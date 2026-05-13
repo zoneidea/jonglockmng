@@ -876,21 +876,28 @@ function MarketImagesPage({ marketId }) {
   const { data = [], loading, error, reload } = useApi(marketId ? `/markets/${marketId}/images` : null, { initialData: [] });
   const { mutate, loading: saving, error: saveError } = useMutation();
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ title: '', imageUrl: '', sortOrder: '0', status: 'active' });
+  const [form, setForm] = useState({ title: '', sortOrder: '0', status: 'active' });
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [uploadError, setUploadError] = useState('');
   const rows = normalizeRows(data);
-  const samples = rows.length ? rows : [
-    { id: 1, url: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=800&q=80', status: 'เปิดใช้งาน' },
-    { id: 2, url: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=800&q=80', status: 'เปิดใช้งาน' },
-    { id: 3, url: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=800&q=80', status: 'เปิดใช้งาน' },
-    { id: 4, url: 'https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=800&q=80', status: 'เปิดใช้งาน' },
-  ];
 
   if (!marketId) return <NeedMarket />;
 
   async function submit(event) {
     event.preventDefault();
-    await mutate(`/markets/${marketId}/images`, { ...form, sortOrder: Number(form.sortOrder) });
-    setForm({ title: '', imageUrl: '', sortOrder: '0', status: 'active' });
+    if (!selectedFiles.length) {
+      setUploadError('กรุณาเลือกรูปภาพอย่างน้อย 1 รูป');
+      return;
+    }
+    setUploadError('');
+    const payload = new FormData();
+    payload.append('title', form.title);
+    payload.append('sortOrder', form.sortOrder);
+    payload.append('status', form.status);
+    selectedFiles.forEach((file) => payload.append('images', file));
+    await mutate(`/markets/${marketId}/images`, payload);
+    setForm({ title: '', sortOrder: '0', status: 'active' });
+    setSelectedFiles([]);
     setModalOpen(false);
     reload();
   }
@@ -899,27 +906,48 @@ function MarketImagesPage({ marketId }) {
     <>
       <PageHeader title="จัดการรูปภาพตลาด" description="ข้อมูลรูปภาพทั้งหมดของตลาดนี้" action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มรูปภาพ</button>} />
       <Card>
-        <ErrorNotice error={error} hint="แสดงรูปตัวอย่างไว้ก่อน หาก backend ยังไม่มี endpoint รูปภาพ" />
+        <ErrorNotice error={error} hint="ตรวจสอบ endpoint /markets/:marketId/images และสิทธิ์การเข้าถึงตลาด" />
         {loading ? <LoadingBlock /> : (
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {samples.map((item) => (
-              <div key={item.id} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-                <div className="relative h-64 bg-slate-100">
-                  <img src={item.url || item.image_url} alt="market" className="h-full w-full object-cover" />
-                  <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-slate-950/60 to-transparent p-5 text-white">
-                    <p className="text-lg font-bold">สถานะ : <span className="text-emerald-300">{item.status || 'เปิดใช้งาน'}</span></p>
+          rows.length ? (
+            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+              {rows.map((item) => (
+                <div key={item.id} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                  <div className="relative h-64 bg-slate-100">
+                    <img src={item.image_url} alt={item.title || 'market'} className="h-full w-full object-cover" />
+                    <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-slate-950/60 to-transparent p-5 text-white">
+                      <p className="text-lg font-bold">สถานะ : <span className="text-emerald-300">{item.status || 'เปิดใช้งาน'}</span></p>
+                      {item.title ? <p className="mt-1 truncate text-sm text-white/80">{item.title}</p> : null}
+                    </div>
                   </div>
+                  <div className="flex gap-2 p-4"><SmallButton tone="slate"><Eye size={14} /> ดู</SmallButton><SmallButton tone="cyan">เปิด/ปิด</SmallButton><SmallButton tone="red">ลบ</SmallButton></div>
                 </div>
-                <div className="flex gap-2 p-4"><SmallButton tone="slate"><Eye size={14} /> ดู</SmallButton><SmallButton tone="cyan">เปิด/ปิด</SmallButton><SmallButton tone="red">ลบ</SmallButton></div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : <EmptyState title="ยังไม่มีรูปภาพตลาด" description="อัพโหลดรูปภาพตลาดเพื่อแสดงในแอปและหน้าจัดการ" />
         )}
       </Card>
       <Modal open={modalOpen} title="เพิ่มรูปภาพตลาด" onClose={() => setModalOpen(false)}>
-        <FormPanel onSubmit={submit} loading={saving} error={saveError}>
+        <FormPanel onSubmit={submit} loading={saving} error={uploadError || saveError}>
           <TextInput label="ชื่อรูปภาพ" value={form.title} onChange={(value) => setForm((current) => ({ ...current, title: value }))} />
-          <TextInput label="Image URL" value={form.imageUrl} onChange={(value) => setForm((current) => ({ ...current, imageUrl: value }))} required />
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-bold text-slate-600">รูปภาพ</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              multiple
+              onChange={(event) => {
+                setSelectedFiles(Array.from(event.target.files || []));
+                setUploadError('');
+              }}
+              className="block w-full rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-cyan-50 file:px-3 file:py-2 file:text-sm file:font-bold file:text-cyan-700 hover:border-cyan-400"
+            />
+          </label>
+          {selectedFiles.length ? (
+            <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              <p className="font-bold text-slate-700">เลือกแล้ว {selectedFiles.length} รูป</p>
+              <p className="mt-1 truncate">{selectedFiles.map((file) => file.name).join(', ')}</p>
+            </div>
+          ) : null}
           <TextInput label="ลำดับ" type="number" value={form.sortOrder} onChange={(value) => setForm((current) => ({ ...current, sortOrder: value }))} />
           <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'เปิดใช้งาน'], ['inactive', 'ปิดการใช้งาน']]} />
         </FormPanel>
