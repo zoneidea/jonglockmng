@@ -27,7 +27,7 @@ async function request(path, options = {}) {
   const payload = contentType.includes('application/json') ? await response.json() : await response.text();
 
   if (!response.ok) {
-    throw new ApiError(payload?.message || response.statusText, response.status, payload);
+    throw new ApiError(payload?.message || response.statusText || 'API request failed', response.status, payload);
   }
 
   return payload;

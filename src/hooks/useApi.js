@@ -6,10 +6,10 @@ export function useApi(path, options = {}) {
   const { token } = useAuth();
   const [data, setData] = useState(options.initialData ?? null);
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(Boolean(path));
+  const [loading, setLoading] = useState(Boolean(path) && !options.skip);
 
   const load = useCallback(async () => {
-    if (!path) return null;
+    if (!path || options.skip) return null;
     setLoading(true);
     setError('');
     try {
@@ -17,16 +17,16 @@ export function useApi(path, options = {}) {
       setData(payload.data);
       return payload.data;
     } catch (err) {
-      setError(err.message);
-      throw err;
+      setError(err.message || 'โหลดข้อมูลไม่สำเร็จ');
+      return null;
     } finally {
       setLoading(false);
     }
-  }, [path, token]);
+  }, [path, token, options.skip]);
 
   useEffect(() => {
-    if (!options.skip) load().catch(() => {});
-  }, [load, options.skip]);
+    load();
+  }, [load]);
 
   return { data, error, loading, reload: load, setData };
 }
@@ -44,7 +44,7 @@ export function useMutation() {
         const payload = await request(path, { method, body, token });
         return payload.data;
       } catch (err) {
-        setError(err.message);
+        setError(err.message || 'บันทึกข้อมูลไม่สำเร็จ');
         throw err;
       } finally {
         setLoading(false);
