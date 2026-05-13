@@ -821,13 +821,26 @@ function BoothsPage({ marketId }) {
   const { data: categories = [] } = useApi(marketId ? `/markets/${marketId}/categories` : null, { initialData: [] });
   const { data: boothTypes = [] } = useApi(marketId ? `/markets/${marketId}/booth-types` : null, { initialData: [] });
   const { mutate, loading: saving, error: saveError } = useMutation();
-  const apiRows = normalizeRows(data);
-  const rows = apiRows.length ? apiRows : boothSamples;
+  const rows = normalizeRows(data);
   const categoryRows = normalizeRows(categories);
   const typeRows = normalizeRows(boothTypes);
   const [selectedType, setSelectedType] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ floorPlanId: '', categoryId: '', code: '', name: '', price: '500', sortOrder: '0', status: 'active' });
+
+  useEffect(() => {
+    if (!selectedType && typeRows[0]?.id) {
+      setSelectedType(String(typeRows[0].id));
+    }
+  }, [selectedType, typeRows]);
+
+  const filteredRows = rows.filter((booth) => {
+    if (!selectedType) return false;
+    if (String(booth.floor_plan_id || booth.floorPlanId || '') !== String(selectedType)) return false;
+    if (selectedCategory === 'all') return true;
+    return String(booth.category_id || booth.categoryId || '') === String(selectedCategory);
+  });
 
   if (!marketId) return <NeedMarket />;
 
@@ -840,38 +853,52 @@ function BoothsPage({ marketId }) {
       price: Number(form.price),
       sortOrder: Number(form.sortOrder),
     });
-    setForm({ floorPlanId: '', categoryId: '', code: '', name: '', price: '500', sortOrder: '0', status: 'active' });
+    setForm({ floorPlanId: selectedType || '', categoryId: '', code: '', name: '', price: '500', sortOrder: '0', status: 'active' });
     setModalOpen(false);
     reload();
   }
 
   return (
     <>
-      <PageHeader title="จัดการ Booth ต่างๆ" description="จัดการราคา Booth เปิด/ปิด Booth และประเภทสินค้า" action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่ม Booth</button>} />
+      <PageHeader title="จัดการ Booth ต่างๆ" description="เลือกแบบ Booth ก่อน แล้วกรองตามประเภทสินค้าที่ผูกกับบูธ" action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่ม Booth</button>} />
       <Card>
-        <ErrorNotice error={error} hint="ตอนนี้แสดงตัวอย่างผัง Booth เพื่อให้ UI ใช้งานต่อได้ทันที" />
+        <ErrorNotice error={error} hint="ตรวจสอบ endpoint /markets/:marketId/booths และความสัมพันธ์ booths.category_id -> product_categories.id" />
         <div className="mb-8 grid gap-4 xl:grid-cols-[1fr_1.2fr]">
           <select value={selectedType} onChange={(event) => setSelectedType(event.target.value)} className="h-12 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-cyan-600">
-            <option value="">กรุณาเลือก แบบที่</option>
-            <option value="default">ตลาดนัดตัวอย่าง</option>
+            <option value="">กรุณาเลือก แบบ Booth</option>
+            {typeRows.map((item) => (
+              <option key={item.id} value={item.id}>{item.name}</option>
+            ))}
           </select>
           <div className="flex flex-wrap gap-2 xl:justify-end">
-            <OutlineButton tone="cyan">ประเภทอาหาร</OutlineButton>
-            <OutlineButton tone="cyan">ไม่ใช่อาหาร</OutlineButton>
-            <OutlineButton tone="red">ปิดการใช้งาน</OutlineButton>
-            <OutlineButton tone="amber">ยังไม่ได้เลือกประเภท</OutlineButton>
+            <FilterPill active={selectedCategory === 'all'} onClick={() => setSelectedCategory('all')}>ทั้งหมด</FilterPill>
+            {categoryRows.map((category) => (
+              <FilterPill key={category.id} active={String(selectedCategory) === String(category.id)} onClick={() => setSelectedCategory(String(category.id))}>
+                {category.name}
+              </FilterPill>
+            ))}
           </div>
         </div>
-        {loading ? <LoadingBlock /> : (
+        {!selectedType ? (
+          <EmptyState title="ยังไม่ได้เลือกแบบ Booth" description="เลือกแบบ Booth จากรายการด้านซ้ายก่อน เพื่อแสดงผังและรายการบูธ" />
+        ) : loading ? <LoadingBlock /> : filteredRows.length ? (
           <div className="flex flex-wrap gap-5">
-            <BoothBox danger label="ล็อคพิเศษ" subLabel="อาหาร" />
-            {rows.map((booth) => <BoothBox key={booth.id || booth.code || booth.name} label={booth.code || booth.name || booth.id} subLabel={booth.type || booth.category_name || 'ยังไม่ระบุ'} />)}
+            {filteredRows.map((booth) => (
+              <BoothBox
+                key={booth.id || booth.code || booth.name}
+                danger={booth.status !== 'active'}
+                label={booth.code || booth.name || booth.id}
+                subLabel={booth.category_name || 'ยังไม่ระบุ'}
+              />
+            ))}
           </div>
+        ) : (
+          <EmptyState title="ไม่พบบูธตามเงื่อนไข" description="แบบ Booth นี้ยังไม่มีบูธ หรือไม่มีบูธในประเภทที่เลือก" />
         )}
       </Card>
       <Modal open={modalOpen} title="เพิ่ม Booth" onClose={() => setModalOpen(false)}>
         <FormPanel onSubmit={submit} loading={saving} error={saveError}>
-          <SelectInput label="แบบ Booth" value={form.floorPlanId || typeRows[0]?.id || ''} onChange={(value) => setForm((current) => ({ ...current, floorPlanId: value }))} options={typeRows.map((item) => [String(item.id), item.name])} />
+          <SelectInput label="แบบ Booth" value={form.floorPlanId || selectedType || typeRows[0]?.id || ''} onChange={(value) => setForm((current) => ({ ...current, floorPlanId: value }))} options={typeRows.map((item) => [String(item.id), item.name])} />
           <SelectInput label="ประเภทสินค้า" value={form.categoryId || categoryRows[0]?.id || ''} onChange={(value) => setForm((current) => ({ ...current, categoryId: value }))} options={categoryRows.map((item) => [String(item.id), item.name])} />
           <TextInput label="รหัส Booth" value={form.code} onChange={(value) => setForm((current) => ({ ...current, code: value }))} required />
           <TextInput label="ชื่อ Booth" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
@@ -881,6 +908,21 @@ function BoothsPage({ marketId }) {
         </FormPanel>
       </Modal>
     </>
+  );
+}
+
+function FilterPill({ children, active, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={classNames(
+        'inline-flex h-11 items-center rounded-xl border px-4 text-sm font-bold transition',
+        active ? 'border-cyan-600 bg-cyan-600 text-white' : 'border-slate-200 bg-white text-slate-600 hover:border-cyan-300 hover:text-cyan-700',
+      )}
+    >
+      {children}
+    </button>
   );
 }
 
