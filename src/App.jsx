@@ -1,33 +1,44 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import {
   BadgeCheck,
   BarChart3,
+  Bold,
   CalendarCheck,
   ChevronDown,
   ChevronRight,
   ClipboardCheck,
   CreditCard,
   Eye,
+  Heading1,
   Image,
+  ImagePlus,
+  Italic,
   LayoutDashboard,
+  Link2,
+  List,
+  ListOrdered,
   LogOut,
   Megaphone,
   Menu,
   Package,
   Percent,
   Plus,
+  Redo2,
   Search,
   Settings,
   Store,
   TicketCheck,
+  Type,
+  Underline,
+  Undo2,
   UserCheck,
   Users,
   Utensils,
   Warehouse,
   X,
 } from 'lucide-react';
-import { API_BASE_URL } from './api/client.js';
+import { API_BASE_URL, request } from './api/client.js';
 import { useApi, useMutation } from './hooks/useApi.js';
 import { useAuth } from './state/auth.jsx';
 
@@ -1659,8 +1670,11 @@ function TenantsPage({ status }) {
 
 function PdpaPage() {
   const { data = {}, loading, reload } = useApi('/pdpa', { initialData: {} });
+  const { token } = useAuth();
   const { mutate, loading: saving, error } = useMutation();
   const [form, setForm] = useState({ title: 'PDPA Consent', content: '', status: 'active' });
+  const [editorError, setEditorError] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     setForm({ title: data?.title || 'PDPA Consent', content: data?.content || '', status: data?.status || 'active' });
@@ -1668,17 +1682,35 @@ function PdpaPage() {
 
   async function submit(event) {
     event.preventDefault();
+    setEditorError('');
     await mutate('/pdpa', form, 'PUT');
     reload();
+  }
+
+  async function uploadImage(file) {
+    if (!file) return '';
+    setUploadingImage(true);
+    setEditorError('');
+    try {
+      const body = new FormData();
+      body.append('image', file);
+      const payload = await request('/pdpa/assets', { method: 'POST', body, token });
+      return payload.data?.imageUrl || '';
+    } catch (uploadError) {
+      setEditorError(uploadError.message || 'อัปโหลดรูปภาพไม่สำเร็จ');
+      return '';
+    } finally {
+      setUploadingImage(false);
+    }
   }
 
   return (
     <>
       <PageHeader title="จัดการ PDPA" description="จัดการข้อความ Consent PDPA ภายใต้องค์กร" />
       <Card>{loading ? <LoadingBlock /> : (
-        <FormPanel onSubmit={submit} loading={saving} error={error}>
+        <FormPanel onSubmit={submit} loading={saving} error={editorError || error}>
           <TextInput label="หัวข้อ" value={form.title} onChange={(value) => setForm((current) => ({ ...current, title: value }))} required />
-          <label className="block"><span className="mb-1.5 block text-sm font-bold text-slate-600">รายละเอียด PDPA</span><textarea value={form.content} onChange={(event) => setForm((current) => ({ ...current, content: event.target.value }))} rows={14} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600" /></label>
+          <RichTextEditor label="รายละเอียด PDPA" value={form.content} onChange={(value) => setForm((current) => ({ ...current, content: value }))} onUploadImage={uploadImage} uploadingImage={uploadingImage} />
           <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'เปิดใช้งาน'], ['inactive', 'ปิดการใช้งาน']]} />
         </FormPanel>
       )}</Card>
@@ -1961,6 +1993,102 @@ function TimePicker({ label, value, onChange, required = false }) {
     <label className="block">
       <span className="mb-1.5 block text-sm font-bold text-slate-600">{label}</span>
       <input type="time" value={value} required={required} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" />
+    </label>
+  );
+}
+
+function RichTextEditor({ label, value, onChange, onUploadImage, uploadingImage = false }) {
+  const editorRef = useRef(null);
+  const imageInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!editorRef.current) return;
+    if (editorRef.current.innerHTML !== (value || '')) {
+      editorRef.current.innerHTML = value || '';
+    }
+  }, [value]);
+
+  function syncValue() {
+    onChange(editorRef.current?.innerHTML || '');
+  }
+
+  function runCommand(command, commandValue = null) {
+    editorRef.current?.focus();
+    document.execCommand('styleWithCSS', false, true);
+    document.execCommand(command, false, commandValue);
+    syncValue();
+  }
+
+  function handleFormatBlock(tagName) {
+    runCommand('formatBlock', `<${tagName}>`);
+  }
+
+  async function handleInsertLink() {
+    const link = window.prompt('กรอก URL ที่ต้องการแทรก');
+    if (!link) return;
+    runCommand('createLink', link);
+  }
+
+  async function handleUploadImage(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !onUploadImage) return;
+    const imageUrl = await onUploadImage(file);
+    if (!imageUrl) return;
+    runCommand('insertImage', imageUrl);
+  }
+
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-sm font-bold text-slate-600">{label}</span>
+      <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white">
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-3">
+          <select defaultValue="p" onChange={(event) => handleFormatBlock(event.target.value)} className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600">
+            <option value="p">ย่อหน้า</option>
+            <option value="h1">หัวข้อใหญ่</option>
+            <option value="h2">หัวข้อรอง</option>
+            <option value="blockquote">ข้อความอ้างอิง</option>
+          </select>
+          <select defaultValue="Arial" onChange={(event) => runCommand('fontName', event.target.value)} className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600">
+            <option value="Arial">Arial</option>
+            <option value="Tahoma">Tahoma</option>
+            <option value="Verdana">Verdana</option>
+            <option value="Times New Roman">Times New Roman</option>
+            <option value="Courier New">Courier New</option>
+          </select>
+          <select defaultValue="3" onChange={(event) => runCommand('fontSize', event.target.value)} className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600">
+            <option value="2">เล็ก</option>
+            <option value="3">ปกติ</option>
+            <option value="4">กลาง</option>
+            <option value="5">ใหญ่</option>
+            <option value="6">ใหญ่มาก</option>
+          </select>
+          <div className="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-600">
+            <Type size={16} />
+            <input type="color" defaultValue="#0f172a" onChange={(event) => runCommand('foreColor', event.target.value)} className="h-6 w-8 cursor-pointer border-0 bg-transparent p-0" />
+          </div>
+          <SmallButton tone="slate" onClick={() => runCommand('bold')}><Bold size={14} /> หนา</SmallButton>
+          <SmallButton tone="slate" onClick={() => runCommand('italic')}><Italic size={14} /> เอียง</SmallButton>
+          <SmallButton tone="slate" onClick={() => runCommand('underline')}><Underline size={14} /> ขีดเส้นใต้</SmallButton>
+          <SmallButton tone="slate" onClick={() => handleFormatBlock('h1')}><Heading1 size={14} /> หัวข้อ</SmallButton>
+          <SmallButton tone="slate" onClick={() => runCommand('insertUnorderedList')}><List size={14} /> Bullet</SmallButton>
+          <SmallButton tone="slate" onClick={() => runCommand('insertOrderedList')}><ListOrdered size={14} /> Number</SmallButton>
+          <SmallButton tone="slate" onClick={handleInsertLink}><Link2 size={14} /> ลิงก์</SmallButton>
+          <SmallButton tone="slate" onClick={() => imageInputRef.current?.click()}>{uploadingImage ? 'กำลังอัปโหลด...' : <><ImagePlus size={14} /> รูปภาพ</>}</SmallButton>
+          <SmallButton tone="slate" onClick={() => runCommand('undo')}><Undo2 size={14} /></SmallButton>
+          <SmallButton tone="slate" onClick={() => runCommand('redo')}><Redo2 size={14} /></SmallButton>
+          <input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={handleUploadImage} />
+        </div>
+        <div
+          ref={editorRef}
+          contentEditable
+          suppressContentEditableWarning
+          onInput={syncValue}
+          className="min-h-[360px] w-full px-4 py-4 text-sm leading-7 text-slate-700 outline-none"
+          style={{ whiteSpace: 'pre-wrap' }}
+        />
+      </div>
+      <p className="mt-2 text-xs text-slate-500">รองรับการจัดหน้า ปรับฟอนต์ ปรับตัวหนังสือ แทรกรูปภาพ และแทรกลิงก์ โดยบันทึกเป็นเนื้อหา HTML</p>
     </label>
   );
 }
