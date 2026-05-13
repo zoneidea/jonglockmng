@@ -675,7 +675,7 @@ function MarketsPage({ markets, reloadMarkets }) {
         <Card>
           <Toolbar keyword={keyword} onKeyword={setKeyword} />
           <DataTable
-            columns={['ลำดับ', 'รหัสตลาด', 'ชื่อตลาด', 'วันเปิด', 'วันปิด', 'สถานะ', 'จัดการ']}
+            columns={['ลำดับ', 'รหัสตลาด', 'ชื่อตลาด', 'วันเปิด', 'วันปิด', 'สถานะ']}
             rows={rows.map((market, index) => [
               index + 1,
               market.code || '-',
@@ -683,7 +683,6 @@ function MarketsPage({ markets, reloadMarkets }) {
               formatDate(market.open_date),
               formatDate(market.close_date),
               <StatusBadge value={market.status || 'active'} />,
-              <div className="flex flex-wrap gap-2"><SmallButton tone="cyan">ดูตลาด</SmallButton><SmallButton tone="amber">แก้ไขข้อมูล</SmallButton></div>,
             ])}
           />
         </Card>
@@ -780,7 +779,7 @@ function MarketInfoPage({ marketId, market, reloadMarkets }) {
           <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>เบอร์โทร</Label><TextInputBare value={form.phone} onChange={(value) => setForm((current) => ({ ...current, phone: value }))} /></div>
           <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>Line ID</Label><TextInputBare value={form.lineId} onChange={(value) => setForm((current) => ({ ...current, lineId: value }))} /></div>
           <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>Email</Label><TextInputBare value={form.email} onChange={(value) => setForm((current) => ({ ...current, email: value }))} /></div>
-          <div className="grid gap-4 lg:grid-cols-[220px_1fr]"><Label>เงื่อนไขข้อตกลง</Label><textarea value={form.terms} onChange={(event) => setForm((current) => ({ ...current, terms: event.target.value }))} rows={5} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600" /></div>
+          <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-start"><Label>เงื่อนไขข้อตกลง</Label><RichTextEditor value={form.terms} onChange={(value) => setForm((current) => ({ ...current, terms: value }))} /></div>
         </FormPanel>
       </Card>
     </>
@@ -792,14 +791,22 @@ function BoothTypesPage({ marketId }) {
   const { mutate, loading: saving, error: saveError } = useMutation();
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ name: '', startDate: '', endDate: '', status: 'active' });
+  const [planImageFile, setPlanImageFile] = useState(null);
   const rows = normalizeRows(data);
 
   if (!marketId) return <NeedMarket />;
 
   async function submit(event) {
     event.preventDefault();
-    await mutate(`/markets/${marketId}/booth-types`, form);
+    const payload = new FormData();
+    payload.append('name', form.name);
+    payload.append('startDate', form.startDate);
+    payload.append('endDate', form.endDate);
+    payload.append('status', form.status);
+    if (planImageFile) payload.append('planImage', planImageFile);
+    await mutate(`/markets/${marketId}/booth-types`, payload);
     setForm({ name: '', startDate: '', endDate: '', status: 'active' });
+    setPlanImageFile(null);
     setModalOpen(false);
     reload();
   }
@@ -812,14 +819,24 @@ function BoothTypesPage({ marketId }) {
           <ErrorNotice error={error} hint="ถ้ายังไม่มี endpoint นี้ ให้เพิ่ม backend endpoint /markets/:marketId/booth-types" />
           {loading ? <LoadingBlock /> : (
             <DataTable
-              columns={['ลำดับ', 'ชื่อแบบ', 'เริ่มต้น', 'สิ้นสุด', 'สถานะ', 'จัดการ']}
-              rows={rows.map((item, index) => [index + 1, item.name || item.title, formatDate(item.start_date), formatDate(item.end_date), <StatusBadge value={item.status || 'active'} />, <div className="flex gap-2"><SmallButton tone="cyan">ดูข้อมูล Booths</SmallButton><SmallButton tone="amber">แก้ไขข้อมูล</SmallButton></div>])}
+              columns={['ลำดับ', 'ผังภาพรวม', 'ชื่อแบบ', 'เริ่มต้น', 'สิ้นสุด', 'สถานะ', 'จัดการ']}
+              rows={rows.map((item, index) => [
+                index + 1,
+                item.plan_image_url ? <img src={item.plan_image_url} className="h-16 w-24 rounded-xl object-cover" /> : <div className="flex h-16 w-24 items-center justify-center rounded-xl bg-slate-100 text-xs font-bold text-slate-400">ไม่มีผัง</div>,
+                item.name || item.title,
+                formatDate(item.start_date),
+                formatDate(item.end_date),
+                <StatusBadge value={item.status || 'active'} />,
+                <div className="flex gap-2"><SmallButton tone="cyan">ดูข้อมูล Booths</SmallButton><SmallButton tone="amber">แก้ไขข้อมูล</SmallButton></div>,
+              ])}
             />
           )}
         </Card>
         <Modal open={modalOpen} title="เพิ่มแบบ Booth" onClose={() => setModalOpen(false)}>
         <FormPanel onSubmit={submit} loading={saving} error={saveError}>
           <TextInput label="ชื่อแบบ Booth" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
+          <FileInput label="แผนผังภาพรวมของตลาด" onChange={setPlanImageFile} />
+          {planImageFile ? <FileSummary file={planImageFile} /> : null}
           <DatePicker label="วันที่เริ่มต้น" value={form.startDate} onChange={(value) => setForm((current) => ({ ...current, startDate: value }))} />
           <DatePicker label="วันที่สิ้นสุด" value={form.endDate} onChange={(value) => setForm((current) => ({ ...current, endDate: value }))} />
           <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['inactive', 'ระงับการใช้']]} />
@@ -2232,7 +2249,7 @@ function RichTextEditor({ label, value, onChange, onUploadImage, uploadingImage 
 
   return (
     <label className="block">
-      <span className="mb-1.5 block text-sm font-bold text-slate-600">{label}</span>
+      {label ? <span className="mb-1.5 block text-sm font-bold text-slate-600">{label}</span> : null}
       <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white">
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-3">
           <select defaultValue="p" onChange={(event) => handleFormatBlock(event.target.value)} className="h-10 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600">
