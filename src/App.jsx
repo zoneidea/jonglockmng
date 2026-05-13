@@ -272,6 +272,16 @@ function StatusBadge({ value }) {
   return <span className={classNames('inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1', styles[status] || styles.active)}>{value || '-'}</span>;
 }
 
+function boothAvailabilityLabel(status) {
+  const labels = {
+    available: 'ว่าง',
+    selected: 'กำลังเลือก',
+    processing: 'กำลังดำเนินการ',
+    booked: 'ถูกจองแล้ว',
+  };
+  return labels[status] || status || '-';
+}
+
 function EmptyState({ title = 'ไม่พบข้อมูล', description = 'ยังไม่มีรายการสำหรับเงื่อนไขนี้' }) {
   return (
     <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
@@ -641,12 +651,23 @@ function Dashboard({ marketId, markets }) {
 }
 
 function MarketsPage({ markets, reloadMarkets }) {
+  const { token } = useAuth();
   const { mutate, loading, error } = useMutation();
   const [keyword, setKeyword] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ code: '', name: '', description: '', openDate: '', closeDate: '' });
   const [mainImageFile, setMainImageFile] = useState(null);
   const rows = markets.filter((market) => `${market.code} ${market.name}`.toLowerCase().includes(keyword.toLowerCase()));
+
+  async function openCreateModal() {
+    setMainImageFile(null);
+    setForm({ code: '', name: '', description: '', openDate: '', closeDate: '' });
+    setModalOpen(true);
+    try {
+      const payload = await request('/markets/next-code', { token });
+      setForm((current) => ({ ...current, code: payload.data?.code || '' }));
+    } catch {}
+  }
 
   async function submit(event) {
     event.preventDefault();
@@ -669,7 +690,7 @@ function MarketsPage({ markets, reloadMarkets }) {
       <PageHeader
         title="รายชื่อตลาด"
         description="แสดงรายชื่อตลาดที่อยู่ภายใต้องค์กร"
-        action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มตลาด</button>}
+        action={<button onClick={openCreateModal} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มตลาด</button>}
       />
       <div className="grid gap-6">
         <Card>
@@ -933,6 +954,7 @@ function BoothTypesPage({ marketId }) {
 }
 
 function BoothsPage({ marketId }) {
+  const { token } = useAuth();
   const { data = [], loading, error, reload } = useApi(marketId ? `/markets/${marketId}/booths` : null, { initialData: [] });
   const { data: categories = [] } = useApi(marketId ? `/markets/${marketId}/categories` : null, { initialData: [] });
   const { data: boothTypes = [] } = useApi(marketId ? `/markets/${marketId}/booth-types` : null, { initialData: [] });
@@ -944,6 +966,8 @@ function BoothsPage({ marketId }) {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ floorPlanId: '', categoryId: '', code: '', name: '', price: '500', sortOrder: '0', status: 'active' });
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editForm, setEditForm] = useState({ id: '', floorPlanId: '', categoryId: '', code: '', name: '', price: '500', sortOrder: '0', status: 'active' });
 
   useEffect(() => {
     if (!selectedType && typeRows[0]?.id) {
@@ -960,6 +984,37 @@ function BoothsPage({ marketId }) {
 
   if (!marketId) return <NeedMarket />;
 
+  async function openCreateModal() {
+    setForm({
+      floorPlanId: selectedType || '',
+      categoryId: String(categoryRows[0]?.id || ''),
+      code: '',
+      name: '',
+      price: '500',
+      sortOrder: '0',
+      status: 'active',
+    });
+    setModalOpen(true);
+    try {
+      const payload = await request(`/markets/${marketId}/booths/next-code`, { token });
+      setForm((current) => ({ ...current, code: payload.data?.code || '' }));
+    } catch {}
+  }
+
+  function openEditModal(booth) {
+    setEditForm({
+      id: booth.id,
+      floorPlanId: String(booth.floor_plan_id || booth.floorPlanId || ''),
+      categoryId: String(booth.category_id || booth.categoryId || ''),
+      code: booth.code || '',
+      name: booth.name || '',
+      price: String(booth.price ?? '0'),
+      sortOrder: String(booth.sort_order ?? booth.sortOrder ?? '0'),
+      status: booth.status || 'active',
+    });
+    setEditModalOpen(true);
+  }
+
   async function submit(event) {
     event.preventDefault();
     await mutate(`/markets/${marketId}/booths`, {
@@ -974,9 +1029,24 @@ function BoothsPage({ marketId }) {
     reload();
   }
 
+  async function submitEdit(event) {
+    event.preventDefault();
+    await mutate(`/markets/${marketId}/booths/${editForm.id}`, {
+      floorPlanId: Number(editForm.floorPlanId || typeRows[0]?.id) || null,
+      categoryId: Number(editForm.categoryId || categoryRows[0]?.id) || null,
+      code: editForm.code,
+      name: editForm.name,
+      price: Number(editForm.price),
+      sortOrder: Number(editForm.sortOrder),
+      status: editForm.status,
+    }, 'PATCH');
+    setEditModalOpen(false);
+    reload();
+  }
+
   return (
     <>
-      <PageHeader title="จัดการ Booth ต่างๆ" description="เลือกแบบ Booth ก่อน แล้วกรองตามประเภทสินค้าที่ผูกกับบูธ" action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่ม Booth</button>} />
+      <PageHeader title="จัดการ Booth ต่างๆ" description="เลือกแบบ Booth ก่อน แล้วกรองตามประเภทสินค้าที่ผูกกับบูธ" action={<button onClick={openCreateModal} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่ม Booth</button>} />
       <Card>
         <ErrorNotice error={error} hint="ตรวจสอบ endpoint /markets/:marketId/booths และความสัมพันธ์ booths.category_id -> product_categories.id" />
         <div className="mb-8 grid gap-4 xl:grid-cols-[1fr_1.2fr]">
@@ -1005,6 +1075,7 @@ function BoothsPage({ marketId }) {
                 danger={booth.status !== 'active'}
                 label={booth.code || booth.name || booth.id}
                 subLabel={booth.category_name || 'ยังไม่ระบุ'}
+                onClick={() => openEditModal(booth)}
               />
             ))}
           </div>
@@ -1021,6 +1092,17 @@ function BoothsPage({ marketId }) {
           <TextInput label="ราคา" type="number" value={form.price} onChange={(value) => setForm((current) => ({ ...current, price: value }))} />
           <TextInput label="ลำดับ" type="number" value={form.sortOrder} onChange={(value) => setForm((current) => ({ ...current, sortOrder: value }))} />
           <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['inactive', 'ปิดการใช้งาน'], ['maintenance', 'ซ่อมบำรุง']]} />
+        </FormPanel>
+      </Modal>
+      <Modal open={editModalOpen} title="แก้ไข Booth" onClose={() => setEditModalOpen(false)}>
+        <FormPanel onSubmit={submitEdit} loading={saving} error={saveError}>
+          <SelectInput label="แบบ Booth" value={editForm.floorPlanId || ''} onChange={(value) => setEditForm((current) => ({ ...current, floorPlanId: value }))} options={typeRows.map((item) => [String(item.id), item.name])} />
+          <SelectInput label="ประเภทสินค้า" value={editForm.categoryId || ''} onChange={(value) => setEditForm((current) => ({ ...current, categoryId: value }))} options={categoryRows.map((item) => [String(item.id), item.name])} />
+          <TextInput label="รหัส Booth" value={editForm.code} onChange={(value) => setEditForm((current) => ({ ...current, code: value }))} required />
+          <TextInput label="ชื่อ Booth" value={editForm.name} onChange={(value) => setEditForm((current) => ({ ...current, name: value }))} required />
+          <TextInput label="ราคา" type="number" value={editForm.price} onChange={(value) => setEditForm((current) => ({ ...current, price: value }))} />
+          <TextInput label="ลำดับ" type="number" value={editForm.sortOrder} onChange={(value) => setEditForm((current) => ({ ...current, sortOrder: value }))} />
+          <SelectInput label="สถานะ" value={editForm.status} onChange={(value) => setEditForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['inactive', 'ปิดการใช้งาน'], ['maintenance', 'ซ่อมบำรุง']]} />
         </FormPanel>
       </Modal>
     </>
@@ -1042,9 +1124,27 @@ function FilterPill({ children, active, onClick }) {
   );
 }
 
-function BoothBox({ label, subLabel, danger = false }) {
+function BoothBox({ label, subLabel, danger = false, tone = '', onClick, disabled = false }) {
+  const tones = {
+    available: 'border-emerald-300 bg-emerald-600 hover:bg-emerald-700',
+    selected: 'border-amber-300 bg-amber-500 hover:bg-amber-600',
+    processing: 'border-amber-300 bg-amber-500',
+    booked: 'border-red-300 bg-red-500',
+    danger: 'border-red-300 bg-red-500',
+    default: 'border-cyan-200 bg-cyan-600 hover:bg-cyan-700',
+  };
   return (
-    <button className={classNames('flex min-h-24 w-24 flex-col items-center justify-center rounded-xl border-2 border-dashed px-2 text-center text-sm font-bold text-white shadow-sm transition hover:-translate-y-0.5', danger ? 'border-red-300 bg-red-500' : 'border-cyan-200 bg-cyan-600')}>
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled || !onClick}
+      className={classNames(
+        'flex min-h-24 w-24 flex-col items-center justify-center rounded-xl border-2 border-dashed px-2 text-center text-sm font-bold text-white shadow-sm transition',
+        tones[tone] || (danger ? tones.danger : tones.default),
+        onClick && !disabled ? 'hover:-translate-y-0.5' : 'cursor-default',
+        disabled ? 'opacity-90' : '',
+      )}
+    >
       <span>{label}</span>
       <span className="mt-1 text-xs leading-5 opacity-90">{subLabel}</span>
     </button>
@@ -1956,26 +2056,47 @@ function PdpaPage() {
 }
 
 function BookingsPage({ marketId, mode }) {
-  const { data = [], loading } = useApi(marketId ? `/markets/${marketId}/bookings` : null, { initialData: [] });
+  const { data = [], loading, reload } = useApi(marketId ? `/markets/${marketId}/bookings` : null, { initialData: [] });
   const { data: users = [] } = useApi('/mobile-users', { initialData: [] });
-  const { data: booths = [] } = useApi(marketId ? `/markets/${marketId}/booths` : null, { initialData: [] });
   const { data: products = [] } = useApi(marketId ? `/markets/${marketId}/products` : null, { initialData: [] });
   const { mutate, loading: saving, error } = useMutation();
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ mobileUserId: '', boothId: '', bookingDate: '2026-05-14', productId: '' });
+  const [localError, setLocalError] = useState('');
   const rows = normalizeRows(data);
   const userRows = normalizeRows(users);
-  const boothRows = normalizeRows(booths);
   const productRows = normalizeRows(products);
+  const availabilityPath = marketId && form.bookingDate && form.productId
+    ? `/markets/${marketId}/bookings/booth-availability?bookingDate=${form.bookingDate}&productId=${form.productId}`
+    : null;
+  const { data: availability = [], loading: availabilityLoading, error: availabilityError, reload: reloadAvailability } = useApi(availabilityPath, { initialData: [] });
+  const availabilityRows = normalizeRows(availability);
+
+  useEffect(() => {
+    setForm((current) => ({ ...current, boothId: '' }));
+    setLocalError('');
+  }, [form.bookingDate, form.productId]);
+
   if (!marketId) return <NeedMarket />;
 
   async function submit(event) {
     event.preventDefault();
+    setLocalError('');
+    if (!form.productId) {
+      setLocalError('กรุณาเลือกสินค้าก่อนเลือก Booth');
+      return;
+    }
+    if (!form.boothId) {
+      setLocalError('กรุณาเลือก Booth ที่ว่างอยู่');
+      return;
+    }
     await mutate(`/markets/${marketId}/bookings`, {
       mobileUserId: Number(form.mobileUserId || userRows[0]?.id),
-      items: [{ boothId: Number(form.boothId || boothRows[0]?.id), bookingDate: form.bookingDate, productIds: form.productId ? [Number(form.productId)] : [] }],
+      items: [{ boothId: Number(form.boothId), bookingDate: form.bookingDate, productIds: [Number(form.productId)] }],
     });
     setModalOpen(false);
+    reload();
+    reloadAvailability();
   }
 
   return (
@@ -1988,11 +2109,42 @@ function BookingsPage({ marketId, mode }) {
       <div className="grid gap-6">
         <Card>{loading ? <LoadingBlock /> : <DataTable columns={['เลขที่', 'สถานะ', 'ยอดรวม', 'แหล่งที่มา', 'จำนวนรายการ', 'วันที่สร้าง']} rows={rows.map((booking) => [booking.public_id, <StatusBadge value={booking.status} />, formatMoney(booking.total_amount), booking.source, booking.item_count, formatDate(booking.created_at)])} />}</Card>
         <Modal open={modalOpen} title="สร้างการจองแทนลูกค้า" onClose={() => setModalOpen(false)}>
-        <FormPanel onSubmit={submit} loading={saving} error={error}>
+        <FormPanel onSubmit={submit} loading={saving} error={localError || error || availabilityError}>
           <SelectInput label="ผู้จอง" value={form.mobileUserId || userRows[0]?.id || ''} onChange={(value) => setForm((current) => ({ ...current, mobileUserId: value }))} options={userRows.map((item) => [String(item.id), `${item.public_id || 'User'} (#${item.id})`])} />
-          <SelectInput label="Booth" value={form.boothId || boothRows[0]?.id || ''} onChange={(value) => setForm((current) => ({ ...current, boothId: value }))} options={boothRows.map((item) => [String(item.id), `${item.code || item.name} - ${formatMoney(item.price)}`])} />
           <DatePicker label="วันที่จอง" value={form.bookingDate} onChange={(value) => setForm((current) => ({ ...current, bookingDate: value }))} required />
-          <SelectInput label="สินค้า" value={form.productId} onChange={(value) => setForm((current) => ({ ...current, productId: value }))} options={[['', 'ไม่ระบุ'], ...productRows.map((item) => [String(item.id), item.name])]} />
+          <SelectInput label="สินค้า" value={form.productId} onChange={(value) => setForm((current) => ({ ...current, productId: value }))} options={[['', 'กรุณาเลือกสินค้า'], ...productRows.map((item) => [String(item.id), `${item.name}${item.category_name ? ` (${item.category_name})` : ''}`])]} />
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-3 text-xs font-bold text-slate-600">
+              <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-emerald-600" /> ว่าง</span>
+              <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-red-500" /> ถูกจองแล้ว</span>
+              <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-amber-500" /> กำลังดำเนินการ/กำลังเลือก</span>
+            </div>
+            {!form.productId ? (
+              <EmptyState title="เลือกวันที่และสินค้าก่อน" description="ระบบจะกรอง Booth ตามประเภทสินค้าของสินค้าที่เลือก" />
+            ) : availabilityLoading ? (
+              <LoadingBlock />
+            ) : availabilityRows.length ? (
+              <div className="flex flex-wrap gap-4">
+                {availabilityRows.map((booth) => {
+                  const isSelected = String(form.boothId) === String(booth.id);
+                  const status = isSelected ? 'selected' : booth.availability_status;
+                  const canSelect = booth.availability_status === 'available';
+                  return (
+                    <BoothBox
+                      key={booth.id}
+                      tone={status}
+                      label={booth.code || booth.name || booth.id}
+                      subLabel={`${boothAvailabilityLabel(status)} / ${formatMoney(booth.price)}`}
+                      disabled={!canSelect && !isSelected}
+                      onClick={canSelect || isSelected ? () => setForm((current) => ({ ...current, boothId: isSelected ? '' : String(booth.id) })) : undefined}
+                    />
+                  );
+                })}
+              </div>
+            ) : (
+              <EmptyState title="ไม่พบ Booth ที่ตรงกับสินค้า" description="ตรวจสอบประเภทสินค้าของ Booth หรือเลือกสินค้าอื่น" />
+            )}
+          </div>
         </FormPanel>
         </Modal>
       </div>
