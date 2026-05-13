@@ -153,6 +153,36 @@ function formatDate(value) {
   return new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeZone: 'Asia/Bangkok' }).format(new Date(value));
 }
 
+function dateKeyFromValue(value) {
+  if (!value) return '';
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value) && !value.includes('T')) return value.slice(0, 10);
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+    .formatToParts(date)
+    .reduce((current, part) => ({ ...current, [part.type]: part.value }), {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function dateKeyFromUtcTime(time) {
+  const date = new Date(time);
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function utcTimeFromDateKey(key) {
+  const [year, month, day] = String(key || '').split('-').map(Number);
+  if (!year || !month || !day) return Number.NaN;
+  return Date.UTC(year, month - 1, day);
+}
+
 function normalizeRows(value) {
   if (Array.isArray(value)) return value;
   if (Array.isArray(value?.rows)) return value.rows;
@@ -776,13 +806,30 @@ function MarketHolidaysPage({ marketId }) {
 }
 
 function HolidayCalendarPage({ marketId }) {
-  const { data = [], error } = useApi(marketId ? `/markets/${marketId}/holidays` : null, { initialData: [] });
+  const { data = [], loading, error } = useApi(marketId ? `/markets/${marketId}/holidays` : null, { initialData: [] });
   const rows = normalizeRows(data);
   const today = new Date();
   const year = today.getFullYear();
   const month = today.getMonth();
   const first = new Date(year, month, 1);
   const days = new Date(year, month + 1, 0).getDate();
+  const monthStartTime = Date.UTC(year, month, 1);
+  const monthEndTime = Date.UTC(year, month, days);
+  const holidaysByDate = rows
+    .filter((holiday) => (holiday.status || 'active') === 'active')
+    .reduce((current, holiday) => {
+      const startKey = dateKeyFromValue(holiday.start_date || holiday.startDate);
+      const endKey = dateKeyFromValue(holiday.end_date || holiday.endDate || holiday.start_date || holiday.startDate);
+      const startTime = Math.max(utcTimeFromDateKey(startKey), monthStartTime);
+      const endTime = Math.min(utcTimeFromDateKey(endKey), monthEndTime);
+      if (Number.isNaN(startTime) || Number.isNaN(endTime) || startTime > endTime) return current;
+
+      for (let time = startTime; time <= endTime; time += 86400000) {
+        const key = dateKeyFromUtcTime(time);
+        current[key] = [...(current[key] || []), holiday];
+      }
+      return current;
+    }, {});
   const cells = [];
   for (let i = 0; i < first.getDay(); i += 1) cells.push(null);
   for (let day = 1; day <= days; day += 1) cells.push(day);
@@ -798,17 +845,28 @@ function HolidayCalendarPage({ marketId }) {
           <h2 className="text-xl font-extrabold">{new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(today)}</h2>
           <button className="rounded-xl bg-blue-500 px-4 py-2 text-sm font-bold text-white">Today</button>
         </div>
-        <div className="grid grid-cols-7 overflow-hidden rounded-2xl border border-slate-200">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((item) => <div key={item} className="border-b border-slate-200 bg-slate-50 py-3 text-center text-sm font-bold">{item}</div>)}
-          {cells.map((day, index) => (
-            <div key={`${day}-${index}`} className={classNames('min-h-28 border-b border-r border-slate-200 p-2 text-right text-sm', day === today.getDate() ? 'bg-amber-50' : 'bg-white')}>
-              <span className={day ? 'text-slate-700' : 'text-slate-300'}>{day || ''}</span>
-              {day && rows.some((holiday) => Number(String(holiday.start_date || holiday.startDate || '').slice(8, 10)) === day) ? (
-                <div className="mt-2 truncate rounded bg-green-700 px-2 py-1 text-left text-xs font-bold text-white">วันหยุดตลาด</div>
-              ) : null}
-            </div>
-          ))}
-        </div>
+        {loading ? (
+          <LoadingBlock />
+        ) : (
+          <div className="grid grid-cols-7 overflow-hidden rounded-2xl border border-slate-200">
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((item) => <div key={item} className="border-b border-slate-200 bg-slate-50 py-3 text-center text-sm font-bold">{item}</div>)}
+            {cells.map((day, index) => {
+              const dateKey = day ? `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
+              const dayHolidays = holidaysByDate[dateKey] || [];
+              return (
+                <div key={`${day}-${index}`} className={classNames('min-h-28 border-b border-r border-slate-200 p-2 text-right text-sm', day === today.getDate() ? 'bg-amber-50' : 'bg-white')}>
+                  <span className={day ? 'text-slate-700' : 'text-slate-300'}>{day || ''}</span>
+                  {dayHolidays.slice(0, 3).map((holiday) => (
+                    <div key={`${holiday.id}-${dateKey}`} title={holiday.title || holiday.name || 'วันหยุดตลาด'} className="mt-2 truncate rounded bg-green-700 px-2 py-1 text-left text-xs font-bold text-white">
+                      {holiday.title || holiday.name || 'วันหยุดตลาด'}
+                    </div>
+                  ))}
+                  {dayHolidays.length > 3 ? <div className="mt-1 text-left text-xs font-bold text-green-700">+{dayHolidays.length - 3} รายการ</div> : null}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </Card>
     </>
   );
