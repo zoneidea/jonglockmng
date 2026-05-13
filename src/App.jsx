@@ -1848,6 +1848,15 @@ function AdminsPage({ marketId }) {
         </FormPanel>
         </Modal>
         <Card>
+          <SectionTitle title="คำอธิบาย Role" description="ใช้สำหรับกำหนดสิทธิ์การเข้าถึงเมนูหลัก" icon={ShieldIcon} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <RoleCard role="supervisor" description="ดูภาพรวม จัดการตลาด รายงาน และบัญชี" />
+            <RoleCard role="admin" description="จัดการตลาด บูธ สินค้า คูปอง และการจอง" />
+            <RoleCard role="accounting" description="ดูรายการชำระเงินและบัญชี" />
+            <RoleCard role="audit" description="ตรวจสอบตลาดและรายการจอง" />
+          </div>
+        </Card>
+        <Card>
           <SectionTitle title="รายการผู้ดูแลระบบ" description="ข้อมูลบัญชีผู้ดูแลทั้งหมดภายในองค์กร" icon={Users} />
           {adminsLoading ? <LoadingBlock /> : (
             <DataTable
@@ -1864,15 +1873,6 @@ function AdminsPage({ marketId }) {
               ])}
             />
           )}
-        </Card>
-        <Card>
-          <SectionTitle title="คำอธิบาย Role" description="ใช้สำหรับกำหนดสิทธิ์การเข้าถึงเมนูหลัก" icon={ShieldIcon} />
-          <div className="grid gap-3 sm:grid-cols-2">
-            <RoleCard role="supervisor" description="ดูภาพรวม จัดการตลาด รายงาน และบัญชี" />
-            <RoleCard role="admin" description="จัดการตลาด บูธ สินค้า คูปอง และการจอง" />
-            <RoleCard role="accounting" description="ดูรายการชำระเงินและบัญชี" />
-            <RoleCard role="audit" description="ตรวจสอบตลาดและรายการจอง" />
-          </div>
         </Card>
       </div>
     </>
