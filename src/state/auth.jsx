@@ -17,7 +17,7 @@ export function AuthProvider({ children }) {
   const [session, setSession] = useState(readStoredSession);
 
   async function login(username, password) {
-    const payload = await request('/management/auth/login', {
+    const payload = await request('/auth/login', {
       method: 'POST',
       body: { username, password },
     });

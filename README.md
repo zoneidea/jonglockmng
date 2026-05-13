@@ -23,7 +23,7 @@ npm run build
 ตั้งค่า API ที่ `.env`:
 
 ```bash
-VITE_API_BASE_URL=https://jonglockapi.zonedevnode.com/api
+VITE_API_BASE_URL=https://jonglockapi.zonedevnode.com/management
 ```
 
 รายละเอียด workflow และสิทธิ์อยู่ใน [AGENT.md](./AGENT.md).

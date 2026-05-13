@@ -186,7 +186,7 @@ function Shell() {
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const canLoadMarkets = ['supervisor', 'admin'].includes(user?.role);
-  const { data: markets = [], loading: marketsLoading, reload: reloadMarkets } = useApi(canLoadMarkets ? '/management/markets' : null, {
+  const { data: markets = [], loading: marketsLoading, reload: reloadMarkets } = useApi(canLoadMarkets ? '/markets' : null, {
     initialData: [],
     skip: !canLoadMarkets,
   });
@@ -325,11 +325,11 @@ function Dashboard({ marketId, markets }) {
   const { user } = useAuth();
   const canReadReports = ['supervisor', 'admin'].includes(user?.role);
   const canReadPayments = ['supervisor', 'accounting'].includes(user?.role);
-  const { data: report = [], loading: reportLoading } = useApi(canReadReports ? '/management/reports/bookings' : null, {
+  const { data: report = [], loading: reportLoading } = useApi(canReadReports ? '/reports/bookings' : null, {
     initialData: [],
     skip: !canReadReports,
   });
-  const { data: payments = [] } = useApi(canReadPayments ? '/management/accounting/payments' : null, {
+  const { data: payments = [] } = useApi(canReadPayments ? '/accounting/payments' : null, {
     initialData: [],
     skip: !canReadPayments,
   });
@@ -370,7 +370,7 @@ function MarketsPage({ markets, reloadMarkets }) {
 
   async function submit(event) {
     event.preventDefault();
-    await mutate('/management/markets', { ...form, closeDate: form.closeDate || null, openDate: form.openDate || null });
+    await mutate('/markets', { ...form, closeDate: form.closeDate || null, openDate: form.openDate || null });
     setForm({ code: '', name: '', description: '', openDate: '', closeDate: '' });
     reloadMarkets();
   }
@@ -398,13 +398,13 @@ function MarketsPage({ markets, reloadMarkets }) {
 }
 
 function ProductsPage({ marketId }) {
-  const { data = [], loading, reload } = useApi(marketId ? `/management/markets/${marketId}/products` : null, { initialData: [] });
+  const { data = [], loading, reload } = useApi(marketId ? `/markets/${marketId}/products` : null, { initialData: [] });
   const { mutate, loading: saving, error } = useMutation();
   const [form, setForm] = useState({ categoryId: '1', groupId: '1', name: '' });
 
   async function submit(event) {
     event.preventDefault();
-    await mutate(`/management/markets/${marketId}/products`, {
+    await mutate(`/markets/${marketId}/products`, {
       categoryId: Number(form.categoryId),
       groupId: form.groupId ? Number(form.groupId) : null,
       name: form.name,
@@ -438,7 +438,7 @@ function ProductsPage({ marketId }) {
 }
 
 function CouponsPage({ marketId }) {
-  const { data = [], loading, reload } = useApi(marketId ? `/management/markets/${marketId}/coupons` : null, { initialData: [] });
+  const { data = [], loading, reload } = useApi(marketId ? `/markets/${marketId}/coupons` : null, { initialData: [] });
   const { mutate, loading: saving, error } = useMutation();
   const [form, setForm] = useState({
     name: '',
@@ -452,7 +452,7 @@ function CouponsPage({ marketId }) {
 
   async function submit(event) {
     event.preventDefault();
-    await mutate(`/management/markets/${marketId}/coupons`, {
+    await mutate(`/markets/${marketId}/coupons`, {
       ...form,
       discountValue: Number(form.discountValue),
       usageLimit: form.usageLimit ? Number(form.usageLimit) : null,
@@ -496,13 +496,13 @@ function CouponsPage({ marketId }) {
 }
 
 function BookingsPage({ marketId }) {
-  const { data = [], loading } = useApi(marketId ? `/management/markets/${marketId}/bookings` : null, { initialData: [] });
+  const { data = [], loading } = useApi(marketId ? `/markets/${marketId}/bookings` : null, { initialData: [] });
   const { mutate, loading: saving, error } = useMutation();
   const [form, setForm] = useState({ mobileUserId: '1', boothId: '2', bookingDate: '2026-05-14', productId: '1' });
 
   async function submit(event) {
     event.preventDefault();
-    await mutate(`/management/markets/${marketId}/bookings`, {
+    await mutate(`/markets/${marketId}/bookings`, {
       mobileUserId: Number(form.mobileUserId),
       items: [
         {
@@ -548,7 +548,7 @@ function BookingsPage({ marketId }) {
 
 function ReportsPage() {
   const [range, setRange] = useState({ startDate: '2026-05-01', endDate: '2026-05-31' });
-  const path = `/management/reports/bookings?startDate=${range.startDate}&endDate=${range.endDate}`;
+  const path = `/reports/bookings?startDate=${range.startDate}&endDate=${range.endDate}`;
   const { data = [], loading, reload } = useApi(path, { initialData: [] });
 
   return (
@@ -573,7 +573,7 @@ function ReportsPage() {
 }
 
 function AuditPage({ marketId }) {
-  const { data = [], loading } = useApi(marketId ? `/management/markets/${marketId}/audit-checks` : null, { initialData: [] });
+  const { data = [], loading } = useApi(marketId ? `/markets/${marketId}/audit-checks` : null, { initialData: [] });
 
   return (
     <>
@@ -601,7 +601,7 @@ function AuditPage({ marketId }) {
 }
 
 function AccountingPage() {
-  const { data = [], loading } = useApi('/management/accounting/payments', { initialData: [] });
+  const { data = [], loading } = useApi('/accounting/payments', { initialData: [] });
   return (
     <>
       <PageHeader title="บัญชี" description="รายการชำระเงินและข้อมูลอ้างอิงการจอง" />
@@ -637,7 +637,7 @@ function AdminsPage({ marketId }) {
       .split(',')
       .map((value) => Number(value.trim()))
       .filter(Boolean);
-    await mutate('/management/admins', {
+    await mutate('/admins', {
       ...form,
       marketIds,
     });
