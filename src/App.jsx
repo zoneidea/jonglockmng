@@ -12,6 +12,7 @@ import {
   Image,
   LayoutDashboard,
   LogOut,
+  Megaphone,
   Menu,
   Package,
   Percent,
@@ -20,6 +21,7 @@ import {
   Settings,
   Store,
   TicketCheck,
+  UserCheck,
   Users,
   Utensils,
   Warehouse,
@@ -100,6 +102,28 @@ const menu = [
     ],
   },
   {
+    label: 'ประกาศ/ประชาสัมพันธ์',
+    icon: Megaphone,
+    menuKey: 'announcements',
+    roles: ['supervisor', 'admin'],
+    children: [
+      { path: '/announcements/news', label: 'ข่าวสาร' },
+      { path: '/announcements/banners', label: 'Banner' },
+      { path: '/announcements/contact-us', label: 'Contact Us' },
+    ],
+  },
+  {
+    label: 'จัดการผู้เช่า',
+    icon: UserCheck,
+    menuKey: 'tenants',
+    roles: ['supervisor', 'admin'],
+    children: [
+      { path: '/tenant-types', label: 'ประเภทผู้เช่า' },
+      { path: '/tenants', label: 'รายชื่อผู้ใช้งาน' },
+      { path: '/tenants/pending', label: 'ผู้ใช้งานรอการอนุมัติ' },
+    ],
+  },
+  {
     label: 'บัญชี',
     icon: CreditCard,
     menuKey: 'accounting',
@@ -112,6 +136,7 @@ const menu = [
       { path: '/accounting-product-types', label: 'รายงานประเภทสินค้าที่ขาย' },
     ],
   },
+  { path: '/pdpa', label: 'จัดการ PDPA', icon: Settings, menuKey: 'pdpa', roles: ['supervisor'] },
   { path: '/admins', label: 'ผู้ดูแลระบบ', icon: Users, menuKey: 'admins' },
 ];
 
@@ -395,12 +420,19 @@ function Shell() {
             <Route path="/audit-fines" element={<AuditPage marketId={currentMarketId} mode="fines" />} />
             <Route path="/audit-fines-paid" element={<AuditPage marketId={currentMarketId} mode="paid" />} />
             <Route path="/audit-defective" element={<AuditPage marketId={currentMarketId} mode="defective" />} />
+            <Route path="/announcements/news" element={<AnnouncementsPage type="news" />} />
+            <Route path="/announcements/banners" element={<AnnouncementsPage type="banner" />} />
+            <Route path="/announcements/contact-us" element={<ContactUsPage />} />
+            <Route path="/tenant-types" element={<TenantTypesPage />} />
+            <Route path="/tenants" element={<TenantsPage />} />
+            <Route path="/tenants/pending" element={<TenantsPage status="pending" />} />
             <Route path="/accounting" element={<AccountingPage />} />
             <Route path="/accounting-bookings" element={<ReportsPage reportType="accounting-bookings" />} />
             <Route path="/accounting-payments" element={<AccountingPage />} />
             <Route path="/accounting-summary" element={<ReportsPage reportType="summary" />} />
             <Route path="/accounting-sap" element={<ReportsPage reportType="sap" />} />
             <Route path="/accounting-product-types" element={<ReportsPage reportType="product-types" />} />
+            <Route path="/pdpa" element={<PdpaPage />} />
             <Route path="/admins" element={<AdminsPage marketId={currentMarketId} />} />
           </Routes>
         </main>
@@ -412,6 +444,12 @@ function Shell() {
 function Sidebar({ items, open, onClose }) {
   const location = useLocation();
   const [expanded, setExpanded] = useState({ markets: true });
+  const activeMenuKey = items.find((item) => item.children?.some((child) => location.pathname === child.path))?.menuKey;
+
+  useEffect(() => {
+    if (!activeMenuKey) return;
+    setExpanded({ [activeMenuKey]: true });
+  }, [activeMenuKey]);
 
   return (
     <>
@@ -434,7 +472,7 @@ function Sidebar({ items, open, onClose }) {
               return (
                 <div key={item.label} className="mb-1">
                   <button
-                    onClick={() => setExpanded((current) => ({ ...current, [item.menuKey]: !current[item.menuKey] }))}
+                    onClick={() => setExpanded((current) => (current[item.menuKey] ? {} : { [item.menuKey]: true }))}
                     className={classNames('flex h-11 w-full items-center gap-3 rounded-xl px-3 text-sm font-semibold transition', activeChild ? 'bg-cyan-500/15 text-cyan-200' : 'text-slate-300 hover:bg-white/10 hover:text-white')}
                   >
                     <Icon size={18} />
@@ -1312,6 +1350,202 @@ function CouponsPage({ marketId, mode }) {
         </FormPanel>
         </Modal>
       </div>
+    </>
+  );
+}
+
+function AnnouncementsPage({ type }) {
+  const title = type === 'banner' ? 'Banner' : 'ข่าวสาร';
+  const { data = [], loading, reload } = useApi(`/announcements?type=${type}`, { initialData: [] });
+  const { mutate, loading: saving, error } = useMutation();
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState({ title: '', description: '', startDate: '', endDate: '', status: 'active' });
+  const [imageFile, setImageFile] = useState(null);
+  const rows = normalizeRows(data);
+
+  async function submit(event) {
+    event.preventDefault();
+    const payload = new FormData();
+    payload.append('type', type);
+    payload.append('title', form.title);
+    payload.append('description', form.description);
+    if (form.startDate) payload.append('startDate', form.startDate);
+    if (form.endDate) payload.append('endDate', form.endDate);
+    payload.append('status', form.status);
+    if (imageFile) payload.append('image', imageFile);
+    await mutate('/announcements', payload);
+    setForm({ title: '', description: '', startDate: '', endDate: '', status: 'active' });
+    setImageFile(null);
+    setModalOpen(false);
+    reload();
+  }
+
+  return (
+    <>
+      <PageHeader title={title} description="จัดการประกาศและประชาสัมพันธ์ภายใต้องค์กร" action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่ม{title}</button>} />
+      <Card>
+        {loading ? <LoadingBlock /> : (
+          <DataTable
+            columns={['ลำดับ', 'รูปภาพ', 'หัวข้อ', 'ช่วงวันที่', 'สถานะ']}
+            rows={rows.map((item, index) => [
+              index + 1,
+              item.image_url ? <img src={item.image_url} className="h-16 w-24 rounded-xl object-cover" /> : <div className="flex h-16 w-24 items-center justify-center rounded-xl bg-slate-100"><Image size={20} /></div>,
+              item.title,
+              `${formatDate(item.start_date)} - ${formatDate(item.end_date)}`,
+              <StatusBadge value={item.status} />,
+            ])}
+          />
+        )}
+      </Card>
+      <Modal open={modalOpen} title={`เพิ่ม${title}`} onClose={() => setModalOpen(false)}>
+        <FormPanel onSubmit={submit} loading={saving} error={error}>
+          <TextInput label="หัวข้อ" value={form.title} onChange={(value) => setForm((current) => ({ ...current, title: value }))} required />
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-bold text-slate-600">รายละเอียด</span>
+            <textarea value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} rows={5} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600" />
+          </label>
+          <FileInput label="รูปภาพ" onChange={setImageFile} />
+          {imageFile ? <FileSummary file={imageFile} /> : null}
+          <DatePicker label="วันที่เริ่ม" value={form.startDate} onChange={(value) => setForm((current) => ({ ...current, startDate: value }))} />
+          <DatePicker label="วันที่สิ้นสุด" value={form.endDate} onChange={(value) => setForm((current) => ({ ...current, endDate: value }))} />
+          <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'เปิดใช้งาน'], ['inactive', 'ปิดการใช้งาน']]} />
+        </FormPanel>
+      </Modal>
+    </>
+  );
+}
+
+function ContactUsPage() {
+  const { data = [], loading, reload } = useApi('/contact-us', { initialData: [] });
+  const { mutate, loading: saving, error } = useMutation();
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState({ title: '', phone: '', email: '', lineId: '', address: '', status: 'active' });
+  const rows = normalizeRows(data);
+
+  async function submit(event) {
+    event.preventDefault();
+    await mutate('/contact-us', form);
+    setForm({ title: '', phone: '', email: '', lineId: '', address: '', status: 'active' });
+    setModalOpen(false);
+    reload();
+  }
+
+  return (
+    <>
+      <PageHeader title="Contact Us" description="จัดการช่องทางติดต่อที่แสดงในระบบ" action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มข้อมูลติดต่อ</button>} />
+      <Card>{loading ? <LoadingBlock /> : <DataTable columns={['หัวข้อ', 'โทรศัพท์', 'Email', 'Line', 'สถานะ']} rows={rows.map((item) => [item.title, item.phone || '-', item.email || '-', item.line_id || '-', <StatusBadge value={item.status} />])} />}</Card>
+      <Modal open={modalOpen} title="เพิ่ม Contact Us" onClose={() => setModalOpen(false)}>
+        <FormPanel onSubmit={submit} loading={saving} error={error}>
+          <TextInput label="หัวข้อ" value={form.title} onChange={(value) => setForm((current) => ({ ...current, title: value }))} required />
+          <TextInput label="โทรศัพท์" value={form.phone} onChange={(value) => setForm((current) => ({ ...current, phone: value }))} />
+          <TextInput label="Email" value={form.email} onChange={(value) => setForm((current) => ({ ...current, email: value }))} />
+          <TextInput label="Line ID" value={form.lineId} onChange={(value) => setForm((current) => ({ ...current, lineId: value }))} />
+          <label className="block"><span className="mb-1.5 block text-sm font-bold text-slate-600">ที่อยู่</span><textarea value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} rows={4} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600" /></label>
+          <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'เปิดใช้งาน'], ['inactive', 'ปิดการใช้งาน']]} />
+        </FormPanel>
+      </Modal>
+    </>
+  );
+}
+
+function TenantTypesPage() {
+  const { data = [], loading, reload } = useApi('/tenant-types', { initialData: [] });
+  const { mutate, loading: saving, error } = useMutation();
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState({ name: '', status: 'active' });
+  const rows = normalizeRows(data);
+
+  async function submit(event) {
+    event.preventDefault();
+    await mutate('/tenant-types', form);
+    setForm({ name: '', status: 'active' });
+    setModalOpen(false);
+    reload();
+  }
+
+  return (
+    <>
+      <PageHeader title="ประเภทผู้เช่า" description="จัดการประเภทผู้เช่าในองค์กร" action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มประเภท</button>} />
+      <Card>{loading ? <LoadingBlock /> : <DataTable columns={['ลำดับ', 'ประเภทผู้เช่า', 'สถานะ']} rows={rows.map((item, index) => [index + 1, item.name, <StatusBadge value={item.status} />])} />}</Card>
+      <Modal open={modalOpen} title="เพิ่มประเภทผู้เช่า" onClose={() => setModalOpen(false)}>
+        <FormPanel onSubmit={submit} loading={saving} error={error}>
+          <TextInput label="ประเภทผู้เช่า" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
+          <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['inactive', 'ปิดการใช้งาน']]} />
+        </FormPanel>
+      </Modal>
+    </>
+  );
+}
+
+function TenantsPage({ status }) {
+  const { data = [], loading, reload } = useApi('/tenants', { initialData: [] });
+  const { data: tenantTypes = [] } = useApi('/tenant-types', { initialData: [] });
+  const { mutate, loading: saving, error } = useMutation();
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState({ username: '', password: 'Vendor@123456', tenantTypeId: '', firstName: '', lastName: '', phone: '', email: '', idCard: '', address: '', status: 'active' });
+  const typeRows = normalizeRows(tenantTypes);
+  const rows = normalizeRows(data).filter((item) => !status || item.status === status);
+
+  async function submit(event) {
+    event.preventDefault();
+    await mutate('/tenants', { ...form, tenantTypeId: form.tenantTypeId || null });
+    setForm({ username: '', password: 'Vendor@123456', tenantTypeId: '', firstName: '', lastName: '', phone: '', email: '', idCard: '', address: '', status: 'active' });
+    setModalOpen(false);
+    reload();
+  }
+
+  async function updateStatus(tenant, nextStatus) {
+    await mutate(`/tenants/${tenant.id}/status`, { status: nextStatus }, 'PATCH');
+    reload();
+  }
+
+  return (
+    <>
+      <PageHeader title={status === 'pending' ? 'ผู้ใช้งานรอการอนุมัติ' : 'รายชื่อผู้ใช้งาน'} description="จัดการข้อมูลผู้เช่าภายใต้องค์กร" action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มผู้เช่า</button>} />
+      <Card>{loading ? <LoadingBlock /> : <DataTable columns={['รหัส', 'ชื่อ', 'ประเภท', 'โทรศัพท์', 'Email', 'สถานะ', 'จัดการ']} rows={rows.map((item) => [item.public_id, `${item.first_name || ''} ${item.last_name || ''}`.trim() || '-', item.tenant_type_name || '-', item.phone || '-', item.email || '-', <StatusBadge value={item.status} />, <div className="flex gap-2"><SmallButton tone="cyan" onClick={() => updateStatus(item, 'active')}>อนุมัติ</SmallButton><SmallButton tone="red" onClick={() => updateStatus(item, 'suspended')}>ระงับ</SmallButton></div>])} />}</Card>
+      <Modal open={modalOpen} title="เพิ่มผู้เช่า" onClose={() => setModalOpen(false)}>
+        <FormPanel onSubmit={submit} loading={saving} error={error}>
+          <TextInput label="Username" value={form.username} onChange={(value) => setForm((current) => ({ ...current, username: value }))} required />
+          <TextInput label="Password" value={form.password} onChange={(value) => setForm((current) => ({ ...current, password: value }))} required />
+          <SelectInput label="ประเภทผู้เช่า" value={form.tenantTypeId} onChange={(value) => setForm((current) => ({ ...current, tenantTypeId: value }))} options={[['', 'ไม่ระบุ'], ...typeRows.map((item) => [String(item.id), item.name])]} />
+          <TextInput label="ชื่อ" value={form.firstName} onChange={(value) => setForm((current) => ({ ...current, firstName: value }))} required />
+          <TextInput label="นามสกุล" value={form.lastName} onChange={(value) => setForm((current) => ({ ...current, lastName: value }))} />
+          <TextInput label="โทรศัพท์" value={form.phone} onChange={(value) => setForm((current) => ({ ...current, phone: value }))} />
+          <TextInput label="Email" value={form.email} onChange={(value) => setForm((current) => ({ ...current, email: value }))} />
+          <TextInput label="เลขบัตร/ทะเบียน" value={form.idCard} onChange={(value) => setForm((current) => ({ ...current, idCard: value }))} />
+          <label className="block"><span className="mb-1.5 block text-sm font-bold text-slate-600">ที่อยู่</span><textarea value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} rows={4} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600" /></label>
+          <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['pending', 'รออนุมัติ'], ['suspended', 'ระงับ']]} />
+        </FormPanel>
+      </Modal>
+    </>
+  );
+}
+
+function PdpaPage() {
+  const { data = {}, loading, reload } = useApi('/pdpa', { initialData: {} });
+  const { mutate, loading: saving, error } = useMutation();
+  const [form, setForm] = useState({ title: 'PDPA Consent', content: '', status: 'active' });
+
+  useEffect(() => {
+    setForm({ title: data?.title || 'PDPA Consent', content: data?.content || '', status: data?.status || 'active' });
+  }, [data]);
+
+  async function submit(event) {
+    event.preventDefault();
+    await mutate('/pdpa', form, 'PUT');
+    reload();
+  }
+
+  return (
+    <>
+      <PageHeader title="จัดการ PDPA" description="จัดการข้อความ Consent PDPA ภายใต้องค์กร" />
+      <Card>{loading ? <LoadingBlock /> : (
+        <FormPanel onSubmit={submit} loading={saving} error={error}>
+          <TextInput label="หัวข้อ" value={form.title} onChange={(value) => setForm((current) => ({ ...current, title: value }))} required />
+          <label className="block"><span className="mb-1.5 block text-sm font-bold text-slate-600">รายละเอียด PDPA</span><textarea value={form.content} onChange={(event) => setForm((current) => ({ ...current, content: event.target.value }))} rows={14} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600" /></label>
+          <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'เปิดใช้งาน'], ['inactive', 'ปิดการใช้งาน']]} />
+        </FormPanel>
+      )}</Card>
     </>
   );
 }
