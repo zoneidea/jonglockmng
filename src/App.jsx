@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import {
   BadgeCheck,
@@ -563,12 +563,21 @@ function MarketsPage({ markets, reloadMarkets }) {
   const [keyword, setKeyword] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ code: '', name: '', description: '', openDate: '', closeDate: '' });
+  const [mainImageFile, setMainImageFile] = useState(null);
   const rows = markets.filter((market) => `${market.code} ${market.name}`.toLowerCase().includes(keyword.toLowerCase()));
 
   async function submit(event) {
     event.preventDefault();
-    await mutate('/markets', { ...form, closeDate: form.closeDate || null, openDate: form.openDate || null });
+    const payload = new FormData();
+    payload.append('code', form.code);
+    payload.append('name', form.name);
+    payload.append('description', form.description);
+    if (form.openDate) payload.append('openDate', form.openDate);
+    if (form.closeDate) payload.append('closeDate', form.closeDate);
+    if (mainImageFile) payload.append('mainImage', mainImageFile);
+    await mutate('/markets', payload);
     setForm({ code: '', name: '', description: '', openDate: '', closeDate: '' });
+    setMainImageFile(null);
     setModalOpen(false);
     reloadMarkets();
   }
@@ -601,6 +610,8 @@ function MarketsPage({ markets, reloadMarkets }) {
           <TextInput label="รหัสตลาด" value={form.code} onChange={(value) => setForm((current) => ({ ...current, code: value }))} required />
           <TextInput label="ชื่อตลาด" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
           <TextInput label="คำอธิบาย" value={form.description} onChange={(value) => setForm((current) => ({ ...current, description: value }))} />
+          <FileInput label="รูปภาพหลักของตลาด" onChange={setMainImageFile} />
+          {mainImageFile ? <FileSummary file={mainImageFile} /> : null}
           <TextInput label="วันเปิด" type="date" value={form.openDate} onChange={(value) => setForm((current) => ({ ...current, openDate: value }))} />
           <TextInput label="วันปิด" type="date" value={form.closeDate} onChange={(value) => setForm((current) => ({ ...current, closeDate: value }))} />
         </FormPanel>
@@ -621,12 +632,30 @@ function MarketInfoPage({ marketId, market, reloadMarkets }) {
     email: market?.email || '',
     terms: market?.terms || '',
   });
+  const [mainImageFile, setMainImageFile] = useState(null);
+
+  useEffect(() => {
+    setForm({
+      name: market?.name || '',
+      address: market?.address || '',
+      openingHours: market?.opening_hours || '08.30-17.30',
+      phone: market?.phone || '',
+      lineId: market?.line_id || '',
+      email: market?.email || '',
+      terms: market?.terms || '',
+    });
+    setMainImageFile(null);
+  }, [market]);
 
   if (!marketId) return <NeedMarket />;
 
   async function submit(event) {
     event.preventDefault();
-    await mutate(`/markets/${marketId}`, form, 'PATCH');
+    const payload = new FormData();
+    Object.entries(form).forEach(([key, value]) => payload.append(key, value || ''));
+    if (mainImageFile) payload.append('mainImage', mainImageFile);
+    await mutate(`/markets/${marketId}`, payload, 'PATCH');
+    setMainImageFile(null);
     reloadMarkets?.();
   }
 
@@ -636,6 +665,14 @@ function MarketInfoPage({ marketId, market, reloadMarkets }) {
       <Card>
         <FormPanel title="ข้อมูลทั่วไป" onSubmit={submit} loading={loading} error={error}>
           <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>ชื่อตลาด</Label><TextInputBare value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} /></div>
+          <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-start">
+            <Label>รูปภาพหลัก</Label>
+            <div className="space-y-3">
+              {market?.main_image_url ? <img src={market.main_image_url} alt={market.name || 'market'} className="h-56 w-full max-w-xl rounded-2xl object-cover" /> : <div className="flex h-40 max-w-xl items-center justify-center rounded-2xl bg-slate-100 text-sm font-bold text-slate-400">ยังไม่มีรูปภาพหลัก</div>}
+              <FileInput label="อัพโหลดรูปภาพหลัก" onChange={setMainImageFile} />
+              {mainImageFile ? <FileSummary file={mainImageFile} /> : null}
+            </div>
+          </div>
           <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>ที่ตั้ง</Label><TextInputBare value={form.address} onChange={(value) => setForm((current) => ({ ...current, address: value }))} /></div>
           <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>เวลาทำการ</Label><TextInputBare value={form.openingHours} onChange={(value) => setForm((current) => ({ ...current, openingHours: value }))} /></div>
           <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>เบอร์โทร</Label><TextInputBare value={form.phone} onChange={(value) => setForm((current) => ({ ...current, phone: value }))} /></div>
@@ -1031,14 +1068,22 @@ function AccessoriesPage({ marketId }) {
   const { mutate, loading: saving, error: saveError } = useMutation();
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ name: '', price: '100', quantity: '1', status: 'active' });
+  const [imageFile, setImageFile] = useState(null);
   const rows = normalizeRows(data);
 
   if (!marketId) return <NeedMarket />;
 
   async function submit(event) {
     event.preventDefault();
-    await mutate(`/markets/${marketId}/accessories`, { ...form, price: Number(form.price), quantity: Number(form.quantity) });
+    const payload = new FormData();
+    payload.append('name', form.name);
+    payload.append('price', form.price);
+    payload.append('quantity', form.quantity);
+    payload.append('status', form.status);
+    if (imageFile) payload.append('image', imageFile);
+    await mutate(`/markets/${marketId}/accessories`, payload);
     setForm({ name: '', price: '100', quantity: '1', status: 'active' });
+    setImageFile(null);
     setModalOpen(false);
     reload();
   }
@@ -1059,6 +1104,8 @@ function AccessoriesPage({ marketId }) {
         <Modal open={modalOpen} title="เพิ่มบริการเสริม" onClose={() => setModalOpen(false)}>
         <FormPanel onSubmit={submit} loading={saving} error={saveError}>
           <TextInput label="ชื่อบริการ" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
+          <FileInput label="รูปภาพบริการเสริม" onChange={setImageFile} />
+          {imageFile ? <FileSummary file={imageFile} /> : null}
           <TextInput label="ราคา" type="number" value={form.price} onChange={(value) => setForm((current) => ({ ...current, price: value }))} required />
           <TextInput label="จำนวน" type="number" value={form.quantity} onChange={(value) => setForm((current) => ({ ...current, quantity: value }))} required />
           <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['inactive', 'ปิดการใช้งาน']]} />
@@ -1461,6 +1508,26 @@ function TextInput({ label, value, onChange, type = 'text', required = false }) 
 
 function TextInputBare({ value, onChange, type = 'text', required = false }) {
   return <input type={type} value={value} required={required} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" />;
+}
+
+function FileInput({ label, onChange, multiple = false }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-sm font-bold text-slate-600">{label}</span>
+      <input
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif"
+        multiple={multiple}
+        onChange={(event) => onChange(multiple ? Array.from(event.target.files || []) : event.target.files?.[0] || null)}
+        className="block w-full rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-cyan-50 file:px-3 file:py-2 file:text-sm file:font-bold file:text-cyan-700 hover:border-cyan-400"
+      />
+    </label>
+  );
+}
+
+function FileSummary({ file }) {
+  if (!file) return null;
+  return <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">เลือกแล้ว {file.name}</div>;
 }
 
 function SelectInput({ label, value, onChange, options }) {
