@@ -790,8 +790,15 @@ function BoothTypesPage({ marketId }) {
   const { data = [], loading, error, reload } = useApi(marketId ? `/markets/${marketId}/booth-types` : null, { initialData: [] });
   const { mutate, loading: saving, error: saveError } = useMutation();
   const [modalOpen, setModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [copyModalOpen, setCopyModalOpen] = useState(false);
+  const [editingBoothType, setEditingBoothType] = useState(null);
   const [form, setForm] = useState({ name: '', startDate: '', endDate: '', status: 'active' });
+  const [editForm, setEditForm] = useState({ name: '', startDate: '', endDate: '', status: 'active' });
+  const [copyForm, setCopyForm] = useState({ sourceBoothTypeId: '', name: '', startDate: '', endDate: '', status: 'active' });
   const [planImageFile, setPlanImageFile] = useState(null);
+  const [editPlanImageFile, setEditPlanImageFile] = useState(null);
+  const [copyPlanImageFile, setCopyPlanImageFile] = useState(null);
   const rows = normalizeRows(data);
 
   if (!marketId) return <NeedMarket />;
@@ -811,9 +818,65 @@ function BoothTypesPage({ marketId }) {
     reload();
   }
 
+  function openEditModal(item) {
+    setEditingBoothType(item);
+    setEditForm({
+      name: item.name || item.title || '',
+      startDate: item.start_date ? String(item.start_date).slice(0, 10) : '',
+      endDate: item.end_date ? String(item.end_date).slice(0, 10) : '',
+      status: item.status || 'active',
+    });
+    setEditPlanImageFile(null);
+    setEditModalOpen(true);
+  }
+
+  async function submitEdit(event) {
+    event.preventDefault();
+    if (!editingBoothType) return;
+    const payload = new FormData();
+    payload.append('name', editForm.name);
+    payload.append('startDate', editForm.startDate);
+    payload.append('endDate', editForm.endDate);
+    payload.append('status', editForm.status);
+    if (editPlanImageFile) payload.append('planImage', editPlanImageFile);
+    await mutate(`/markets/${marketId}/booth-types/${editingBoothType.id}`, payload, 'PATCH');
+    setEditModalOpen(false);
+    setEditingBoothType(null);
+    setEditPlanImageFile(null);
+    reload();
+  }
+
+  function openCopyModal() {
+    const source = rows[0];
+    setCopyForm({
+      sourceBoothTypeId: source?.id ? String(source.id) : '',
+      name: '',
+      startDate: source?.start_date ? String(source.start_date).slice(0, 10) : '',
+      endDate: source?.end_date ? String(source.end_date).slice(0, 10) : '',
+      status: 'active',
+    });
+    setCopyPlanImageFile(null);
+    setCopyModalOpen(true);
+  }
+
+  async function submitCopy(event) {
+    event.preventDefault();
+    const payload = new FormData();
+    payload.append('sourceBoothTypeId', copyForm.sourceBoothTypeId);
+    payload.append('name', copyForm.name);
+    payload.append('startDate', copyForm.startDate);
+    payload.append('endDate', copyForm.endDate);
+    payload.append('status', copyForm.status);
+    if (copyPlanImageFile) payload.append('planImage', copyPlanImageFile);
+    await mutate(`/markets/${marketId}/booth-types/copy`, payload);
+    setCopyModalOpen(false);
+    setCopyPlanImageFile(null);
+    reload();
+  }
+
   return (
     <>
-      <PageHeader title="แบบ Booth" description="จัดการรูปแบบบูธและช่วงวันที่เปิดใช้งาน" action={<div className="flex gap-2"><OutlineButton>Copy Booth</OutlineButton><button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มแบบ Booth</button></div>} />
+      <PageHeader title="แบบ Booth" description="จัดการรูปแบบบูธและช่วงวันที่เปิดใช้งาน" action={<div className="flex gap-2"><OutlineButton onClick={openCopyModal}>Copy Booth</OutlineButton><button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มแบบ Booth</button></div>} />
       <div className="grid gap-6">
         <Card>
           <ErrorNotice error={error} hint="ถ้ายังไม่มี endpoint นี้ ให้เพิ่ม backend endpoint /markets/:marketId/booth-types" />
@@ -827,7 +890,7 @@ function BoothTypesPage({ marketId }) {
                 formatDate(item.start_date),
                 formatDate(item.end_date),
                 <StatusBadge value={item.status || 'active'} />,
-                <div className="flex gap-2"><SmallButton tone="cyan">ดูข้อมูล Booths</SmallButton><SmallButton tone="amber">แก้ไขข้อมูล</SmallButton></div>,
+                <div className="flex gap-2"><SmallButton tone="amber" onClick={() => openEditModal(item)}>แก้ไขข้อมูล</SmallButton></div>,
               ])}
             />
           )}
@@ -840,6 +903,28 @@ function BoothTypesPage({ marketId }) {
           <DatePicker label="วันที่เริ่มต้น" value={form.startDate} onChange={(value) => setForm((current) => ({ ...current, startDate: value }))} />
           <DatePicker label="วันที่สิ้นสุด" value={form.endDate} onChange={(value) => setForm((current) => ({ ...current, endDate: value }))} />
           <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['inactive', 'ระงับการใช้']]} />
+        </FormPanel>
+        </Modal>
+        <Modal open={editModalOpen} title="แก้ไขแบบ Booth" onClose={() => setEditModalOpen(false)}>
+        <FormPanel onSubmit={submitEdit} loading={saving} error={saveError}>
+          <TextInput label="ชื่อแบบ Booth" value={editForm.name} onChange={(value) => setEditForm((current) => ({ ...current, name: value }))} required />
+          {editingBoothType?.plan_image_url ? <img src={editingBoothType.plan_image_url} className="h-48 w-full rounded-2xl object-cover" /> : null}
+          <FileInput label="แผนผังภาพรวมของตลาด" onChange={setEditPlanImageFile} />
+          {editPlanImageFile ? <FileSummary file={editPlanImageFile} /> : null}
+          <DatePicker label="วันที่เริ่มต้น" value={editForm.startDate} onChange={(value) => setEditForm((current) => ({ ...current, startDate: value }))} />
+          <DatePicker label="วันที่สิ้นสุด" value={editForm.endDate} onChange={(value) => setEditForm((current) => ({ ...current, endDate: value }))} />
+          <SelectInput label="สถานะ" value={editForm.status} onChange={(value) => setEditForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['inactive', 'ระงับการใช้']]} />
+        </FormPanel>
+        </Modal>
+        <Modal open={copyModalOpen} title="Copy Booth" onClose={() => setCopyModalOpen(false)}>
+        <FormPanel onSubmit={submitCopy} loading={saving} error={saveError}>
+          <SelectInput label="แบบ Booth ต้นแบบ" value={copyForm.sourceBoothTypeId} onChange={(value) => setCopyForm((current) => ({ ...current, sourceBoothTypeId: value }))} options={rows.map((item) => [String(item.id), item.name || item.title])} />
+          <TextInput label="ชื่อแบบ Booth ใหม่" value={copyForm.name} onChange={(value) => setCopyForm((current) => ({ ...current, name: value }))} required />
+          <FileInput label="รูปภาพแผนผัง" onChange={setCopyPlanImageFile} />
+          {copyPlanImageFile ? <FileSummary file={copyPlanImageFile} /> : null}
+          <DatePicker label="วันที่เริ่มต้น" value={copyForm.startDate} onChange={(value) => setCopyForm((current) => ({ ...current, startDate: value }))} required />
+          <DatePicker label="วันที่สิ้นสุด" value={copyForm.endDate} onChange={(value) => setCopyForm((current) => ({ ...current, endDate: value }))} required />
+          <SelectInput label="สถานะการเปิดใช้งาน" value={copyForm.status} onChange={(value) => setCopyForm((current) => ({ ...current, status: value }))} options={[['active', 'เปิดใช้งาน'], ['inactive', 'ปิดใช้งาน']]} />
         </FormPanel>
         </Modal>
       </div>
@@ -2352,13 +2437,13 @@ function SmallButton({ children, tone = 'slate', onClick, disabled = false }) {
   return <button type="button" disabled={disabled} onClick={onClick} className={classNames('inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50', tones[tone])}>{children}</button>;
 }
 
-function OutlineButton({ children, tone = 'amber' }) {
+function OutlineButton({ children, tone = 'amber', onClick, disabled = false }) {
   const tones = {
     cyan: 'border-cyan-300 text-cyan-700 hover:bg-cyan-50',
     amber: 'border-amber-300 text-amber-700 hover:bg-amber-50',
     red: 'border-red-300 text-red-700 hover:bg-red-50',
   };
-  return <button type="button" className={classNames('inline-flex h-11 items-center gap-2 rounded-xl border px-4 text-sm font-bold transition', tones[tone])}>{children}</button>;
+  return <button type="button" disabled={disabled} onClick={onClick} className={classNames('inline-flex h-11 items-center gap-2 rounded-xl border px-4 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50', tones[tone])}>{children}</button>;
 }
 
 export default function App() {
