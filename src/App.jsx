@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   CreditCard,
   Eye,
+  EyeOff,
   Heading1,
   Image,
   ImagePlus,
@@ -43,7 +44,7 @@ import { useApi, useMutation } from './hooks/useApi.js';
 import { useAuth } from './state/auth.jsx';
 
 const menu = [
-  { path: '/', label: 'ภาพรวม', icon: LayoutDashboard, menuKey: 'dashboard', roles: ['supervisor', 'admin'] },
+  { path: '/', label: 'ภาพรวม', icon: LayoutDashboard, menuKey: 'dashboard', roles: ['supervisor', 'admin', 'accounting'] },
   {
     label: 'จัดการตลาด',
     icon: Store,
@@ -374,7 +375,7 @@ function ProtectedRoute({ children }) {
 function Shell() {
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const canLoadMarkets = ['supervisor', 'admin'].includes(user?.role);
+  const canLoadMarkets = ['supervisor', 'admin', 'accounting'].includes(user?.role);
   const { data: markets = [], loading: marketsLoading, reload: reloadMarkets } = useApi(canLoadMarkets ? '/markets' : null, {
     initialData: [],
     skip: !canLoadMarkets,
@@ -398,6 +399,7 @@ function Shell() {
           markets={marketRows}
           currentMarketId={currentMarketId}
           marketsLoading={marketsLoading}
+          showMarketSelector={user?.role !== 'accounting'}
           onSelectMarket={setSelectedMarketId}
           onOpenSidebar={() => setSidebarOpen(true)}
           onLogout={logout}
@@ -526,7 +528,7 @@ function Sidebar({ items, open, onClose }) {
   );
 }
 
-function Topbar({ user, markets, currentMarketId, marketsLoading, onSelectMarket, onOpenSidebar, onLogout }) {
+function Topbar({ user, markets, currentMarketId, marketsLoading, showMarketSelector, onSelectMarket, onOpenSidebar, onLogout }) {
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
       <div className="flex h-20 items-center gap-4 px-4 sm:px-6 lg:px-8">
@@ -535,7 +537,7 @@ function Topbar({ user, markets, currentMarketId, marketsLoading, onSelectMarket
           <h1 className="truncate text-lg font-extrabold text-slate-950">ระบบจัดการตลาด</h1>
           <p className="text-xs text-slate-500">Role: {user?.role || '-'} · API connected</p>
         </div>
-        {marketsLoading || markets.length ? (
+        {showMarketSelector && (marketsLoading || markets.length) ? (
           <select value={currentMarketId} onChange={(event) => onSelectMarket(event.target.value)} className="hidden h-11 min-w-64 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 sm:block">
             {marketsLoading ? <option>Loading...</option> : null}
             {markets.map((market) => (
@@ -604,8 +606,8 @@ function Stat({ label, value, icon: Icon, tone = 'slate' }) {
 
 function Dashboard({ marketId, markets }) {
   const { user } = useAuth();
-  const canReadReports = ['supervisor', 'admin'].includes(user?.role);
-  const canReadPayments = ['supervisor', 'accounting'].includes(user?.role);
+  const canReadReports = ['supervisor', 'admin', 'accounting'].includes(user?.role);
+  const canReadPayments = ['supervisor', 'admin', 'accounting'].includes(user?.role);
   const { data: report = [], loading: reportLoading } = useApi(canReadReports ? '/reports/bookings' : null, { initialData: [], skip: !canReadReports });
   const { data: payments = [] } = useApi(canReadPayments ? '/accounting/payments' : null, { initialData: [], skip: !canReadPayments });
   const reportRows = normalizeRows(report);
@@ -613,10 +615,13 @@ function Dashboard({ marketId, markets }) {
   const bookingCount = reportRows.reduce((sum, row) => sum + Number(row.booking_count || 0), 0);
   const revenue = reportRows.reduce((sum, row) => sum + Number(row.total_amount || 0), 0);
   const paidPayments = paymentRows.filter((payment) => payment.status === 'paid').length;
+  const dashboardDescription = user?.role === 'admin'
+    ? `ภาพรวมเฉพาะตลาดที่ได้รับมอบหมาย ${marketId ? `(เลือกตลาด ${marketId})` : ''}`
+    : 'ภาพรวมรวมทุกตลาดภายในองค์กร';
 
   return (
     <>
-      <PageHeader title="ภาพรวมระบบ" description={`Market ID: ${marketId || '-'}`} />
+      <PageHeader title="ภาพรวมระบบ" description={dashboardDescription} />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Stat label="จำนวนตลาด" value={markets.length} icon={Store} />
         <Stat label="จำนวนการจอง" value={bookingCount} icon={TicketCheck} tone="blue" />
@@ -1797,10 +1802,12 @@ function AccountingPage() {
 }
 
 function AdminsPage({ marketId }) {
+  const { data: admins = [], loading: adminsLoading, reload: reloadAdmins } = useApi('/admins', { initialData: [] });
   const { data: markets = [] } = useApi('/markets', { initialData: [] });
   const { mutate, loading, error } = useMutation();
   const [modalOpen, setModalOpen] = useState(false);
   const marketRows = normalizeRows(markets);
+  const adminRows = normalizeRows(admins);
   const [form, setForm] = useState({ username: '', password: 'Admin@123456', role: 'admin', name: '', email: '', phone: '', marketId: String(marketId || '') });
   const [message, setMessage] = useState('');
   const [formError, setFormError] = useState('');
@@ -1818,6 +1825,7 @@ function AdminsPage({ marketId }) {
     setModalOpen(false);
     setFormError('');
     setForm((current) => ({ ...current, username: '', name: '', email: '', phone: '' }));
+    reloadAdmins();
   }
 
   return (
@@ -1839,6 +1847,24 @@ function AdminsPage({ marketId }) {
           ) : null}
         </FormPanel>
         </Modal>
+        <Card>
+          <SectionTitle title="รายการผู้ดูแลระบบ" description="ข้อมูลบัญชีผู้ดูแลทั้งหมดภายในองค์กร" icon={Users} />
+          {adminsLoading ? <LoadingBlock /> : (
+            <DataTable
+              columns={['ID', 'ชื่อ', 'Role', 'Email', 'Phone', 'ตลาดที่ดูแล', 'สถานะ', 'สร้างเมื่อ']}
+              rows={adminRows.map((item) => [
+                item.id,
+                item.name || '-',
+                item.role,
+                item.email || '-',
+                item.phone || '-',
+                item.role === 'accounting' ? 'ทุกตลาดในองค์กร' : item.role === 'supervisor' ? 'ทุกตลาดในองค์กร' : item.assigned_markets || '-',
+                <StatusBadge value={item.status} />,
+                formatDate(item.created_at),
+              ])}
+            />
+          )}
+        </Card>
         <Card>
           <SectionTitle title="คำอธิบาย Role" description="ใช้สำหรับกำหนดสิทธิ์การเข้าถึงเมนูหลัก" icon={ShieldIcon} />
           <div className="grid gap-3 sm:grid-cols-2">
@@ -1972,7 +1998,18 @@ function TextInput({ label, value, onChange, type = 'text', required = false }) 
 }
 
 function TextInputBare({ value, onChange, type = 'text', required = false }) {
-  return <input type={type} value={value} required={required} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" />;
+  const [visible, setVisible] = useState(false);
+  const isPassword = type === 'password';
+  return (
+    <div className="relative">
+      <input type={isPassword && visible ? 'text' : type} value={value} required={required} onChange={(event) => onChange(event.target.value)} className={classNames('h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100', isPassword ? 'pr-11' : '')} />
+      {isPassword ? (
+        <button type="button" onClick={() => setVisible((current) => !current)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700">
+          {visible ? <EyeOff size={18} /> : <Eye size={18} />}
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 function DatePicker({ label, value, onChange, required = false }) {
