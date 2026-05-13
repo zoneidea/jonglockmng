@@ -876,12 +876,35 @@ function MarketImagesPage({ marketId }) {
   const { data = [], loading, error, reload } = useApi(marketId ? `/markets/${marketId}/images` : null, { initialData: [] });
   const { mutate, loading: saving, error: saveError } = useMutation();
   const [modalOpen, setModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingImage, setEditingImage] = useState(null);
   const [form, setForm] = useState({ title: '', sortOrder: '0', status: 'active' });
+  const [editForm, setEditForm] = useState({ title: '', sortOrder: '0', status: 'active' });
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const [selectedEditFile, setSelectedEditFile] = useState(null);
   const [uploadError, setUploadError] = useState('');
   const rows = normalizeRows(data);
 
   if (!marketId) return <NeedMarket />;
+
+  function openCreateModal() {
+    setForm({ title: '', sortOrder: '0', status: 'active' });
+    setSelectedFiles([]);
+    setUploadError('');
+    setModalOpen(true);
+  }
+
+  function openEditModal(item) {
+    setEditingImage(item);
+    setEditForm({
+      title: item.title || '',
+      sortOrder: String(item.sort_order ?? item.sortOrder ?? 0),
+      status: item.status || 'active',
+    });
+    setSelectedEditFile(null);
+    setUploadError('');
+    setEditModalOpen(true);
+  }
 
   async function submit(event) {
     event.preventDefault();
@@ -902,9 +925,34 @@ function MarketImagesPage({ marketId }) {
     reload();
   }
 
+  async function submitEdit(event) {
+    event.preventDefault();
+    if (!editingImage) return;
+    setUploadError('');
+    const payload = new FormData();
+    payload.append('title', editForm.title);
+    payload.append('sortOrder', editForm.sortOrder);
+    payload.append('status', editForm.status);
+    if (selectedEditFile) payload.append('image', selectedEditFile);
+    await mutate(`/markets/${marketId}/images/${editingImage.id}`, payload, 'PATCH');
+    setEditingImage(null);
+    setSelectedEditFile(null);
+    setEditModalOpen(false);
+    reload();
+  }
+
+  async function toggleStatus(item) {
+    const payload = new FormData();
+    payload.append('title', item.title || '');
+    payload.append('sortOrder', String(item.sort_order ?? item.sortOrder ?? 0));
+    payload.append('status', item.status === 'active' ? 'inactive' : 'active');
+    await mutate(`/markets/${marketId}/images/${item.id}`, payload, 'PATCH');
+    reload();
+  }
+
   return (
     <>
-      <PageHeader title="จัดการรูปภาพตลาด" description="ข้อมูลรูปภาพทั้งหมดของตลาดนี้" action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มรูปภาพ</button>} />
+      <PageHeader title="จัดการรูปภาพตลาด" description="ข้อมูลรูปภาพทั้งหมดของตลาดนี้" action={<button onClick={openCreateModal} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มรูปภาพ</button>} />
       <Card>
         <ErrorNotice error={error} hint="ตรวจสอบ endpoint /markets/:marketId/images และสิทธิ์การเข้าถึงตลาด" />
         {loading ? <LoadingBlock /> : (
@@ -919,7 +967,11 @@ function MarketImagesPage({ marketId }) {
                       {item.title ? <p className="mt-1 truncate text-sm text-white/80">{item.title}</p> : null}
                     </div>
                   </div>
-                  <div className="flex gap-2 p-4"><SmallButton tone="slate"><Eye size={14} /> ดู</SmallButton><SmallButton tone="cyan">เปิด/ปิด</SmallButton><SmallButton tone="red">ลบ</SmallButton></div>
+                  <div className="flex flex-wrap gap-2 p-4">
+                    <SmallButton tone="slate" onClick={() => window.open(item.image_url, '_blank', 'noopener,noreferrer')}><Eye size={14} /> ดู</SmallButton>
+                    <SmallButton tone="amber" onClick={() => openEditModal(item)}>แก้ไข</SmallButton>
+                    <SmallButton tone="cyan" onClick={() => toggleStatus(item)}>{item.status === 'active' ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}</SmallButton>
+                  </div>
                 </div>
               ))}
             </div>
@@ -950,6 +1002,24 @@ function MarketImagesPage({ marketId }) {
           ) : null}
           <TextInput label="ลำดับ" type="number" value={form.sortOrder} onChange={(value) => setForm((current) => ({ ...current, sortOrder: value }))} />
           <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'เปิดใช้งาน'], ['inactive', 'ปิดการใช้งาน']]} />
+        </FormPanel>
+      </Modal>
+      <Modal open={editModalOpen} title="แก้ไขรูปภาพตลาด" onClose={() => setEditModalOpen(false)}>
+        <FormPanel onSubmit={submitEdit} loading={saving} error={uploadError || saveError}>
+          <TextInput label="ชื่อรูปภาพ" value={editForm.title} onChange={(value) => setEditForm((current) => ({ ...current, title: value }))} />
+          {editingImage?.image_url ? <img src={editingImage.image_url} alt={editingImage.title || 'market'} className="h-48 w-full rounded-2xl object-cover" /> : null}
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-bold text-slate-600">อัพโหลดรูปภาพใหม่</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={(event) => setSelectedEditFile(event.target.files?.[0] || null)}
+              className="block w-full rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-cyan-50 file:px-3 file:py-2 file:text-sm file:font-bold file:text-cyan-700 hover:border-cyan-400"
+            />
+          </label>
+          {selectedEditFile ? <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">เลือกแล้ว {selectedEditFile.name}</div> : null}
+          <TextInput label="ลำดับ" type="number" value={editForm.sortOrder} onChange={(value) => setEditForm((current) => ({ ...current, sortOrder: value }))} />
+          <SelectInput label="สถานะ" value={editForm.status} onChange={(value) => setEditForm((current) => ({ ...current, status: value }))} options={[['active', 'เปิดใช้งาน'], ['inactive', 'ปิดการใช้งาน']]} />
         </FormPanel>
       </Modal>
     </>
@@ -1404,14 +1474,14 @@ function SelectInput({ label, value, onChange, options }) {
   );
 }
 
-function SmallButton({ children, tone = 'slate' }) {
+function SmallButton({ children, tone = 'slate', onClick }) {
   const tones = {
     slate: 'bg-slate-100 text-slate-700 hover:bg-slate-200',
     cyan: 'bg-cyan-50 text-cyan-700 ring-1 ring-cyan-200 hover:bg-cyan-100',
     amber: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200 hover:bg-amber-100',
     red: 'bg-red-50 text-red-700 ring-1 ring-red-200 hover:bg-red-100',
   };
-  return <button type="button" className={classNames('inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-bold transition', tones[tone])}>{children}</button>;
+  return <button type="button" onClick={onClick} className={classNames('inline-flex items-center gap-1 rounded-lg px-3 py-2 text-xs font-bold transition', tones[tone])}>{children}</button>;
 }
 
 function OutlineButton({ children, tone = 'amber' }) {
