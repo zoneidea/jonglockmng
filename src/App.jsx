@@ -1493,29 +1493,12 @@ function ContactUsPage() {
 
 function TenantTypesPage() {
   const { data = [], loading, reload } = useApi('/tenant-types', { initialData: [] });
-  const { mutate, loading: saving, error } = useMutation();
-  const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', status: 'active' });
   const rows = normalizeRows(data);
-
-  async function submit(event) {
-    event.preventDefault();
-    await mutate('/tenant-types', form);
-    setForm({ name: '', status: 'active' });
-    setModalOpen(false);
-    reload();
-  }
 
   return (
     <>
-      <PageHeader title="ประเภทผู้เช่า" description="จัดการประเภทผู้เช่าในองค์กร" action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มประเภท</button>} />
+      <PageHeader title="ประเภทผู้เช่า" description="ประเภทสมาชิกถูกกำหนดคงที่ภายใต้องค์กร: บุคคลธรรมดา และ นิติบุคคล" />
       <Card>{loading ? <LoadingBlock /> : <DataTable columns={['ลำดับ', 'ประเภทผู้เช่า', 'สถานะ']} rows={rows.map((item, index) => [index + 1, item.name, <StatusBadge value={item.status} />])} />}</Card>
-      <Modal open={modalOpen} title="เพิ่มประเภทผู้เช่า" onClose={() => setModalOpen(false)}>
-        <FormPanel onSubmit={submit} loading={saving} error={error}>
-          <TextInput label="ประเภทผู้เช่า" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
-          <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['inactive', 'ปิดการใช้งาน']]} />
-        </FormPanel>
-      </Modal>
     </>
   );
 }
