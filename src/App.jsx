@@ -113,14 +113,14 @@ const menu = [
     ],
   },
   {
-    label: 'จัดการผู้เช่า',
+    label: 'รายงานผู้เช่า',
     icon: UserCheck,
     menuKey: 'tenants',
     roles: ['supervisor', 'admin'],
     children: [
       { path: '/tenant-types', label: 'ประเภทผู้เช่า' },
-      { path: '/tenants', label: 'รายชื่อผู้ใช้งาน' },
-      { path: '/tenants/pending', label: 'ผู้ใช้งานรอการอนุมัติ' },
+      { path: '/tenants', label: 'รายชื่อผู้เช่า' },
+      { path: '/tenants/pending', label: 'ผู้เช่ารอการอนุมัติ' },
     ],
   },
   {
@@ -1520,20 +1520,81 @@ function TenantTypesPage() {
   );
 }
 
+function validateTenantForm(form, mode = 'create') {
+  if (!form.username || form.username.trim().length < 4) return 'Username ต้องมีอย่างน้อย 4 ตัวอักษร';
+  if (mode === 'create' && (!form.password || form.password.length < 8)) return 'Password ต้องมีอย่างน้อย 8 ตัวอักษร';
+  if (mode === 'edit' && form.password && form.password.length < 8) return 'Password ใหม่ต้องมีอย่างน้อย 8 ตัวอักษร';
+  if (!form.tenantTypeId) return 'กรุณาเลือกประเภทสมาชิก';
+  if (!form.name || !form.name.trim()) return 'กรุณากรอกชื่อผู้เช่า';
+  if (!/^\d{9,20}$/.test(String(form.phone || '').replace(/\D/g, ''))) return 'เบอร์โทรไม่ถูกต้อง';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(form.email || '').trim())) return 'อีเมลไม่ถูกต้อง';
+  if (!/^\d{13,20}$/.test(String(form.idCard || '').replace(/\D/g, ''))) return 'เลขบัตรประชาชนไม่ถูกต้อง';
+  if (!form.address || form.address.trim().length < 5) return 'กรุณากรอกที่อยู่';
+  return '';
+}
+
 function TenantsPage({ status }) {
   const { data = [], loading, reload } = useApi('/tenants', { initialData: [] });
   const { data: tenantTypes = [] } = useApi('/tenant-types', { initialData: [] });
   const { mutate, loading: saving, error } = useMutation();
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ username: '', password: 'Vendor@123456', tenantTypeId: '', firstName: '', lastName: '', phone: '', email: '', idCard: '', address: '', status: 'active' });
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [tenantError, setTenantError] = useState('');
+  const [editingTenant, setEditingTenant] = useState(null);
+  const [form, setForm] = useState({ username: '', password: 'Vendor@123456', tenantTypeId: '', name: '', phone: '', email: '', idCard: '', address: '' });
+  const [editForm, setEditForm] = useState({ username: '', password: '', tenantTypeId: '', name: '', phone: '', email: '', idCard: '', address: '', status: 'active' });
   const typeRows = normalizeRows(tenantTypes);
   const rows = normalizeRows(data).filter((item) => !status || item.status === status);
 
+  function openCreateModal() {
+    setTenantError('');
+    setForm({ username: '', password: 'Vendor@123456', tenantTypeId: typeRows[0]?.id ? String(typeRows[0].id) : '', name: '', phone: '', email: '', idCard: '', address: '' });
+    setModalOpen(true);
+  }
+
+  function openEditModal(tenant) {
+    setTenantError('');
+    setEditingTenant(tenant);
+    setEditForm({
+      username: tenant.username || '',
+      password: '',
+      tenantTypeId: tenant.tenant_type_id ? String(tenant.tenant_type_id) : '',
+      name: tenant.name || '',
+      phone: tenant.phone || '',
+      email: tenant.email || '',
+      idCard: tenant.id_card || '',
+      address: tenant.address || '',
+      status: tenant.status || 'active',
+    });
+    setEditModalOpen(true);
+  }
+
   async function submit(event) {
     event.preventDefault();
-    await mutate('/tenants', { ...form, tenantTypeId: form.tenantTypeId || null });
-    setForm({ username: '', password: 'Vendor@123456', tenantTypeId: '', firstName: '', lastName: '', phone: '', email: '', idCard: '', address: '', status: 'active' });
+    const validationError = validateTenantForm(form, 'create');
+    if (validationError) {
+      setTenantError(validationError);
+      return;
+    }
+    await mutate('/tenants', { ...form, tenantTypeId: Number(form.tenantTypeId) });
+    setForm({ username: '', password: 'Vendor@123456', tenantTypeId: '', name: '', phone: '', email: '', idCard: '', address: '' });
+    setTenantError('');
     setModalOpen(false);
+    reload();
+  }
+
+  async function submitEdit(event) {
+    event.preventDefault();
+    if (!editingTenant) return;
+    const validationError = validateTenantForm(editForm, 'edit');
+    if (validationError) {
+      setTenantError(validationError);
+      return;
+    }
+    await mutate(`/tenants/${editingTenant.id}`, { ...editForm, tenantTypeId: Number(editForm.tenantTypeId) }, 'PATCH');
+    setTenantError('');
+    setEditModalOpen(false);
+    setEditingTenant(null);
     reload();
   }
 
@@ -1544,20 +1605,33 @@ function TenantsPage({ status }) {
 
   return (
     <>
-      <PageHeader title={status === 'pending' ? 'ผู้ใช้งานรอการอนุมัติ' : 'รายชื่อผู้ใช้งาน'} description="จัดการข้อมูลผู้เช่าภายใต้องค์กร" action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มผู้เช่า</button>} />
-      <Card>{loading ? <LoadingBlock /> : <DataTable columns={['รหัส', 'ชื่อ', 'ประเภท', 'โทรศัพท์', 'Email', 'สถานะ', 'จัดการ']} rows={rows.map((item) => [item.public_id, `${item.first_name || ''} ${item.last_name || ''}`.trim() || '-', item.tenant_type_name || '-', item.phone || '-', item.email || '-', <StatusBadge value={item.status} />, <div className="flex gap-2"><SmallButton tone="cyan" onClick={() => updateStatus(item, 'active')}>อนุมัติ</SmallButton><SmallButton tone="red" onClick={() => updateStatus(item, 'suspended')}>ระงับ</SmallButton></div>])} />}</Card>
+      <PageHeader title={status === 'pending' ? 'ผู้เช่ารอการอนุมัติ' : 'รายชื่อผู้เช่า'} description="รายงานและจัดการข้อมูลผู้เช่าภายใต้องค์กร" action={<button onClick={openCreateModal} disabled={!typeRows.length} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"><Plus size={16} /> เพิ่มผู้เช่า</button>} />
+      {!typeRows.length ? <Card><div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">กรุณาสร้างประเภทสมาชิกในเมนู “ประเภทผู้เช่า” ก่อนเพิ่มผู้เช่า</div></Card> : null}
+      <Card>{loading ? <LoadingBlock /> : <DataTable columns={['รหัส', 'Username', 'ชื่อผู้เช่า', 'ประเภทสมาชิก', 'โทรศัพท์', 'Email', 'สถานะ', 'จัดการ']} rows={rows.map((item) => [item.public_id, item.username || '-', item.name || '-', item.tenant_type_name || '-', item.phone || '-', item.email || '-', <StatusBadge value={item.status} />, <div className="flex gap-2"><SmallButton tone="amber" onClick={() => openEditModal(item)}>แก้ไข</SmallButton><SmallButton tone="cyan" onClick={() => updateStatus(item, 'active')}>อนุมัติ</SmallButton><SmallButton tone="red" onClick={() => updateStatus(item, 'suspended')}>ระงับ</SmallButton></div>])} />}</Card>
       <Modal open={modalOpen} title="เพิ่มผู้เช่า" onClose={() => setModalOpen(false)}>
-        <FormPanel onSubmit={submit} loading={saving} error={error}>
-          <TextInput label="Username" value={form.username} onChange={(value) => setForm((current) => ({ ...current, username: value }))} required />
-          <TextInput label="Password" value={form.password} onChange={(value) => setForm((current) => ({ ...current, password: value }))} required />
-          <SelectInput label="ประเภทผู้เช่า" value={form.tenantTypeId} onChange={(value) => setForm((current) => ({ ...current, tenantTypeId: value }))} options={[['', 'ไม่ระบุ'], ...typeRows.map((item) => [String(item.id), item.name])]} />
-          <TextInput label="ชื่อ" value={form.firstName} onChange={(value) => setForm((current) => ({ ...current, firstName: value }))} required />
-          <TextInput label="นามสกุล" value={form.lastName} onChange={(value) => setForm((current) => ({ ...current, lastName: value }))} />
-          <TextInput label="โทรศัพท์" value={form.phone} onChange={(value) => setForm((current) => ({ ...current, phone: value }))} />
-          <TextInput label="Email" value={form.email} onChange={(value) => setForm((current) => ({ ...current, email: value }))} />
-          <TextInput label="เลขบัตร/ทะเบียน" value={form.idCard} onChange={(value) => setForm((current) => ({ ...current, idCard: value }))} />
-          <label className="block"><span className="mb-1.5 block text-sm font-bold text-slate-600">ที่อยู่</span><textarea value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} rows={4} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600" /></label>
-          <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['pending', 'รออนุมัติ'], ['suspended', 'ระงับ']]} />
+        <FormPanel onSubmit={submit} loading={saving} error={tenantError || error}>
+          <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>Username</Label><TextInputBare value={form.username} onChange={(value) => setForm((current) => ({ ...current, username: value }))} /></div>
+          <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>Password</Label><TextInputBare value={form.password} onChange={(value) => setForm((current) => ({ ...current, password: value }))} /></div>
+          <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>ประเภทสมาชิก</Label><select value={form.tenantTypeId} onChange={(event) => setForm((current) => ({ ...current, tenantTypeId: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"><option value="">เลือกประเภทสมาชิก</option>{typeRows.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
+          <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>ชื่อผู้เช่า</Label><TextInputBare value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} /></div>
+          <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>เลขบัตรประชาชน</Label><TextInputBare value={form.idCard} onChange={(value) => setForm((current) => ({ ...current, idCard: value }))} /></div>
+          <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>อีเมล</Label><TextInputBare value={form.email} onChange={(value) => setForm((current) => ({ ...current, email: value }))} type="email" /></div>
+          <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>เบอร์โทร</Label><TextInputBare value={form.phone} onChange={(value) => setForm((current) => ({ ...current, phone: value }))} /></div>
+          <div className="grid gap-4 lg:grid-cols-[180px_1fr]"><Label>ที่อยู่</Label><textarea value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} rows={4} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600" /></div>
+          <div className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">บันทึกจากระบบจัดการจะตั้งสถานะเป็นอนุมัติอัตโนมัติ</div>
+        </FormPanel>
+      </Modal>
+      <Modal open={editModalOpen} title="แก้ไขข้อมูลผู้เช่า" onClose={() => setEditModalOpen(false)}>
+        <FormPanel onSubmit={submitEdit} loading={saving} error={tenantError || error}>
+          <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>Username</Label><TextInputBare value={editForm.username} onChange={(value) => setEditForm((current) => ({ ...current, username: value }))} /></div>
+          <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>Password ใหม่</Label><TextInputBare value={editForm.password} onChange={(value) => setEditForm((current) => ({ ...current, password: value }))} /><p className="text-xs text-slate-500">ปล่อยว่างถ้าไม่ต้องการเปลี่ยนรหัสผ่าน</p></div>
+          <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>ประเภทสมาชิก</Label><select value={editForm.tenantTypeId} onChange={(event) => setEditForm((current) => ({ ...current, tenantTypeId: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"><option value="">เลือกประเภทสมาชิก</option>{typeRows.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
+          <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>ชื่อผู้เช่า</Label><TextInputBare value={editForm.name} onChange={(value) => setEditForm((current) => ({ ...current, name: value }))} /></div>
+          <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>เลขบัตรประชาชน</Label><TextInputBare value={editForm.idCard} onChange={(value) => setEditForm((current) => ({ ...current, idCard: value }))} /></div>
+          <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>อีเมล</Label><TextInputBare value={editForm.email} onChange={(value) => setEditForm((current) => ({ ...current, email: value }))} type="email" /></div>
+          <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>เบอร์โทร</Label><TextInputBare value={editForm.phone} onChange={(value) => setEditForm((current) => ({ ...current, phone: value }))} /></div>
+          <div className="grid gap-4 lg:grid-cols-[180px_1fr]"><Label>ที่อยู่</Label><textarea value={editForm.address} onChange={(event) => setEditForm((current) => ({ ...current, address: event.target.value }))} rows={4} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600" /></div>
+          <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>สถานะใช้งาน</Label><select value={editForm.status} onChange={(event) => setEditForm((current) => ({ ...current, status: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"><option value="active">อนุมัติแล้ว</option><option value="pending">รออนุมัติ</option><option value="suspended">ระงับ</option><option value="deleted">ยกเลิก</option></select></div>
         </FormPanel>
       </Modal>
     </>
