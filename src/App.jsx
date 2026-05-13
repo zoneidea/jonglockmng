@@ -485,6 +485,7 @@ function Sidebar({ items, open, onClose }) {
                         <NavLink
                           key={child.path}
                           to={child.path}
+                          end
                           onClick={onClose}
                           className={({ isActive }) => classNames('block rounded-lg px-3 py-2 text-sm transition', isActive ? 'bg-white text-slate-950 font-bold' : 'text-slate-400 hover:bg-white/10 hover:text-white')}
                         >
