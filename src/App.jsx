@@ -1336,7 +1336,7 @@ function AccessoriesPage({ marketId }) {
 
   return (
     <>
-      <PageHeader title="บริการเสริม" description="แสดงรายการบริการเสริมของแต่ละตลาด" action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl border border-amber-300 px-4 text-sm font-bold text-amber-700"><Plus size={16} /> เพิ่มบริการ</button>} />
+      <PageHeader title="บริการเสริม" description="แสดงรายการบริการเสริมของแต่ละตลาด" action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มบริการ</button>} />
       <div className="grid gap-6">
         <Card>
           <ErrorNotice error={error} hint="ถ้ายังไม่มี endpoint นี้ ให้เพิ่ม backend endpoint /markets/:marketId/accessories" />
