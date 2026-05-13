@@ -1503,16 +1503,50 @@ function TenantTypesPage() {
   );
 }
 
+const PASSWORD_POLICY_ITEMS = [
+  'อย่างน้อย 10 ตัวอักษร',
+  'มีตัวพิมพ์ใหญ่อย่างน้อย 1 ตัว',
+  'มีตัวเลขอย่างน้อย 1 ตัว',
+  'มีอักขระพิเศษอย่างน้อย 1 ตัว',
+];
+
+function isStrongPassword(password) {
+  return typeof password === 'string'
+    && password.length >= 10
+    && /[A-Z]/.test(password)
+    && /\d/.test(password)
+    && /[^A-Za-z0-9]/.test(password);
+}
+
+function PasswordPolicyHint({ optional = false }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+      <div className="font-semibold text-slate-700">{optional ? 'นโยบายรหัสผ่านใหม่' : 'นโยบายรหัสผ่าน'}</div>
+      <ul className="mt-2 list-disc space-y-1 pl-5">
+        {PASSWORD_POLICY_ITEMS.map((item) => <li key={item}>{item}</li>)}
+      </ul>
+    </div>
+  );
+}
+
 function validateTenantForm(form, mode = 'create') {
   if (!form.username || form.username.trim().length < 4) return 'Username ต้องมีอย่างน้อย 4 ตัวอักษร';
-  if (mode === 'create' && (!form.password || form.password.length < 8)) return 'Password ต้องมีอย่างน้อย 8 ตัวอักษร';
-  if (mode === 'edit' && form.password && form.password.length < 8) return 'Password ใหม่ต้องมีอย่างน้อย 8 ตัวอักษร';
+  if (mode === 'create' && !isStrongPassword(form.password)) return 'Password ต้องมีอย่างน้อย 10 ตัวอักษร และมีตัวพิมพ์ใหญ่ ตัวเลข และอักขระพิเศษ';
+  if (mode === 'edit' && form.password && !isStrongPassword(form.password)) return 'Password ใหม่ต้องมีอย่างน้อย 10 ตัวอักษร และมีตัวพิมพ์ใหญ่ ตัวเลข และอักขระพิเศษ';
   if (!form.tenantTypeId) return 'กรุณาเลือกประเภทสมาชิก';
   if (!form.name || !form.name.trim()) return 'กรุณากรอกชื่อผู้เช่า';
   if (!/^\d{9,20}$/.test(String(form.phone || '').replace(/\D/g, ''))) return 'เบอร์โทรไม่ถูกต้อง';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(form.email || '').trim())) return 'อีเมลไม่ถูกต้อง';
   if (!/^\d{13,20}$/.test(String(form.idCard || '').replace(/\D/g, ''))) return 'เลขบัตรประชาชนไม่ถูกต้อง';
   if (!form.address || form.address.trim().length < 5) return 'กรุณากรอกที่อยู่';
+  return '';
+}
+
+function validateAdminForm(form) {
+  if (!form.username || form.username.trim().length < 3) return 'Username ต้องมีอย่างน้อย 3 ตัวอักษร';
+  if (!isStrongPassword(form.password)) return 'Password ต้องมีอย่างน้อย 10 ตัวอักษร และมีตัวพิมพ์ใหญ่ ตัวเลข และอักขระพิเศษ';
+  if (!form.name || !form.name.trim()) return 'กรุณากรอกชื่อ';
+  if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(form.email).trim())) return 'อีเมลไม่ถูกต้อง';
   return '';
 }
 
@@ -1594,7 +1628,8 @@ function TenantsPage({ status }) {
       <Modal open={modalOpen} title="เพิ่มผู้เช่า" onClose={() => setModalOpen(false)}>
         <FormPanel onSubmit={submit} loading={saving} error={tenantError || error}>
           <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>Username</Label><TextInputBare value={form.username} onChange={(value) => setForm((current) => ({ ...current, username: value }))} /></div>
-          <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>Password</Label><TextInputBare value={form.password} onChange={(value) => setForm((current) => ({ ...current, password: value }))} /></div>
+          <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>Password</Label><TextInputBare value={form.password} onChange={(value) => setForm((current) => ({ ...current, password: value }))} type="password" /></div>
+          <PasswordPolicyHint />
           <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>ประเภทสมาชิก</Label><select value={form.tenantTypeId} onChange={(event) => setForm((current) => ({ ...current, tenantTypeId: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"><option value="">เลือกประเภทสมาชิก</option>{typeRows.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
           <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>ชื่อผู้เช่า</Label><TextInputBare value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} /></div>
           <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>เลขบัตรประชาชน</Label><TextInputBare value={form.idCard} onChange={(value) => setForm((current) => ({ ...current, idCard: value }))} /></div>
@@ -1607,7 +1642,8 @@ function TenantsPage({ status }) {
       <Modal open={editModalOpen} title="แก้ไขข้อมูลผู้เช่า" onClose={() => setEditModalOpen(false)}>
         <FormPanel onSubmit={submitEdit} loading={saving} error={tenantError || error}>
           <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>Username</Label><TextInputBare value={editForm.username} onChange={(value) => setEditForm((current) => ({ ...current, username: value }))} /></div>
-          <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>Password ใหม่</Label><TextInputBare value={editForm.password} onChange={(value) => setEditForm((current) => ({ ...current, password: value }))} /><p className="text-xs text-slate-500">ปล่อยว่างถ้าไม่ต้องการเปลี่ยนรหัสผ่าน</p></div>
+          <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>Password ใหม่</Label><TextInputBare value={editForm.password} onChange={(value) => setEditForm((current) => ({ ...current, password: value }))} type="password" /><p className="text-xs text-slate-500">ปล่อยว่างถ้าไม่ต้องการเปลี่ยนรหัสผ่าน</p></div>
+          <PasswordPolicyHint optional />
           <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>ประเภทสมาชิก</Label><select value={editForm.tenantTypeId} onChange={(event) => setEditForm((current) => ({ ...current, tenantTypeId: event.target.value }))} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"><option value="">เลือกประเภทสมาชิก</option>{typeRows.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></div>
           <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>ชื่อผู้เช่า</Label><TextInputBare value={editForm.name} onChange={(value) => setEditForm((current) => ({ ...current, name: value }))} /></div>
           <div className="grid gap-4 lg:grid-cols-[180px_1fr] lg:items-center"><Label>เลขบัตรประชาชน</Label><TextInputBare value={editForm.idCard} onChange={(value) => setEditForm((current) => ({ ...current, idCard: value }))} /></div>
@@ -1735,13 +1771,20 @@ function AdminsPage({ marketId }) {
   const marketRows = normalizeRows(markets);
   const [form, setForm] = useState({ username: '', password: 'Admin@123456', role: 'admin', name: '', email: '', phone: '', marketId: String(marketId || '') });
   const [message, setMessage] = useState('');
+  const [formError, setFormError] = useState('');
 
   async function submit(event) {
     event.preventDefault();
+    const validationError = validateAdminForm(form);
+    if (validationError) {
+      setFormError(validationError);
+      return;
+    }
     const marketIds = form.role === 'accounting' || form.role === 'supervisor' ? [] : [Number(form.marketId || marketRows[0]?.id)].filter(Boolean);
     await mutate('/admins', { ...form, marketIds });
     setMessage('สร้างผู้ดูแลระบบสำเร็จ');
     setModalOpen(false);
+    setFormError('');
     setForm((current) => ({ ...current, username: '', name: '', email: '', phone: '' }));
   }
 
@@ -1750,10 +1793,11 @@ function AdminsPage({ marketId }) {
       <PageHeader title="ผู้ดูแลระบบ" description="สร้างบัญชีผู้ดูแลและกำหนดสิทธิ์ตลาด" action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มผู้ดูแล</button>} />
       <div className="grid gap-6">
         <Modal open={modalOpen} title="เพิ่มผู้ดูแล" onClose={() => setModalOpen(false)}>
-        <FormPanel onSubmit={submit} loading={loading} error={error}>
+        <FormPanel onSubmit={submit} loading={loading} error={formError || error}>
           {message ? <div className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div> : null}
           <TextInput label="Username" value={form.username} onChange={(value) => setForm((current) => ({ ...current, username: value }))} required />
-          <TextInput label="Password" value={form.password} onChange={(value) => setForm((current) => ({ ...current, password: value }))} required />
+          <TextInput label="Password" value={form.password} onChange={(value) => setForm((current) => ({ ...current, password: value }))} type="password" required />
+          <PasswordPolicyHint />
           <SelectInput label="Role" value={form.role} onChange={(value) => setForm((current) => ({ ...current, role: value }))} options={[['admin', 'admin'], ['supervisor', 'supervisor'], ['accounting', 'accounting'], ['audit', 'audit']]} />
           <TextInput label="ชื่อ" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
           <TextInput label="Email" value={form.email} onChange={(value) => setForm((current) => ({ ...current, email: value }))} />
