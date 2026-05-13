@@ -1414,12 +1414,23 @@ function CouponsPage({ marketId, mode }) {
 }
 
 function AnnouncementsPage({ type }) {
+  const { token } = useAuth();
+  const isNews = type === 'news';
   const title = type === 'banner' ? 'Banner' : 'ข่าวสาร';
   const { data = [], loading, reload } = useApi(`/announcements?type=${type}`, { initialData: [] });
   const { mutate, loading: saving, error } = useMutation();
   const [modalOpen, setModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState('');
+  const [editingAnnouncement, setEditingAnnouncement] = useState(null);
   const [form, setForm] = useState({ title: '', description: '', startDate: '', endDate: '', status: 'active' });
+  const [editForm, setEditForm] = useState({ title: '', description: '', startDate: '', endDate: '', status: 'active', coverImageId: '' });
   const [imageFile, setImageFile] = useState(null);
+  const [imageFiles, setImageFiles] = useState([]);
+  const [editImageFile, setEditImageFile] = useState(null);
+  const [editImageFiles, setEditImageFiles] = useState([]);
+  const [editImages, setEditImages] = useState([]);
   const rows = normalizeRows(data);
 
   async function submit(event) {
@@ -1431,11 +1442,85 @@ function AnnouncementsPage({ type }) {
     if (form.startDate) payload.append('startDate', form.startDate);
     if (form.endDate) payload.append('endDate', form.endDate);
     payload.append('status', form.status);
-    if (imageFile) payload.append('image', imageFile);
+    if (isNews) {
+      imageFiles.forEach((file) => payload.append('images', file));
+    } else if (imageFile) {
+      payload.append('image', imageFile);
+    }
     await mutate('/announcements', payload);
     setForm({ title: '', description: '', startDate: '', endDate: '', status: 'active' });
     setImageFile(null);
+    setImageFiles([]);
     setModalOpen(false);
+    reload();
+  }
+
+  async function openEditModal(id) {
+    setDetailLoading(true);
+    setDetailError('');
+    try {
+      const payload = await request(`/announcements/${id}`, { token });
+      const item = payload.data;
+      setEditingAnnouncement(item);
+      setEditForm({
+        title: item.title || '',
+        description: item.description || '',
+        startDate: item.start_date ? String(item.start_date).slice(0, 10) : '',
+        endDate: item.end_date ? String(item.end_date).slice(0, 10) : '',
+        status: item.status || 'active',
+        coverImageId: item.images?.find((image) => Number(image.is_cover) === 1)?.id ? String(item.images.find((image) => Number(image.is_cover) === 1).id) : '',
+      });
+      setEditImages(item.images || []);
+      setEditImageFile(null);
+      setEditImageFiles([]);
+      setEditModalOpen(true);
+    } catch (loadError) {
+      setDetailError(loadError.message || 'โหลดรายละเอียดข่าวสารไม่สำเร็จ');
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  async function submitEdit(event) {
+    event.preventDefault();
+    if (!editingAnnouncement) return;
+    const payload = new FormData();
+    payload.append('title', editForm.title);
+    payload.append('description', editForm.description);
+    if (editForm.startDate) payload.append('startDate', editForm.startDate);
+    if (editForm.endDate) payload.append('endDate', editForm.endDate);
+    payload.append('status', editForm.status);
+    if (isNews) {
+      if (editForm.coverImageId) payload.append('coverImageId', editForm.coverImageId);
+      editImageFiles.forEach((file) => payload.append('images', file));
+    } else if (editImageFile) {
+      payload.append('image', editImageFile);
+    }
+    await mutate(`/announcements/${editingAnnouncement.id}`, payload, 'PATCH');
+    setEditModalOpen(false);
+    setEditingAnnouncement(null);
+    setEditImages([]);
+    reload();
+  }
+
+  async function setCoverImage(imageId) {
+    if (!editingAnnouncement) return;
+    await mutate(`/announcements/${editingAnnouncement.id}/images/${imageId}/cover`, {}, 'PATCH');
+    setEditImages((current) => current.map((image) => ({ ...image, is_cover: image.id === imageId ? 1 : 0 })));
+    setEditForm((current) => ({ ...current, coverImageId: String(imageId) }));
+    reload();
+  }
+
+  async function deleteImage(imageId) {
+    if (!editingAnnouncement) return;
+    await request(`/announcements/${editingAnnouncement.id}/images/${imageId}`, {
+      method: 'DELETE',
+      token,
+    });
+    const remaining = editImages.filter((image) => image.id !== imageId);
+    setEditImages(remaining);
+    const nextCover = remaining.find((image) => Number(image.is_cover) === 1)?.id || remaining[0]?.id || '';
+    setEditForm((current) => ({ ...current, coverImageId: nextCover ? String(nextCover) : '' }));
     reload();
   }
 
@@ -1445,13 +1530,14 @@ function AnnouncementsPage({ type }) {
       <Card>
         {loading ? <LoadingBlock /> : (
           <DataTable
-            columns={['ลำดับ', 'รูปภาพ', 'หัวข้อ', 'ช่วงวันที่', 'สถานะ']}
+            columns={['ลำดับ', 'รูปภาพ', 'หัวข้อ', 'ช่วงวันที่', 'สถานะ', 'จัดการ']}
             rows={rows.map((item, index) => [
               index + 1,
               item.image_url ? <img src={item.image_url} className="h-16 w-24 rounded-xl object-cover" /> : <div className="flex h-16 w-24 items-center justify-center rounded-xl bg-slate-100"><Image size={20} /></div>,
               item.title,
               `${formatDate(item.start_date)} - ${formatDate(item.end_date)}`,
               <StatusBadge value={item.status} />,
+              <div className="flex gap-2"><SmallButton tone="amber" onClick={() => openEditModal(item.id)}>แก้ไข</SmallButton>{isNews ? <span className="inline-flex items-center rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">{item.image_count || 0} รูป</span> : null}</div>,
             ])}
           />
         )}
@@ -1459,16 +1545,58 @@ function AnnouncementsPage({ type }) {
       <Modal open={modalOpen} title={`เพิ่ม${title}`} onClose={() => setModalOpen(false)}>
         <FormPanel onSubmit={submit} loading={saving} error={error}>
           <TextInput label="หัวข้อ" value={form.title} onChange={(value) => setForm((current) => ({ ...current, title: value }))} required />
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-bold text-slate-600">รายละเอียด</span>
-            <textarea value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} rows={5} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600" />
-          </label>
-          <FileInput label="รูปภาพ" onChange={setImageFile} />
-          {imageFile ? <FileSummary file={imageFile} /> : null}
+          {isNews ? (
+            <RichTextEditor label="รายละเอียดข่าวสาร" value={form.description} onChange={(value) => setForm((current) => ({ ...current, description: value }))} />
+          ) : (
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-bold text-slate-600">รายละเอียด</span>
+              <textarea value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} rows={5} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600" />
+            </label>
+          )}
+          <FileInput label={isNews ? 'รูปภาพข่าวสาร' : 'รูปภาพ'} onChange={isNews ? setImageFiles : setImageFile} multiple={isNews} />
+          {isNews ? (imageFiles.length ? <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">เลือกแล้ว {imageFiles.length} รูป</div> : null) : imageFile ? <FileSummary file={imageFile} /> : null}
           <DatePicker label="วันที่เริ่ม" value={form.startDate} onChange={(value) => setForm((current) => ({ ...current, startDate: value }))} />
           <DatePicker label="วันที่สิ้นสุด" value={form.endDate} onChange={(value) => setForm((current) => ({ ...current, endDate: value }))} />
           <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'เปิดใช้งาน'], ['inactive', 'ปิดการใช้งาน']]} />
         </FormPanel>
+      </Modal>
+      <Modal open={editModalOpen} title={`แก้ไข${title}`} onClose={() => setEditModalOpen(false)}>
+        {detailLoading ? <LoadingBlock /> : (
+          <FormPanel onSubmit={submitEdit} loading={saving} error={detailError || error}>
+            <TextInput label="หัวข้อ" value={editForm.title} onChange={(value) => setEditForm((current) => ({ ...current, title: value }))} required />
+            {isNews ? (
+              <RichTextEditor label="รายละเอียดข่าวสาร" value={editForm.description} onChange={(value) => setEditForm((current) => ({ ...current, description: value }))} />
+            ) : (
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-bold text-slate-600">รายละเอียด</span>
+                <textarea value={editForm.description} onChange={(event) => setEditForm((current) => ({ ...current, description: event.target.value }))} rows={5} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600" />
+              </label>
+            )}
+            <FileInput label={isNews ? 'เพิ่มรูปภาพข่าวสาร' : 'รูปภาพใหม่'} onChange={isNews ? setEditImageFiles : setEditImageFile} multiple={isNews} />
+            {isNews ? (editImageFiles.length ? <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">เลือกรูปเพิ่ม {editImageFiles.length} รูป</div> : null) : editImageFile ? <FileSummary file={editImageFile} /> : null}
+            {isNews && editImages.length ? (
+              <div className="space-y-3">
+                <Label>รูปภาพข่าวสารเดิม</Label>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {editImages.map((image) => (
+                    <div key={image.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                      <img src={image.image_url} className="h-36 w-full rounded-xl object-cover" />
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <SmallButton tone={Number(image.is_cover) === 1 ? 'cyan' : 'slate'} onClick={() => setCoverImage(image.id)}>
+                          {Number(image.is_cover) === 1 ? 'รูปหน้าปก' : 'ตั้งเป็นหน้าปก'}
+                        </SmallButton>
+                        <SmallButton tone="red" onClick={() => deleteImage(image.id)}>ลบรูป</SmallButton>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            <DatePicker label="วันที่เริ่ม" value={editForm.startDate} onChange={(value) => setEditForm((current) => ({ ...current, startDate: value }))} />
+            <DatePicker label="วันที่สิ้นสุด" value={editForm.endDate} onChange={(value) => setEditForm((current) => ({ ...current, endDate: value }))} />
+            <SelectInput label="สถานะ" value={editForm.status} onChange={(value) => setEditForm((current) => ({ ...current, status: value }))} options={[['active', 'เปิดใช้งาน'], ['inactive', 'ปิดการใช้งาน']]} />
+          </FormPanel>
+        )}
       </Modal>
     </>
   );
