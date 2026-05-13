@@ -183,6 +183,35 @@ function utcTimeFromDateKey(key) {
   return Date.UTC(year, month - 1, day);
 }
 
+function toTimePickerValue(value) {
+  const match = String(value || '').replace('.', ':').match(/(\d{1,2}):(\d{2})/);
+  if (!match) return '';
+  return `${match[1].padStart(2, '0')}:${match[2]}`;
+}
+
+function splitOpeningHours(value) {
+  const [start = '', end = ''] = String(value || '').split('-');
+  return { openingStart: toTimePickerValue(start), openingEnd: toTimePickerValue(end) };
+}
+
+function combineOpeningHours(start, end) {
+  if (!start && !end) return '';
+  if (!end) return start;
+  if (!start) return end;
+  return `${start}-${end}`;
+}
+
+function toDateTimePickerValue(value) {
+  if (!value) return '';
+  return String(value).replace(' ', 'T').slice(0, 16);
+}
+
+function fromDateTimePickerValue(value) {
+  if (!value) return '';
+  const normalized = String(value).replace('T', ' ');
+  return normalized.length === 16 ? `${normalized}:00` : normalized;
+}
+
 function normalizeRows(value) {
   if (Array.isArray(value)) return value;
   if (Array.isArray(value?.rows)) return value.rows;
@@ -612,8 +641,8 @@ function MarketsPage({ markets, reloadMarkets }) {
           <TextInput label="คำอธิบาย" value={form.description} onChange={(value) => setForm((current) => ({ ...current, description: value }))} />
           <FileInput label="รูปภาพหลักของตลาด" onChange={setMainImageFile} />
           {mainImageFile ? <FileSummary file={mainImageFile} /> : null}
-          <TextInput label="วันเปิด" type="date" value={form.openDate} onChange={(value) => setForm((current) => ({ ...current, openDate: value }))} />
-          <TextInput label="วันปิด" type="date" value={form.closeDate} onChange={(value) => setForm((current) => ({ ...current, closeDate: value }))} />
+          <DatePicker label="วันเปิด" value={form.openDate} onChange={(value) => setForm((current) => ({ ...current, openDate: value }))} />
+          <DatePicker label="วันปิด" value={form.closeDate} onChange={(value) => setForm((current) => ({ ...current, closeDate: value }))} />
         </FormPanel>
         </Modal>
       </div>
@@ -623,10 +652,13 @@ function MarketsPage({ markets, reloadMarkets }) {
 
 function MarketInfoPage({ marketId, market, reloadMarkets }) {
   const { mutate, loading, error } = useMutation();
+  const openingHours = splitOpeningHours(market?.opening_hours || '08:30-17:30');
   const [form, setForm] = useState({
     name: market?.name || '',
+    description: market?.description || '',
     address: market?.address || '',
-    openingHours: market?.opening_hours || '08.30-17.30',
+    openingStart: openingHours.openingStart,
+    openingEnd: openingHours.openingEnd,
     phone: market?.phone || '',
     lineId: market?.line_id || '',
     email: market?.email || '',
@@ -635,10 +667,13 @@ function MarketInfoPage({ marketId, market, reloadMarkets }) {
   const [mainImageFile, setMainImageFile] = useState(null);
 
   useEffect(() => {
+    const nextOpeningHours = splitOpeningHours(market?.opening_hours || '08:30-17:30');
     setForm({
       name: market?.name || '',
+      description: market?.description || '',
       address: market?.address || '',
-      openingHours: market?.opening_hours || '08.30-17.30',
+      openingStart: nextOpeningHours.openingStart,
+      openingEnd: nextOpeningHours.openingEnd,
       phone: market?.phone || '',
       lineId: market?.line_id || '',
       email: market?.email || '',
@@ -652,7 +687,14 @@ function MarketInfoPage({ marketId, market, reloadMarkets }) {
   async function submit(event) {
     event.preventDefault();
     const payload = new FormData();
-    Object.entries(form).forEach(([key, value]) => payload.append(key, value || ''));
+    payload.append('name', form.name || '');
+    payload.append('description', form.description || '');
+    payload.append('address', form.address || '');
+    payload.append('openingHours', combineOpeningHours(form.openingStart, form.openingEnd));
+    payload.append('phone', form.phone || '');
+    payload.append('lineId', form.lineId || '');
+    payload.append('email', form.email || '');
+    payload.append('terms', form.terms || '');
     if (mainImageFile) payload.append('mainImage', mainImageFile);
     await mutate(`/markets/${marketId}`, payload, 'PATCH');
     setMainImageFile(null);
@@ -665,6 +707,7 @@ function MarketInfoPage({ marketId, market, reloadMarkets }) {
       <Card>
         <FormPanel title="ข้อมูลทั่วไป" onSubmit={submit} loading={loading} error={error}>
           <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>ชื่อตลาด</Label><TextInputBare value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} /></div>
+          <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>คำอธิบาย</Label><TextInputBare value={form.description} onChange={(value) => setForm((current) => ({ ...current, description: value }))} /></div>
           <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-start">
             <Label>รูปภาพหลัก</Label>
             <div className="space-y-3">
@@ -674,7 +717,13 @@ function MarketInfoPage({ marketId, market, reloadMarkets }) {
             </div>
           </div>
           <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>ที่ตั้ง</Label><TextInputBare value={form.address} onChange={(value) => setForm((current) => ({ ...current, address: value }))} /></div>
-          <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>เวลาทำการ</Label><TextInputBare value={form.openingHours} onChange={(value) => setForm((current) => ({ ...current, openingHours: value }))} /></div>
+          <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center">
+            <Label>เวลาทำการ</Label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <TimePicker label="เวลาเปิด" value={form.openingStart} onChange={(value) => setForm((current) => ({ ...current, openingStart: value }))} />
+              <TimePicker label="เวลาปิด" value={form.openingEnd} onChange={(value) => setForm((current) => ({ ...current, openingEnd: value }))} />
+            </div>
+          </div>
           <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>เบอร์โทร</Label><TextInputBare value={form.phone} onChange={(value) => setForm((current) => ({ ...current, phone: value }))} /></div>
           <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>Line ID</Label><TextInputBare value={form.lineId} onChange={(value) => setForm((current) => ({ ...current, lineId: value }))} /></div>
           <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>Email</Label><TextInputBare value={form.email} onChange={(value) => setForm((current) => ({ ...current, email: value }))} /></div>
@@ -718,8 +767,8 @@ function BoothTypesPage({ marketId }) {
         <Modal open={modalOpen} title="เพิ่มแบบ Booth" onClose={() => setModalOpen(false)}>
         <FormPanel onSubmit={submit} loading={saving} error={saveError}>
           <TextInput label="ชื่อแบบ Booth" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
-          <TextInput label="วันที่เริ่มต้น" type="date" value={form.startDate} onChange={(value) => setForm((current) => ({ ...current, startDate: value }))} />
-          <TextInput label="วันที่สิ้นสุด" type="date" value={form.endDate} onChange={(value) => setForm((current) => ({ ...current, endDate: value }))} />
+          <DatePicker label="วันที่เริ่มต้น" value={form.startDate} onChange={(value) => setForm((current) => ({ ...current, startDate: value }))} />
+          <DatePicker label="วันที่สิ้นสุด" value={form.endDate} onChange={(value) => setForm((current) => ({ ...current, endDate: value }))} />
           <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['inactive', 'ระงับการใช้']]} />
         </FormPanel>
         </Modal>
@@ -833,8 +882,8 @@ function MarketHolidaysPage({ marketId }) {
         <Modal open={modalOpen} title="เพิ่มวันหยุด" onClose={() => setModalOpen(false)}>
         <FormPanel onSubmit={submit} loading={saving} error={saveError}>
           <TextInput label="ชื่อวันหยุด" value={form.title} onChange={(value) => setForm((current) => ({ ...current, title: value }))} required />
-          <TextInput label="วันที่เริ่ม" type="date" value={form.startDate} onChange={(value) => setForm((current) => ({ ...current, startDate: value }))} required />
-          <TextInput label="วันที่สิ้นสุด" type="date" value={form.endDate} onChange={(value) => setForm((current) => ({ ...current, endDate: value }))} required />
+          <DatePicker label="วันที่เริ่ม" value={form.startDate} onChange={(value) => setForm((current) => ({ ...current, startDate: value }))} required />
+          <DatePicker label="วันที่สิ้นสุด" value={form.endDate} onChange={(value) => setForm((current) => ({ ...current, endDate: value }))} required />
         </FormPanel>
         </Modal>
       </div>
@@ -1224,13 +1273,19 @@ function CouponsPage({ marketId, mode }) {
   const { data = [], loading, reload } = useApi(marketId ? `/markets/${marketId}/coupons` : null, { initialData: [] });
   const { mutate, loading: saving, error } = useMutation();
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', code: '', discountType: 'amount', discountValue: '100', usageLimit: '10', startsAt: '2026-01-01 00:00:00', endsAt: '2026-12-31 23:59:59' });
+  const [form, setForm] = useState({ name: '', code: '', discountType: 'amount', discountValue: '100', usageLimit: '10', startsAt: '2026-01-01T00:00', endsAt: '2026-12-31T23:59' });
   const rows = normalizeRows(data);
   if (!marketId) return <NeedMarket />;
 
   async function submit(event) {
     event.preventDefault();
-    await mutate(`/markets/${marketId}/coupons`, { ...form, discountValue: Number(form.discountValue), usageLimit: form.usageLimit ? Number(form.usageLimit) : null });
+    await mutate(`/markets/${marketId}/coupons`, {
+      ...form,
+      startsAt: fromDateTimePickerValue(form.startsAt),
+      endsAt: fromDateTimePickerValue(form.endsAt),
+      discountValue: Number(form.discountValue),
+      usageLimit: form.usageLimit ? Number(form.usageLimit) : null,
+    });
     setForm((current) => ({ ...current, name: '', code: '' }));
     setModalOpen(false);
     reload();
@@ -1252,8 +1307,8 @@ function CouponsPage({ marketId, mode }) {
           <SelectInput label="ประเภทส่วนลด" value={form.discountType} onChange={(value) => setForm((current) => ({ ...current, discountType: value }))} options={[['amount', 'จำนวนเงิน'], ['percent', 'เปอร์เซ็นต์']]} />
           <TextInput label="มูลค่าส่วนลด" value={form.discountValue} onChange={(value) => setForm((current) => ({ ...current, discountValue: value }))} required />
           <TextInput label="จำนวนครั้งที่ใช้ได้" value={form.usageLimit} onChange={(value) => setForm((current) => ({ ...current, usageLimit: value }))} />
-          <TextInput label="เริ่มต้น" value={form.startsAt} onChange={(value) => setForm((current) => ({ ...current, startsAt: value }))} required />
-          <TextInput label="สิ้นสุด" value={form.endsAt} onChange={(value) => setForm((current) => ({ ...current, endsAt: value }))} required />
+          <DateTimePicker label="เริ่มต้น" value={toDateTimePickerValue(form.startsAt)} onChange={(value) => setForm((current) => ({ ...current, startsAt: value }))} required />
+          <DateTimePicker label="สิ้นสุด" value={toDateTimePickerValue(form.endsAt)} onChange={(value) => setForm((current) => ({ ...current, endsAt: value }))} required />
         </FormPanel>
         </Modal>
       </div>
@@ -1297,7 +1352,7 @@ function BookingsPage({ marketId, mode }) {
         <FormPanel onSubmit={submit} loading={saving} error={error}>
           <SelectInput label="ผู้จอง" value={form.mobileUserId || userRows[0]?.id || ''} onChange={(value) => setForm((current) => ({ ...current, mobileUserId: value }))} options={userRows.map((item) => [String(item.id), `${item.public_id || 'User'} (#${item.id})`])} />
           <SelectInput label="Booth" value={form.boothId || boothRows[0]?.id || ''} onChange={(value) => setForm((current) => ({ ...current, boothId: value }))} options={boothRows.map((item) => [String(item.id), `${item.code || item.name} - ${formatMoney(item.price)}`])} />
-          <TextInput label="วันที่จอง" type="date" value={form.bookingDate} onChange={(value) => setForm((current) => ({ ...current, bookingDate: value }))} required />
+          <DatePicker label="วันที่จอง" value={form.bookingDate} onChange={(value) => setForm((current) => ({ ...current, bookingDate: value }))} required />
           <SelectInput label="สินค้า" value={form.productId} onChange={(value) => setForm((current) => ({ ...current, productId: value }))} options={[['', 'ไม่ระบุ'], ...productRows.map((item) => [String(item.id), item.name])]} />
         </FormPanel>
         </Modal>
@@ -1312,7 +1367,7 @@ function ReportsPage() {
   const { data = [], loading, reload } = useApi(path, { initialData: [] });
   return (
     <>
-      <PageHeader title="Report" description="รายงานการจองและรายได้" action={<div className="flex gap-2"><TextInputBare type="date" value={range.startDate} onChange={(value) => setRange((current) => ({ ...current, startDate: value }))} /><TextInputBare type="date" value={range.endDate} onChange={(value) => setRange((current) => ({ ...current, endDate: value }))} /><button onClick={reload} className="rounded-xl bg-slate-950 px-4 text-sm font-bold text-white">ค้นหา</button></div>} />
+      <PageHeader title="Report" description="รายงานการจองและรายได้" action={<div className="flex gap-2"><DatePickerBare value={range.startDate} onChange={(value) => setRange((current) => ({ ...current, startDate: value }))} /><DatePickerBare value={range.endDate} onChange={(value) => setRange((current) => ({ ...current, endDate: value }))} /><button onClick={reload} className="rounded-xl bg-slate-950 px-4 text-sm font-bold text-white">ค้นหา</button></div>} />
       <Card>{loading ? <LoadingBlock /> : <ReportTable rows={normalizeRows(data)} />}</Card>
     </>
   );
@@ -1508,6 +1563,37 @@ function TextInput({ label, value, onChange, type = 'text', required = false }) 
 
 function TextInputBare({ value, onChange, type = 'text', required = false }) {
   return <input type={type} value={value} required={required} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" />;
+}
+
+function DatePicker({ label, value, onChange, required = false }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-sm font-bold text-slate-600">{label}</span>
+      <DatePickerBare value={value} onChange={onChange} required={required} />
+    </label>
+  );
+}
+
+function DatePickerBare({ value, onChange, required = false }) {
+  return <input type="date" value={value} required={required} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" />;
+}
+
+function TimePicker({ label, value, onChange, required = false }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-sm font-bold text-slate-600">{label}</span>
+      <input type="time" value={value} required={required} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" />
+    </label>
+  );
+}
+
+function DateTimePicker({ label, value, onChange, required = false }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-sm font-bold text-slate-600">{label}</span>
+      <input type="datetime-local" value={value} required={required} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" />
+    </label>
+  );
 }
 
 function FileInput({ label, onChange, multiple = false }) {
