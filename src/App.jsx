@@ -120,8 +120,6 @@ const menu = [
     roles: ['supervisor', 'admin'],
     children: [
       { path: '/announcements/news', label: 'ข่าวสาร' },
-      { path: '/announcements/banners', label: 'Banner' },
-      { path: '/announcements/contact-us', label: 'Contact Us' },
     ],
   },
   {
@@ -148,6 +146,7 @@ const menu = [
       { path: '/accounting-product-types', label: 'รายงานประเภทสินค้าที่ขาย' },
     ],
   },
+  { path: '/organization-settings', label: 'ตั้งค่าองค์กร', icon: Settings, menuKey: 'organization_settings', roles: ['supervisor'] },
   { path: '/pdpa', label: 'จัดการ PDPA', icon: Settings, menuKey: 'pdpa', roles: ['supervisor'] },
   { path: '/admins', label: 'ผู้ดูแลระบบ', icon: Users, menuKey: 'admins' },
 ];
@@ -434,8 +433,6 @@ function Shell() {
             <Route path="/audit-fines-paid" element={<AuditPage marketId={currentMarketId} mode="paid" />} />
             <Route path="/audit-defective" element={<AuditPage marketId={currentMarketId} mode="defective" />} />
             <Route path="/announcements/news" element={<AnnouncementsPage type="news" />} />
-            <Route path="/announcements/banners" element={<AnnouncementsPage type="banner" />} />
-            <Route path="/announcements/contact-us" element={<ContactUsPage />} />
             <Route path="/tenant-types" element={<TenantTypesPage />} />
             <Route path="/tenants" element={<TenantsPage />} />
             <Route path="/tenants/pending" element={<TenantsPage status="pending" />} />
@@ -445,6 +442,7 @@ function Shell() {
             <Route path="/accounting-summary" element={<ReportsPage reportType="summary" />} />
             <Route path="/accounting-sap" element={<ReportsPage reportType="sap" />} />
             <Route path="/accounting-product-types" element={<ReportsPage reportType="product-types" />} />
+            <Route path="/organization-settings" element={<OrganizationSettingsPage />} />
             <Route path="/pdpa" element={<PdpaPage />} />
             <Route path="/admins" element={<AdminsPage marketId={currentMarketId} />} />
           </Routes>
@@ -1602,35 +1600,39 @@ function AnnouncementsPage({ type }) {
   );
 }
 
-function ContactUsPage() {
-  const { data = [], loading, reload } = useApi('/contact-us', { initialData: [] });
+function OrganizationSettingsPage() {
+  const { data = {}, loading, reload } = useApi('/organization-settings', { initialData: {} });
   const { mutate, loading: saving, error } = useMutation();
-  const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ title: '', phone: '', email: '', lineId: '', address: '', status: 'active' });
-  const rows = normalizeRows(data);
+  const [form, setForm] = useState({ name: '', address: '', email: '', phone: '', lineId: '' });
+
+  useEffect(() => {
+    setForm({
+      name: data?.name || '',
+      address: data?.address || '',
+      email: data?.email || '',
+      phone: data?.phone || '',
+      lineId: data?.line_id || '',
+    });
+  }, [data]);
 
   async function submit(event) {
     event.preventDefault();
-    await mutate('/contact-us', form);
-    setForm({ title: '', phone: '', email: '', lineId: '', address: '', status: 'active' });
-    setModalOpen(false);
+    await mutate('/organization-settings', form, 'PUT');
     reload();
   }
 
   return (
     <>
-      <PageHeader title="Contact Us" description="จัดการช่องทางติดต่อที่แสดงในระบบ" action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มข้อมูลติดต่อ</button>} />
-      <Card>{loading ? <LoadingBlock /> : <DataTable columns={['หัวข้อ', 'โทรศัพท์', 'Email', 'Line', 'สถานะ']} rows={rows.map((item) => [item.title, item.phone || '-', item.email || '-', item.line_id || '-', <StatusBadge value={item.status} />])} />}</Card>
-      <Modal open={modalOpen} title="เพิ่ม Contact Us" onClose={() => setModalOpen(false)}>
+      <PageHeader title="ตั้งค่าองค์กร" description="กำหนดชื่อองค์กรและข้อมูลติดต่อหลักของบริษัทหรือองค์การ" />
+      <Card>{loading ? <LoadingBlock /> : (
         <FormPanel onSubmit={submit} loading={saving} error={error}>
-          <TextInput label="หัวข้อ" value={form.title} onChange={(value) => setForm((current) => ({ ...current, title: value }))} required />
+          <TextInput label="ชื่อบริษัทหรือองค์การ" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
+          <TextInput label="อีเมล" value={form.email} onChange={(value) => setForm((current) => ({ ...current, email: value }))} />
           <TextInput label="โทรศัพท์" value={form.phone} onChange={(value) => setForm((current) => ({ ...current, phone: value }))} />
-          <TextInput label="Email" value={form.email} onChange={(value) => setForm((current) => ({ ...current, email: value }))} />
           <TextInput label="Line ID" value={form.lineId} onChange={(value) => setForm((current) => ({ ...current, lineId: value }))} />
           <label className="block"><span className="mb-1.5 block text-sm font-bold text-slate-600">ที่อยู่</span><textarea value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} rows={4} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600" /></label>
-          <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'เปิดใช้งาน'], ['inactive', 'ปิดการใช้งาน']]} />
         </FormPanel>
-      </Modal>
+      )}</Card>
     </>
   );
 }
