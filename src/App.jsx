@@ -2062,6 +2062,7 @@ function BookingsPage({ marketId, mode }) {
   const [editForm, setEditForm] = useState({ bookingDate: today, boothId: '', productId: '' });
   const [localError, setLocalError] = useState('');
   const { data: editItems = [], loading: editLoading, reload: reloadEditItems } = useApi(marketId && mode === 'edit' ? `/markets/${marketId}/booking-items?bookingDate=${editDate}` : null, { initialData: [] });
+  const { data: editLogs = [], loading: editLogsLoading, reload: reloadEditLogs } = useApi(marketId && mode === 'history' ? `/markets/${marketId}/booking-edit-logs?limit=500` : null, { initialData: [] });
   const rows = normalizeRows(data);
   const userRows = normalizeRows(users);
   const productRows = normalizeRows(products);
@@ -2152,6 +2153,35 @@ function BookingsPage({ marketId, mode }) {
     if (!comment) return;
     await mutate(`/markets/${marketId}/bookings/${item.booking_id}/cancel`, { comment }, 'PATCH');
     reloadEditItems();
+  }
+
+  if (mode === 'history') {
+    return (
+      <>
+        <PageHeader
+          title="รายการแก้ไขการจอง"
+          description="ประวัติรายการที่มีการเปลี่ยนวันที่หรือย้าย Booth"
+          action={<button onClick={reloadEditLogs} className="rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white">รีเฟรช</button>}
+        />
+        <Card>
+          {editLogsLoading ? <LoadingBlock /> : (
+            <DataTable
+              columns={['วันที่แก้ไข', 'เลขที่ใบจอง', 'ผู้จอง', 'แก้ไขจาก', 'แก้ไขเป็น', 'ราคาเดิม', 'ราคาใหม่', 'ผู้แก้ไข']}
+              rows={normalizeRows(editLogs).map((item) => [
+                formatDate(item.created_at),
+                item.booking_public_id,
+                item.mobile_name || item.mobile_public_id || '-',
+                `${formatDate(item.old_booking_date)} / ${item.old_booth_code || item.old_booth_name || '-'}`,
+                `${formatDate(item.new_booking_date)} / ${item.new_booth_code || item.new_booth_name || '-'}`,
+                formatMoney(item.old_unit_price),
+                formatMoney(item.new_unit_price),
+                item.edited_by_name || '-',
+              ])}
+            />
+          )}
+        </Card>
+      </>
+    );
   }
 
   if (mode === 'edit') {
