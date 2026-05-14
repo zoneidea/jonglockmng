@@ -248,6 +248,14 @@ function fromDateTimePickerValue(value) {
   return normalized.length === 16 ? `${normalized}:00` : normalized;
 }
 
+function toDateInputValue(value) {
+  if (!value) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return String(value);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 function normalizeRows(value) {
   if (Array.isArray(value)) return value;
   if (Array.isArray(value?.rows)) return value.rows;
@@ -483,7 +491,7 @@ function Sidebar({ items, open, onClose }) {
           </div>
           <button onClick={onClose} className="rounded-lg p-2 hover:bg-white/10 lg:hidden"><X size={20} /></button>
         </div>
-        <nav className="flex-1 overflow-y-auto px-3 py-5">
+        <nav className="flex-1 overflow-y-auto px-3 py-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <p className="mb-3 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Navigation</p>
           {items.map((item) => {
             const Icon = item.icon;
@@ -1464,30 +1472,13 @@ function AccessoriesPage({ marketId }) {
 
 function ProductCategoriesPage({ marketId }) {
   const { data = [], loading, reload } = useApi(marketId ? `/markets/${marketId}/categories` : null, { initialData: [] });
-  const { mutate, loading: saving, error } = useMutation();
-  const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', status: 'active' });
   const rows = normalizeRows(data);
   if (!marketId) return <NeedMarket />;
 
-  async function submit(event) {
-    event.preventDefault();
-    await mutate(`/markets/${marketId}/categories`, form);
-    setForm({ name: '', status: 'active' });
-    setModalOpen(false);
-    reload();
-  }
-
   return (
     <>
-      <PageHeader title="ประเภทสินค้า" description="จัดการประเภทสินค้าสำหรับตลาด" action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มประเภทสินค้า</button>} />
+      <PageHeader title="ประเภทสินค้า" description="ระบบใช้ประเภทสินค้าคงที่ 2 ประเภทสำหรับการกรอง Booth" action={<button onClick={reload} className="inline-flex h-11 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-bold text-white">รีเฟรช</button>} />
       <Card>{loading ? <LoadingBlock /> : <DataTable columns={['ลำดับ', 'ชื่อประเภท', 'สถานะ']} rows={rows.map((item, index) => [index + 1, item.name, <StatusBadge value={item.status} />])} />}</Card>
-      <Modal open={modalOpen} title="เพิ่มประเภทสินค้า" onClose={() => setModalOpen(false)}>
-        <FormPanel onSubmit={submit} loading={saving} error={error}>
-          <TextInput label="ชื่อประเภทสินค้า" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
-          <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['inactive', 'ปิดการใช้งาน']]} />
-        </FormPanel>
-      </Modal>
     </>
   );
 }
@@ -2056,13 +2047,21 @@ function PdpaPage() {
 }
 
 function BookingsPage({ marketId, mode }) {
-  const { data = [], loading, reload } = useApi(marketId ? `/markets/${marketId}/bookings` : null, { initialData: [] });
-  const { data: users = [] } = useApi('/mobile-users', { initialData: [] });
+  const today = new Date().toISOString().slice(0, 10);
+  const [userQuery, setUserQuery] = useState('');
+  const userPath = `/mobile-users${userQuery.trim() ? `?keyword=${encodeURIComponent(userQuery.trim())}` : ''}`;
+  const { data = [], loading, reload } = useApi(marketId && mode !== 'edit' ? `/markets/${marketId}/bookings` : null, { initialData: [] });
+  const { data: users = [] } = useApi(userPath, { initialData: [] });
   const { data: products = [] } = useApi(marketId ? `/markets/${marketId}/products` : null, { initialData: [] });
   const { mutate, loading: saving, error } = useMutation();
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ mobileUserId: '', boothId: '', bookingDate: '2026-05-14', productId: '' });
+  const [form, setForm] = useState({ mobileUserId: '', boothId: '', bookingDate: today, productId: '' });
+  const [editDate, setEditDate] = useState(today);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const [editForm, setEditForm] = useState({ bookingDate: today, boothId: '', productId: '' });
   const [localError, setLocalError] = useState('');
+  const { data: editItems = [], loading: editLoading, reload: reloadEditItems } = useApi(marketId && mode === 'edit' ? `/markets/${marketId}/booking-items?bookingDate=${editDate}` : null, { initialData: [] });
   const rows = normalizeRows(data);
   const userRows = normalizeRows(users);
   const productRows = normalizeRows(products);
@@ -2071,17 +2070,50 @@ function BookingsPage({ marketId, mode }) {
     : null;
   const { data: availability = [], loading: availabilityLoading, error: availabilityError, reload: reloadAvailability } = useApi(availabilityPath, { initialData: [] });
   const availabilityRows = normalizeRows(availability);
+  const editAvailabilityPath = marketId && editModalOpen && editForm.bookingDate && editForm.productId && editItem?.id
+    ? `/markets/${marketId}/bookings/booth-availability?bookingDate=${editForm.bookingDate}&productId=${editForm.productId}&excludeBookingItemId=${editItem.id}`
+    : null;
+  const { data: editAvailability = [], loading: editAvailabilityLoading, error: editAvailabilityError, reload: reloadEditAvailability } = useApi(editAvailabilityPath, { initialData: [] });
+  const editAvailabilityRows = normalizeRows(editAvailability);
 
   useEffect(() => {
     setForm((current) => ({ ...current, boothId: '' }));
     setLocalError('');
   }, [form.bookingDate, form.productId]);
 
+  useEffect(() => {
+    setEditForm((current) => ({ ...current, boothId: '' }));
+  }, [editForm.bookingDate]);
+
   if (!marketId) return <NeedMarket />;
+
+  function userLabel(user) {
+    return [user.name, user.phone, user.email, user.public_id].filter(Boolean).join(' / ');
+  }
+
+  function selectUser(user) {
+    setForm((current) => ({ ...current, mobileUserId: String(user.id) }));
+    setUserQuery(userLabel(user));
+  }
+
+  function openEdit(item) {
+    const bookingDate = toDateInputValue(item.booking_date) || editDate;
+    setEditItem(item);
+    setEditForm({
+      bookingDate,
+      boothId: String(item.booth_id || ''),
+      productId: String(item.product_id || productRows[0]?.id || ''),
+    });
+    setEditModalOpen(true);
+  }
 
   async function submit(event) {
     event.preventDefault();
     setLocalError('');
+    if (!form.mobileUserId) {
+      setLocalError('กรุณาเลือกผู้จองจากรายการ suggestion');
+      return;
+    }
     if (!form.productId) {
       setLocalError('กรุณาเลือกสินค้าก่อนเลือก Booth');
       return;
@@ -2099,6 +2131,99 @@ function BookingsPage({ marketId, mode }) {
     reloadAvailability();
   }
 
+  async function submitEdit(event) {
+    event.preventDefault();
+    setLocalError('');
+    if (!editForm.boothId) {
+      setLocalError('กรุณาเลือก Booth ที่ต้องการย้ายการจอง');
+      return;
+    }
+    await mutate(`/markets/${marketId}/booking-items/${editItem.id}`, {
+      bookingDate: editForm.bookingDate,
+      boothId: Number(editForm.boothId),
+    }, 'PATCH');
+    setEditModalOpen(false);
+    reloadEditItems();
+    reloadEditAvailability();
+  }
+
+  async function cancelBooking(item) {
+    const comment = window.prompt(`กรุณาระบุเหตุผลในการยกเลิกเลขที่ ${item.booking_public_id}`);
+    if (!comment) return;
+    await mutate(`/markets/${marketId}/bookings/${item.booking_id}/cancel`, { comment }, 'PATCH');
+    reloadEditItems();
+  }
+
+  if (mode === 'edit') {
+    return (
+      <>
+        <PageHeader
+          title="แก้ไขการจอง"
+          description="ค้นหารายการตามวันที่ แล้วแก้ไขวันจองหรือย้าย Booth ตามรูปแบบระบบเดิม"
+          action={<div className="flex gap-2"><DatePickerBare value={editDate} onChange={setEditDate} /><button onClick={reloadEditItems} className="rounded-xl bg-slate-950 px-4 text-sm font-bold text-white">ค้นหา</button></div>}
+        />
+        <Card>
+          {editLoading ? <LoadingBlock /> : (
+            <DataTable
+              columns={['เลขที่ใบจอง', 'ผู้จอง', 'Booth', 'สินค้า', 'สถานะ', 'เวลาทำรายการ', 'จัดการ']}
+              rows={normalizeRows(editItems).map((item) => [
+                item.booking_public_id,
+                item.mobile_name || item.mobile_public_id || '-',
+                item.booth_name || item.booth_code || '-',
+                item.product_name || '-',
+                <StatusBadge value={item.booking_status} />,
+                formatDate(item.created_at),
+                <div className="flex flex-wrap gap-2">
+                  <SmallButton tone="amber" onClick={() => openEdit(item)}>แก้ไข</SmallButton>
+                  <SmallButton tone="red" onClick={() => cancelBooking(item)}>ยกเลิก</SmallButton>
+                </div>,
+              ])}
+            />
+          )}
+        </Card>
+        <Modal open={editModalOpen} title="แก้ไขข้อมูลการเช่า" onClose={() => setEditModalOpen(false)}>
+          <FormPanel onSubmit={submitEdit} loading={saving} error={localError || error || editAvailabilityError}>
+            <div>
+              <Label>เลขที่ใบจอง</Label>
+              <div className="mt-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-bold text-slate-700">{editItem?.booking_public_id || '-'}</div>
+            </div>
+            <DatePicker label="เลือกวันที่" value={editForm.bookingDate} onChange={(value) => setEditForm((current) => ({ ...current, bookingDate: value }))} required />
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-3 text-xs font-bold text-slate-600">
+                <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-emerald-600" /> ว่าง</span>
+                <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-red-500" /> ถูกจองแล้ว</span>
+                <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-amber-500" /> กำลังดำเนินการ/กำลังเลือก</span>
+              </div>
+              {editAvailabilityLoading ? (
+                <LoadingBlock />
+              ) : editAvailabilityRows.length ? (
+                <div className="flex flex-wrap gap-4">
+                  {editAvailabilityRows.map((booth) => {
+                    const isSelected = String(editForm.boothId) === String(booth.id);
+                    const status = isSelected ? 'selected' : booth.availability_status;
+                    const canSelect = booth.availability_status === 'available';
+                    return (
+                      <BoothBox
+                        key={booth.id}
+                        tone={status}
+                        label={booth.code || booth.name || booth.id}
+                        subLabel={`${boothAvailabilityLabel(status)} / ${formatMoney(booth.price)}`}
+                        disabled={!canSelect && !isSelected}
+                        onClick={canSelect || isSelected ? () => setEditForm((current) => ({ ...current, boothId: String(booth.id) })) : undefined}
+                      />
+                    );
+                  })}
+                </div>
+              ) : (
+                <EmptyState title="ไม่พบ Booth ที่ย้ายได้" description="ตรวจสอบประเภทสินค้าของรายการจองหรือเลือกวันที่อื่น" />
+              )}
+            </div>
+          </FormPanel>
+        </Modal>
+      </>
+    );
+  }
+
   return (
     <>
       <PageHeader
@@ -2110,7 +2235,20 @@ function BookingsPage({ marketId, mode }) {
         <Card>{loading ? <LoadingBlock /> : <DataTable columns={['เลขที่', 'สถานะ', 'ยอดรวม', 'แหล่งที่มา', 'จำนวนรายการ', 'วันที่สร้าง']} rows={rows.map((booking) => [booking.public_id, <StatusBadge value={booking.status} />, formatMoney(booking.total_amount), booking.source, booking.item_count, formatDate(booking.created_at)])} />}</Card>
         <Modal open={modalOpen} title="สร้างการจองแทนลูกค้า" onClose={() => setModalOpen(false)}>
         <FormPanel onSubmit={submit} loading={saving} error={localError || error || availabilityError}>
-          <SelectInput label="ผู้จอง" value={form.mobileUserId || userRows[0]?.id || ''} onChange={(value) => setForm((current) => ({ ...current, mobileUserId: value }))} options={userRows.map((item) => [String(item.id), `${item.public_id || 'User'} (#${item.id})`])} />
+          <label className="relative block">
+            <span className="mb-1.5 block text-sm font-bold text-slate-600">ผู้จอง</span>
+            <input value={userQuery} onChange={(event) => { setUserQuery(event.target.value); setForm((current) => ({ ...current, mobileUserId: '' })); }} placeholder="พิมพ์ชื่อ เบอร์โทร อีเมล หรือรหัสผู้จอง" className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" />
+            {userQuery.trim() && !form.mobileUserId ? (
+              <div className="absolute z-20 mt-2 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
+                {userRows.length ? userRows.map((user) => (
+                  <button key={user.id} type="button" onClick={() => selectUser(user)} className="block w-full px-4 py-3 text-left text-sm hover:bg-cyan-50">
+                    <span className="block font-bold text-slate-800">{user.name || user.public_id}</span>
+                    <span className="text-xs text-slate-500">{[user.phone, user.email, user.username].filter(Boolean).join(' / ')}</span>
+                  </button>
+                )) : <div className="px-4 py-3 text-sm text-slate-500">ไม่พบผู้จอง</div>}
+              </div>
+            ) : null}
+          </label>
           <DatePicker label="วันที่จอง" value={form.bookingDate} onChange={(value) => setForm((current) => ({ ...current, bookingDate: value }))} required />
           <SelectInput label="สินค้า" value={form.productId} onChange={(value) => setForm((current) => ({ ...current, productId: value }))} options={[['', 'กรุณาเลือกสินค้า'], ...productRows.map((item) => [String(item.id), `${item.name}${item.category_name ? ` (${item.category_name})` : ''}`])]} />
           <div className="space-y-4">
