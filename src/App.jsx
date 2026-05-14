@@ -274,6 +274,7 @@ function StatusBadge({ value }) {
     payment_processing: 'bg-blue-50 text-blue-700 ring-blue-200',
     failed: 'bg-red-50 text-red-700 ring-red-200',
     cancelled: 'bg-slate-100 text-slate-600 ring-slate-200',
+    expired: 'bg-slate-100 text-slate-600 ring-slate-200',
     inactive: 'bg-slate-100 text-slate-600 ring-slate-200',
     closed: 'bg-slate-100 text-slate-600 ring-slate-200',
   };
@@ -442,7 +443,7 @@ function Shell() {
             <Route path="/booking-edits" element={<BookingsPage marketId={currentMarketId} mode="history" />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/report-booths" element={<ReportsPage reportType="booths" />} />
-            <Route path="/report-payments" element={<AccountingPage />} />
+            <Route path="/report-payments" element={<AccountingPage paidOnly />} />
             <Route path="/report-daily" element={<ReportsPage reportType="daily" />} />
             <Route path="/report-person" element={<ReportsPage reportType="person" />} />
             <Route path="/report-canceled" element={<ReportsPage reportType="canceled" />} />
@@ -625,12 +626,12 @@ function Dashboard({ marketId, markets }) {
   const canReadReports = ['supervisor', 'admin', 'accounting'].includes(user?.role);
   const canReadPayments = ['supervisor', 'admin', 'accounting'].includes(user?.role);
   const { data: report = [], loading: reportLoading } = useApi(canReadReports ? '/reports/bookings' : null, { initialData: [], skip: !canReadReports });
-  const { data: payments = [] } = useApi(canReadPayments ? '/accounting/payments' : null, { initialData: [], skip: !canReadPayments });
+  const { data: payments = [] } = useApi(canReadPayments ? '/accounting/payments?paidOnly=1' : null, { initialData: [], skip: !canReadPayments });
   const reportRows = normalizeRows(report);
   const paymentRows = normalizeRows(payments);
-  const bookingCount = reportRows.reduce((sum, row) => sum + Number(row.booking_count || 0), 0);
-  const revenue = reportRows.reduce((sum, row) => sum + Number(row.total_amount || 0), 0);
-  const paidPayments = paymentRows.filter((payment) => payment.status === 'paid').length;
+  const bookingCount = reportRows.length;
+  const revenue = paymentRows.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const paidPayments = paymentRows.length;
   const dashboardDescription = user?.role === 'admin'
     ? `ภาพรวมเฉพาะตลาดที่ได้รับมอบหมาย ${marketId ? `(เลือกตลาด ${marketId})` : ''}`
     : 'ภาพรวมรวมทุกตลาดภายในองค์กร';
@@ -640,13 +641,13 @@ function Dashboard({ marketId, markets }) {
       <PageHeader title="ภาพรวมระบบ" description={dashboardDescription} />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Stat label="จำนวนตลาด" value={markets.length} icon={Store} />
-        <Stat label="จำนวนการจอง" value={bookingCount} icon={TicketCheck} tone="blue" />
-        <Stat label="รายได้รวม" value={formatMoney(revenue)} icon={CreditCard} tone="emerald" />
+        <Stat label="จองยังไม่สำเร็จ" value={bookingCount} icon={TicketCheck} tone="blue" />
+        <Stat label="รายได้ชำระแล้ว" value={formatMoney(revenue)} icon={CreditCard} tone="emerald" />
         <Stat label="ชำระเงินแล้ว" value={paidPayments} icon={BadgeCheck} tone="amber" />
       </div>
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <Card>
-          <SectionTitle title="สถานะการจอง" description="ข้อมูลสรุปตามช่วงวันที่จากรายงาน" icon={BarChart3} />
+          <SectionTitle title="รายการจองยังไม่สำเร็จ" description="รายการ pending, processing และ expired ตามวันที่จอง" icon={BarChart3} />
           {reportLoading ? <LoadingBlock /> : <ReportTable rows={reportRows} />}
         </Card>
         <Card>
@@ -2148,11 +2149,12 @@ function BookingsPage({ marketId, mode }) {
     reloadEditAvailability();
   }
 
-  async function cancelBooking(item) {
-    const comment = window.prompt(`กรุณาระบุเหตุผลในการยกเลิกเลขที่ ${item.booking_public_id}`);
-    if (!comment) return;
-    await mutate(`/markets/${marketId}/bookings/${item.booking_id}/cancel`, { comment }, 'PATCH');
-    reloadEditItems();
+  async function deletePendingBooking(booking) {
+    if (booking.status !== 'pending_payment') return;
+    if (!window.confirm(`ลบรายการจองเลขที่ ${booking.public_id} ?`)) return;
+    await mutate(`/markets/${marketId}/bookings/${booking.id}`, {}, 'DELETE');
+    reload();
+    reloadAvailability();
   }
 
   if (mode === 'history') {
@@ -2206,7 +2208,6 @@ function BookingsPage({ marketId, mode }) {
                 formatDate(item.created_at),
                 <div className="flex flex-wrap gap-2">
                   <SmallButton tone="amber" onClick={() => openEdit(item)}>แก้ไข</SmallButton>
-                  <SmallButton tone="red" onClick={() => cancelBooking(item)}>ยกเลิก</SmallButton>
                 </div>,
               ])}
             />
@@ -2263,7 +2264,8 @@ function BookingsPage({ marketId, mode }) {
         action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> จองแทนสมาชิก</button>}
       />
       <div className="grid gap-6">
-        <Card>{loading ? <LoadingBlock /> : <DataTable columns={['เลขที่', 'วันที่จอง', 'Booth', 'สถานะ', 'ยอดรวม', 'แหล่งที่มา', 'จำนวนรายการ', 'วันที่ทำรายการ']} rows={rows.map((booking) => [booking.public_id, booking.booking_dates || '-', booking.booths || '-', <StatusBadge value={booking.status} />, formatMoney(booking.total_amount), booking.source, booking.item_count, formatDate(booking.created_at)])} />}</Card>
+        <ErrorNotice error={error} />
+        <Card>{loading ? <LoadingBlock /> : <DataTable columns={['เลขที่', 'วันที่จอง', 'Booth', 'สถานะ', 'ยอดรวม', 'แหล่งที่มา', 'จำนวนรายการ', 'วันที่ทำรายการ', 'จัดการ']} rows={rows.map((booking) => [booking.public_id, booking.booking_dates || '-', booking.booths || '-', <StatusBadge value={booking.status} />, formatMoney(booking.total_amount), booking.source, booking.item_count, formatDate(booking.created_at), booking.status === 'pending_payment' ? <SmallButton tone="red" onClick={() => deletePendingBooking(booking)}>ลบ</SmallButton> : '-'])} />}</Card>
         <Modal open={modalOpen} title="สร้างการจองแทนลูกค้า" onClose={() => setModalOpen(false)}>
         <FormPanel onSubmit={submit} loading={saving} error={localError || error || availabilityError}>
           <label className="relative block">
@@ -2321,14 +2323,27 @@ function BookingsPage({ marketId, mode }) {
   );
 }
 
-function ReportsPage() {
+function ReportsPage({ reportType }) {
   const [range, setRange] = useState({ startDate: '2026-05-01', endDate: '2026-05-31' });
-  const path = `/reports/bookings?startDate=${range.startDate}&endDate=${range.endDate}`;
+  const isAvailableBoothReport = reportType === 'booths';
+  const path = isAvailableBoothReport
+    ? `/reports/available-booths?bookingDate=${range.startDate}`
+    : `/reports/bookings?startDate=${range.startDate}&endDate=${range.endDate}`;
   const { data = [], loading, reload } = useApi(path, { initialData: [] });
   return (
     <>
-      <PageHeader title="Report" description="รายงานการจองและรายได้" action={<div className="flex gap-2"><DatePickerBare value={range.startDate} onChange={(value) => setRange((current) => ({ ...current, startDate: value }))} /><DatePickerBare value={range.endDate} onChange={(value) => setRange((current) => ({ ...current, endDate: value }))} /><button onClick={reload} className="rounded-xl bg-slate-950 px-4 text-sm font-bold text-white">ค้นหา</button></div>} />
-      <Card>{loading ? <LoadingBlock /> : <ReportTable rows={normalizeRows(data)} />}</Card>
+      <PageHeader
+        title={isAvailableBoothReport ? 'รายงาน Booth ว่าง' : 'รายงานการจอง'}
+        description={isAvailableBoothReport ? 'แสดงเฉพาะ Booth ที่ว่างตามวันที่เลือก' : 'รายการจองที่ยังไม่สำเร็จทั้งหมดตามวันที่จอง'}
+        action={(
+          <div className="flex gap-2">
+            <DatePickerBare value={range.startDate} onChange={(value) => setRange((current) => ({ ...current, startDate: value }))} />
+            {!isAvailableBoothReport ? <DatePickerBare value={range.endDate} onChange={(value) => setRange((current) => ({ ...current, endDate: value }))} /> : null}
+            <button onClick={reload} className="rounded-xl bg-slate-950 px-4 text-sm font-bold text-white">ค้นหา</button>
+          </div>
+        )}
+      />
+      <Card>{loading ? <LoadingBlock /> : isAvailableBoothReport ? <AvailableBoothReportTable rows={normalizeRows(data)} /> : <ReportTable rows={normalizeRows(data)} />}</Card>
     </>
   );
 }
@@ -2344,11 +2359,11 @@ function AuditPage({ marketId }) {
   );
 }
 
-function AccountingPage() {
-  const { data = [], loading } = useApi('/accounting/payments', { initialData: [] });
+function AccountingPage({ paidOnly = false }) {
+  const { data = [], loading } = useApi(paidOnly ? '/accounting/payments?paidOnly=1' : '/accounting/payments', { initialData: [] });
   return (
     <>
-      <PageHeader title="บัญชี" description="รายการชำระเงินทั้งหมด" />
+      <PageHeader title={paidOnly ? 'รายงานการชำระเงิน' : 'บัญชี'} description={paidOnly ? 'ข้อมูลการจองที่ชำระเงินสำเร็จแล้ว' : 'รายการชำระเงินทั้งหมด'} />
       <Card>{loading ? <LoadingBlock /> : <DataTable columns={['เลขชำระเงิน', 'เลขจอง', 'วันที่จอง', 'Booth', 'Provider', 'สถานะ', 'จำนวนเงิน', 'วันที่ชำระ/ทำรายการ']} rows={normalizeRows(data).map((payment) => [payment.public_id, payment.booking_public_id || '-', payment.booking_dates || '-', payment.booths || '-', payment.provider, <StatusBadge value={payment.status} />, formatMoney(payment.amount), formatDate(payment.paid_at || payment.created_at)])} />}</Card>
     </>
   );
@@ -2446,7 +2461,11 @@ function RoleCard({ role, description }) {
 }
 
 function ReportTable({ rows }) {
-  return <DataTable columns={['ตลาด', 'เลขจอง', 'วันที่จอง', 'Booth', 'สถานะ', 'แหล่งที่มา', 'รายได้', 'วันที่ทำรายการ']} rows={rows.map((row) => [row.market_name, row.booking_public_id || '-', formatDate(row.booking_date), row.booth_code || row.booth_name || '-', <StatusBadge value={row.status || 'success'} />, row.source || '-', formatMoney(row.total_amount), formatDate(row.created_at)])} />;
+  return <DataTable columns={['ลำดับ', 'ตลาด', 'เลขจอง', 'วันที่จอง', 'Booth', 'สถานะ', 'แหล่งที่มา', 'ยอดจอง', 'วันที่ทำรายการ']} rows={rows.map((row, index) => [index + 1, row.market_name, row.booking_public_id || '-', formatDate(row.booking_date), row.booth_code || row.booth_name || '-', <StatusBadge value={row.status || 'pending_payment'} />, row.source || '-', formatMoney(row.total_amount), formatDate(row.created_at)])} />;
+}
+
+function AvailableBoothReportTable({ rows }) {
+  return <DataTable columns={['ลำดับ', 'ตลาด', 'วันที่', 'รหัส Booth', 'ชื่อ Booth', 'แบบ Booth', 'ประเภทสินค้า', 'ราคา']} rows={rows.map((row, index) => [index + 1, row.market_name || '-', formatDate(row.booking_date), row.booth_code || '-', row.booth_name || '-', row.floor_plan_name || '-', row.production_category_name || '-', formatMoney(row.price)])} />;
 }
 
 function PaymentList({ rows }) {
