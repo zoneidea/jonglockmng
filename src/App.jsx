@@ -2195,10 +2195,11 @@ function BookingsPage({ marketId, mode }) {
         <Card>
           {editLoading ? <LoadingBlock /> : (
             <DataTable
-              columns={['เลขที่ใบจอง', 'ผู้จอง', 'Booth', 'สินค้า', 'สถานะ', 'เวลาทำรายการ', 'จัดการ']}
+              columns={['เลขที่ใบจอง', 'ผู้จอง', 'วันที่จอง', 'Booth', 'สินค้า', 'สถานะ', 'เวลาทำรายการ', 'จัดการ']}
               rows={normalizeRows(editItems).map((item) => [
                 item.booking_public_id,
                 item.mobile_name || item.mobile_public_id || '-',
+                formatDate(item.booking_date),
                 item.booth_name || item.booth_code || '-',
                 item.product_name || '-',
                 <StatusBadge value={item.booking_status} />,
@@ -2262,7 +2263,7 @@ function BookingsPage({ marketId, mode }) {
         action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> จองแทนสมาชิก</button>}
       />
       <div className="grid gap-6">
-        <Card>{loading ? <LoadingBlock /> : <DataTable columns={['เลขที่', 'สถานะ', 'ยอดรวม', 'แหล่งที่มา', 'จำนวนรายการ', 'วันที่สร้าง']} rows={rows.map((booking) => [booking.public_id, <StatusBadge value={booking.status} />, formatMoney(booking.total_amount), booking.source, booking.item_count, formatDate(booking.created_at)])} />}</Card>
+        <Card>{loading ? <LoadingBlock /> : <DataTable columns={['เลขที่', 'วันที่จอง', 'Booth', 'สถานะ', 'ยอดรวม', 'แหล่งที่มา', 'จำนวนรายการ', 'วันที่ทำรายการ']} rows={rows.map((booking) => [booking.public_id, booking.booking_dates || '-', booking.booths || '-', <StatusBadge value={booking.status} />, formatMoney(booking.total_amount), booking.source, booking.item_count, formatDate(booking.created_at)])} />}</Card>
         <Modal open={modalOpen} title="สร้างการจองแทนลูกค้า" onClose={() => setModalOpen(false)}>
         <FormPanel onSubmit={submit} loading={saving} error={localError || error || availabilityError}>
           <label className="relative block">
@@ -2348,7 +2349,7 @@ function AccountingPage() {
   return (
     <>
       <PageHeader title="บัญชี" description="รายการชำระเงินทั้งหมด" />
-      <Card>{loading ? <LoadingBlock /> : <DataTable columns={['เลขชำระเงิน', 'เลขจอง', 'Provider', 'สถานะ', 'จำนวนเงิน', 'วันที่']} rows={normalizeRows(data).map((payment) => [payment.public_id, payment.booking_public_id || '-', payment.provider, <StatusBadge value={payment.status} />, formatMoney(payment.amount), formatDate(payment.paid_at || payment.created_at)])} />}</Card>
+      <Card>{loading ? <LoadingBlock /> : <DataTable columns={['เลขชำระเงิน', 'เลขจอง', 'วันที่จอง', 'Booth', 'Provider', 'สถานะ', 'จำนวนเงิน', 'วันที่ชำระ/ทำรายการ']} rows={normalizeRows(data).map((payment) => [payment.public_id, payment.booking_public_id || '-', payment.booking_dates || '-', payment.booths || '-', payment.provider, <StatusBadge value={payment.status} />, formatMoney(payment.amount), formatDate(payment.paid_at || payment.created_at)])} />}</Card>
     </>
   );
 }
@@ -2445,7 +2446,7 @@ function RoleCard({ role, description }) {
 }
 
 function ReportTable({ rows }) {
-  return <DataTable columns={['ตลาด', 'สถานะ', 'จำนวนการจอง', 'รายได้รวม']} rows={rows.map((row) => [row.market_name, <StatusBadge value={row.status || 'success'} />, row.booking_count, formatMoney(row.total_amount)])} />;
+  return <DataTable columns={['ตลาด', 'เลขจอง', 'วันที่จอง', 'Booth', 'สถานะ', 'แหล่งที่มา', 'รายได้', 'วันที่ทำรายการ']} rows={rows.map((row) => [row.market_name, row.booking_public_id || '-', formatDate(row.booking_date), row.booth_code || row.booth_name || '-', <StatusBadge value={row.status || 'success'} />, row.source || '-', formatMoney(row.total_amount), formatDate(row.created_at)])} />;
 }
 
 function PaymentList({ rows }) {
@@ -2456,7 +2457,7 @@ function PaymentList({ rows }) {
         <div key={payment.id || payment.public_id} className="flex items-center justify-between rounded-2xl border border-slate-200 p-4">
           <div>
             <p className="font-bold text-slate-950">{payment.public_id}</p>
-            <p className="text-sm text-slate-500">{payment.provider} · {formatDate(payment.created_at)}</p>
+            <p className="text-sm text-slate-500">{payment.provider} · {payment.booking_dates || '-'} · {payment.booths || '-'}</p>
           </div>
           <div className="text-right">
             <p className="font-bold text-slate-950">{formatMoney(payment.amount)}</p>
