@@ -11,6 +11,8 @@ import {
   CreditCard,
   Eye,
   EyeOff,
+  FileSpreadsheet,
+  FileText,
   Heading1,
   Image,
   ImagePlus,
@@ -25,6 +27,7 @@ import {
   Package,
   Percent,
   Plus,
+  Printer,
   Redo2,
   Search,
   Settings,
@@ -99,7 +102,6 @@ const menu = [
       { path: '/report-payments', label: 'รายงานการชำระเงิน' },
       { path: '/report-daily', label: 'รายงานการขายรายวัน' },
       { path: '/report-person', label: 'การจองรายบุคคล' },
-      { path: '/report-canceled', label: 'รายการหลุดจอง' },
     ],
   },
   {
@@ -108,7 +110,7 @@ const menu = [
     menuKey: 'market_audit',
     children: [
       { path: '/audit', label: 'ข้อมูลการตรวจสอบ' },
-      { path: '/audit-fines', label: 'รายชื่อผู้ค้างจ่ายค่าปรับ' },
+      { path: '/audit-fines', label: 'รายงานค่าปรับค้างจ่าย' },
       { path: '/audit-fines-paid', label: 'รายชื่อผู้จ่ายค่าปรับแบบโอน' },
       { path: '/audit-defective', label: 'รายการสินค้าชำรุด' },
     ],
@@ -139,10 +141,8 @@ const menu = [
     menuKey: 'accounting',
     children: [
       { path: '/accounting', label: 'รายงานแสดงข้อมูลทั้งหมด' },
-      { path: '/accounting-bookings', label: 'รายงานทะเบียนคุมใบจอง' },
       { path: '/accounting-payments', label: 'รายงานการชำระเงิน' },
       { path: '/accounting-summary', label: 'รายงานสรุปยอดขาย' },
-      { path: '/accounting-sap', label: 'Excel To SAP' },
       { path: '/accounting-product-types', label: 'รายงานประเภทสินค้าที่ขาย' },
     ],
   },
@@ -187,6 +187,15 @@ function formatMoney(value) {
 function formatDate(value) {
   if (!value) return '-';
   return new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeZone: 'Asia/Bangkok' }).format(new Date(value));
+}
+
+function auditResultLabel(value) {
+  const labels = {
+    pass: 'ผ่านการประเมิน',
+    warning: 'ตักเตือน',
+    failed: 'ทำผิดกฎ',
+  };
+  return labels[String(value || '').toLowerCase()] || value || '-';
 }
 
 function dateKeyFromValue(value) {
@@ -261,6 +270,213 @@ function normalizeRows(value) {
   if (Array.isArray(value?.rows)) return value.rows;
   if (Array.isArray(value?.items)) return value.items;
   return [];
+}
+
+function reportFileName(title, extension) {
+  const date = new Date().toISOString().slice(0, 10);
+  const safeTitle = String(title || 'report').replace(/[^\w\u0E00-\u0E7F-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'report';
+  return `${safeTitle}-${date}.${extension}`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function exportReportExcel(title, columns, rows) {
+  const html = `<!doctype html>
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <style>
+        body { font-family: Arial, sans-serif; padding: 16px; }
+        h1 { font-size: 18px; margin-bottom: 12px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #cbd5e1; padding: 8px; font-size: 12px; vertical-align: top; }
+        th { background: #f8fafc; text-align: left; }
+      </style>
+    </head>
+    <body>
+      <h1>${escapeHtml(title)}</h1>
+      <table>
+        <thead>
+          <tr>${columns.map((column) => `<th>${escapeHtml(column)}</th>`).join('')}</tr>
+        </thead>
+        <tbody>
+          ${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')}
+        </tbody>
+      </table>
+    </body>
+  </html>`;
+  downloadBlob(new Blob(['\ufeff', html], { type: 'application/vnd.ms-excel;charset=utf-8;' }), reportFileName(title, 'xls'));
+}
+
+function openReportPrintWindow(title, columns, rows, mode = 'print') {
+  const child = window.open('', '_blank', 'noopener,noreferrer,width=1200,height=900');
+  if (!child) return;
+  child.document.write(`<!doctype html>
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>${escapeHtml(title)}</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 24px; color: #0f172a; }
+        h1 { font-size: 22px; margin: 0 0 12px; }
+        p { margin: 0 0 18px; font-size: 12px; color: #475569; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #cbd5e1; padding: 8px; font-size: 12px; vertical-align: top; text-align: left; }
+        th { background: #f8fafc; }
+        @media print {
+          body { padding: 0; }
+        }
+      </style>
+    </head>
+    <body>
+      <h1>${escapeHtml(title)}</h1>
+      <p>${mode === 'pdf' ? 'ระบบจะเปิดหน้าพิมพ์เพื่อให้บันทึกเป็น PDF' : 'ระบบจะเปิดหน้าพิมพ์รายงาน'}</p>
+      <table>
+        <thead>
+          <tr>${columns.map((column) => `<th>${escapeHtml(column)}</th>`).join('')}</tr>
+        </thead>
+        <tbody>
+          ${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')}
+        </tbody>
+      </table>
+    </body>
+  </html>`);
+  child.document.close();
+  child.focus();
+  child.onload = () => child.print();
+}
+
+function openPaymentDocumentWindow(payment) {
+  const document = payment.document || {};
+  const organizationSnapshot = typeof document.organization_snapshot_json === 'string'
+    ? JSON.parse(document.organization_snapshot_json || 'null') || {}
+    : document.organization_snapshot_json || {};
+  const customerSnapshot = typeof document.customer_snapshot_json === 'string'
+    ? JSON.parse(document.customer_snapshot_json || 'null') || {}
+    : document.customer_snapshot_json || {};
+  const lineItems = typeof document.line_items_json === 'string'
+    ? JSON.parse(document.line_items_json || '[]') || []
+    : document.line_items_json || [];
+  const documentType = document.document_type || payment.document_type || (Number(payment.vat_enabled || 0) === 1 ? 'tax_invoice' : 'receipt');
+  const isTaxInvoice = documentType === 'tax_invoice';
+  const isCreditNote = documentType === 'credit_note';
+  const title = isCreditNote ? 'ใบลดหนี้' : isTaxInvoice ? 'ใบกำกับภาษี / ใบเสร็จรับเงิน' : 'ใบเสร็จรับเงิน';
+  const organizationName = isTaxInvoice ? organizationSnapshot.registeredName || payment.registered_name || payment.organization_name : organizationSnapshot.name || payment.organization_name;
+  const organizationAddress = [
+    organizationSnapshot.address || payment.organization_address,
+    organizationSnapshot.registeredSubdistrict || payment.registered_subdistrict,
+    organizationSnapshot.registeredDistrict || payment.registered_district,
+    organizationSnapshot.registeredProvince || payment.registered_province,
+    organizationSnapshot.registeredPostcode || payment.registered_postcode,
+  ].filter(Boolean).join(' ');
+  const documentNo = document.document_no || payment.document_no || payment.public_id || '-';
+  const issueDate = document.issue_date || payment.paid_at || payment.created_at;
+  const subtotalAmount = document.subtotal_amount ?? payment.subtotal_amount ?? 0;
+  const discountAmount = document.discount_amount ?? payment.discount_amount ?? 0;
+  const vatAmount = document.vat_amount ?? payment.vat_amount ?? 0;
+  const totalAmount = document.total_amount ?? payment.amount ?? payment.total_amount ?? 0;
+  const displayLineItems = lineItems.length ? lineItems : [{ description: 'ค่าจอง Booth', detail: payment.booths || '-', amount: subtotalAmount }];
+  const child = window.open('', '_blank', 'noopener,noreferrer,width=960,height=1200');
+  if (!child) return;
+  child.document.write(`<!doctype html>
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>${escapeHtml(title)} ${escapeHtml(documentNo)}</title>
+      <style>
+        body { margin: 0; background: #e2e8f0; color: #0f172a; font-family: Arial, Tahoma, sans-serif; }
+        .sheet { width: 794px; min-height: 1123px; margin: 24px auto; background: white; padding: 48px; box-sizing: border-box; box-shadow: 0 20px 50px rgba(15,23,42,.18); }
+        .top { display: flex; justify-content: space-between; gap: 32px; border-bottom: 3px solid #0f172a; padding-bottom: 24px; }
+        .brand { font-size: 24px; font-weight: 800; margin: 0 0 8px; }
+        .muted { color: #64748b; font-size: 12px; line-height: 1.7; }
+        .doc-title { text-align: right; }
+        .doc-title h1 { margin: 0; font-size: 28px; }
+        .badge { display: inline-block; margin-top: 8px; border-radius: 999px; background: #ecfeff; color: #0e7490; padding: 6px 12px; font-size: 12px; font-weight: 700; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 28px; }
+        .box { border: 1px solid #cbd5e1; border-radius: 14px; padding: 18px; }
+        .box h2 { margin: 0 0 12px; font-size: 14px; color: #334155; }
+        .line { display: flex; justify-content: space-between; gap: 16px; padding: 6px 0; font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 28px; }
+        th { background: #0f172a; color: white; text-align: left; font-size: 12px; padding: 12px; }
+        td { border-bottom: 1px solid #e2e8f0; padding: 12px; font-size: 13px; vertical-align: top; }
+        .right { text-align: right; }
+        .totals { width: 330px; margin-left: auto; margin-top: 22px; }
+        .total-row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+        .grand { font-size: 18px; font-weight: 800; border-bottom: 0; color: #0f172a; }
+        .footer { margin-top: 56px; display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+        .sign { border-top: 1px solid #94a3b8; text-align: center; padding-top: 10px; font-size: 12px; color: #475569; }
+        @media print { body { background: white; } .sheet { margin: 0; box-shadow: none; width: auto; min-height: auto; } }
+      </style>
+    </head>
+    <body>
+      <main class="sheet">
+        <section class="top">
+          <div>
+            <p class="brand">${escapeHtml(organizationName || '-')}</p>
+            <div class="muted">
+              ${escapeHtml(organizationAddress || '-')}<br/>
+              ${organizationSnapshot.phone || payment.organization_phone ? `โทร ${escapeHtml(organizationSnapshot.phone || payment.organization_phone)} ` : ''}${organizationSnapshot.email || payment.organization_email ? `อีเมล ${escapeHtml(organizationSnapshot.email || payment.organization_email)}` : ''}<br/>
+              ${isTaxInvoice ? `เลขประจำตัวผู้เสียภาษี ${escapeHtml(organizationSnapshot.registeredTaxId || payment.registered_tax_id || '-')}` : ''}
+            </div>
+          </div>
+          <div class="doc-title">
+            <h1>${escapeHtml(title)}</h1>
+            <span class="badge">${isCreditNote ? 'CREDIT NOTE' : isTaxInvoice ? `VAT ${escapeHtml(organizationSnapshot.vatRate || payment.vat_rate || 7)}%` : 'NON VAT'}</span>
+          </div>
+        </section>
+        <section class="grid">
+          <div class="box">
+            <h2>ข้อมูลลูกค้า</h2>
+            <div class="line"><span>ชื่อลูกค้า</span><strong>${escapeHtml(document.customer_name || payment.customer_name || customerSnapshot.name || '-')}</strong></div>
+            <div class="line"><span>ตลาด</span><strong>${escapeHtml(payment.market_name || customerSnapshot.marketName || '-')}</strong></div>
+            <div class="line"><span>วันที่จอง</span><strong>${escapeHtml(payment.booking_dates || customerSnapshot.bookingDates || '-')}</strong></div>
+          </div>
+          <div class="box">
+            <h2>ข้อมูลเอกสาร</h2>
+            <div class="line"><span>เลขที่เอกสาร</span><strong>${escapeHtml(documentNo)}</strong></div>
+            <div class="line"><span>เลขที่ใบจอง</span><strong>${escapeHtml(payment.booking_public_id || customerSnapshot.bookingPublicId || '-')}</strong></div>
+            <div class="line"><span>วันที่เอกสาร</span><strong>${escapeHtml(formatDate(issueDate))}</strong></div>
+          </div>
+        </section>
+        <table>
+          <thead><tr><th>รายการ</th><th>รายละเอียด</th><th class="right">จำนวนเงิน</th></tr></thead>
+          <tbody>
+            ${displayLineItems.map((item) => `<tr><td>${escapeHtml(item.description || '-')}</td><td>${escapeHtml(item.detail || '-')}</td><td class="right">${escapeHtml(formatMoney(item.amount || 0))}</td></tr>`).join('')}
+          </tbody>
+        </table>
+        <section class="totals">
+          <div class="total-row"><span>ยอดก่อนส่วนลด</span><strong>${escapeHtml(formatMoney(subtotalAmount))}</strong></div>
+          <div class="total-row"><span>ส่วนลด</span><strong>${escapeHtml(formatMoney(discountAmount))}</strong></div>
+          <div class="total-row"><span>VAT</span><strong>${escapeHtml(formatMoney(vatAmount))}</strong></div>
+          <div class="total-row grand"><span>ยอดสุทธิ</span><strong>${escapeHtml(formatMoney(totalAmount))}</strong></div>
+        </section>
+        <section class="footer">
+          <div class="sign">ผู้รับเงิน</div>
+          <div class="sign">ผู้มีอำนาจลงนาม</div>
+        </section>
+      </main>
+      <script>window.onload = () => window.print();</script>
+    </body>
+  </html>`);
+  child.document.close();
 }
 
 function StatusBadge({ value }) {
@@ -446,7 +662,6 @@ function Shell() {
             <Route path="/report-payments" element={<AccountingPage paidOnly />} />
             <Route path="/report-daily" element={<ReportsPage reportType="daily" />} />
             <Route path="/report-person" element={<ReportsPage reportType="person" />} />
-            <Route path="/report-canceled" element={<ReportsPage reportType="canceled" />} />
             <Route path="/audit" element={<AuditPage marketId={currentMarketId} />} />
             <Route path="/audit-fines" element={<AuditPage marketId={currentMarketId} mode="fines" />} />
             <Route path="/audit-fines-paid" element={<AuditPage marketId={currentMarketId} mode="paid" />} />
@@ -455,10 +670,10 @@ function Shell() {
             <Route path="/tenant-types" element={<TenantTypesPage />} />
             <Route path="/tenants" element={<TenantsPage />} />
             <Route path="/tenants/pending" element={<TenantsPage status="pending" />} />
-            <Route path="/accounting" element={<AccountingPage />} />
+            <Route path="/accounting" element={<AccountingAllReportPage />} />
             <Route path="/accounting-bookings" element={<ReportsPage reportType="accounting-bookings" />} />
             <Route path="/accounting-payments" element={<AccountingPage />} />
-            <Route path="/accounting-summary" element={<ReportsPage reportType="summary" />} />
+            <Route path="/accounting-summary" element={<AccountingSalesSummaryPage />} />
             <Route path="/accounting-sap" element={<ReportsPage reportType="sap" />} />
             <Route path="/accounting-product-types" element={<ReportsPage reportType="product-types" />} />
             <Route path="/organization-settings" element={<OrganizationSettingsPage />} />
@@ -609,6 +824,8 @@ function Stat({ label, value, icon: Icon, tone = 'slate' }) {
     emerald: 'bg-emerald-600 text-white',
     blue: 'bg-blue-600 text-white',
     amber: 'bg-amber-500 text-slate-950',
+    cyan: 'bg-cyan-600 text-white',
+    red: 'bg-red-600 text-white',
   };
   return (
     <Card className="flex items-center gap-4">
@@ -625,34 +842,55 @@ function Dashboard({ marketId, markets }) {
   const { user } = useAuth();
   const canReadReports = ['supervisor', 'admin', 'accounting'].includes(user?.role);
   const canReadPayments = ['supervisor', 'admin', 'accounting'].includes(user?.role);
+  const { data: summary = {}, loading: summaryLoading } = useApi(canReadReports ? '/dashboard/summary' : null, { initialData: {}, skip: !canReadReports });
   const { data: report = [], loading: reportLoading } = useApi(canReadReports ? '/reports/bookings' : null, { initialData: [], skip: !canReadReports });
   const { data: payments = [] } = useApi(canReadPayments ? '/accounting/payments?paidOnly=1' : null, { initialData: [], skip: !canReadPayments });
   const reportRows = normalizeRows(report);
   const paymentRows = normalizeRows(payments);
-  const bookingCount = reportRows.length;
-  const revenue = paymentRows.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-  const paidPayments = paymentRows.length;
   const dashboardDescription = user?.role === 'admin'
     ? `ภาพรวมเฉพาะตลาดที่ได้รับมอบหมาย ${marketId ? `(เลือกตลาด ${marketId})` : ''}`
     : 'ภาพรวมรวมทุกตลาดภายในองค์กร';
+
+  const summaryCards = [
+    { label: 'บูธที่เปิดจองทั้งหมด', value: summaryLoading ? '...' : Number(summary.totalBooths || 0), icon: Store, tone: 'slate' },
+    { label: 'บูธที่จองแล้ว', value: summaryLoading ? '...' : Number(summary.bookedBooths || 0), icon: TicketCheck, tone: 'blue' },
+    { label: 'บูธที่ยังว่างอยู่', value: summaryLoading ? '...' : Number(summary.availableBooths || 0), icon: BadgeCheck, tone: 'emerald' },
+    { label: 'ยอดคนที่เข้ามาทำรายการทั้งหมด (วันปัจจุบัน)', value: summaryLoading ? '...' : Number(summary.dailyCustomers || 0), icon: Users, tone: 'amber' },
+    { label: 'ยอดชำระการจอง (วันปัจจุบัน)', value: summaryLoading ? '...' : formatMoney(summary.bookingPaidToday || 0), icon: CreditCard, tone: 'emerald' },
+    { label: 'ยอดชำระค่าปรับ (วันปัจจุบัน)', value: summaryLoading ? '...' : formatMoney(summary.finePaidToday || 0), icon: CreditCard, tone: 'cyan' },
+    { label: 'ยอดค้างชำระค่าจอง (ทั้งหมด)', value: summaryLoading ? '...' : formatMoney(summary.bookingOutstanding || 0), icon: BarChart3, tone: 'red' },
+    { label: 'ยอดค้างชำระค่าปรับ (ทั้งหมด)', value: summaryLoading ? '...' : formatMoney(summary.fineOutstanding || 0), icon: ClipboardCheck, tone: 'red' },
+  ];
 
   return (
     <>
       <PageHeader title="ภาพรวมระบบ" description={dashboardDescription} />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Stat label="จำนวนตลาด" value={markets.length} icon={Store} />
-        <Stat label="จองยังไม่สำเร็จ" value={bookingCount} icon={TicketCheck} tone="blue" />
-        <Stat label="รายได้ชำระแล้ว" value={formatMoney(revenue)} icon={CreditCard} tone="emerald" />
-        <Stat label="ชำระเงินแล้ว" value={paidPayments} icon={BadgeCheck} tone="amber" />
+        {summaryCards.map((item) => <Stat key={item.label} label={item.label} value={item.value} icon={item.icon} tone={item.tone} />)}
       </div>
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+      <div className="mt-6 grid gap-6">
         <Card>
           <SectionTitle title="รายการจองยังไม่สำเร็จ" description="รายการ pending, processing และ expired ตามวันที่จอง" icon={BarChart3} />
           {reportLoading ? <LoadingBlock /> : <ReportTable rows={reportRows} />}
         </Card>
         <Card>
-          <SectionTitle title="รายการชำระเงินล่าสุด" description="แสดงรายการจากระบบบัญชี" icon={CreditCard} />
-          <PaymentList rows={paymentRows} />
+          <SectionTitle title="รายการชำระเงินล่าสุด" description="แสดงรายการล่าสุดจากระบบบัญชี" icon={CreditCard} />
+          {paymentRows.length ? (
+            <DataTable
+              columns={['เลขชำระเงิน', 'เลขจอง', 'วันที่จอง', 'Booth', 'Provider', 'สถานะ', 'VAT', 'จำนวนเงิน', 'วันที่ชำระ/ทำรายการ']}
+              rows={paymentRows.slice(0, 10).map((payment) => [
+                payment.public_id,
+                payment.booking_public_id || '-',
+                payment.booking_dates || '-',
+                payment.booths || '-',
+                payment.provider,
+                <StatusBadge value={payment.status} />,
+                formatMoney(payment.vat_amount || 0),
+                formatMoney(payment.amount),
+                formatDate(payment.paid_at || payment.created_at),
+              ])}
+            />
+          ) : <EmptyState title="ไม่พบข้อมูลการชำระเงิน" description="ยังไม่มีรายการชำระเงินล่าสุดในช่วงนี้" />}
         </Card>
       </div>
     </>
@@ -1797,7 +2035,22 @@ function AnnouncementsPage({ type }) {
 function OrganizationSettingsPage() {
   const { data = {}, loading, reload } = useApi('/organization-settings', { initialData: {} });
   const { mutate, loading: saving, error } = useMutation();
-  const [form, setForm] = useState({ name: '', address: '', email: '', phone: '', lineId: '' });
+  const [formError, setFormError] = useState('');
+  const [form, setForm] = useState({
+    name: '',
+    address: '',
+    email: '',
+    phone: '',
+    lineId: '',
+    vatEnabled: false,
+    vatRate: '7',
+    registeredName: '',
+    registeredTaxId: '',
+    registeredSubdistrict: '',
+    registeredDistrict: '',
+    registeredProvince: '',
+    registeredPostcode: '',
+  });
 
   useEffect(() => {
     setForm({
@@ -1806,12 +2059,36 @@ function OrganizationSettingsPage() {
       email: data?.email || '',
       phone: data?.phone || '',
       lineId: data?.line_id || '',
+      vatEnabled: Number(data?.vat_enabled || 0) === 1,
+      vatRate: String(data?.vat_rate ?? '7'),
+      registeredName: data?.registered_name || '',
+      registeredTaxId: data?.registered_tax_id || '',
+      registeredSubdistrict: data?.registered_subdistrict || '',
+      registeredDistrict: data?.registered_district || '',
+      registeredProvince: data?.registered_province || '',
+      registeredPostcode: data?.registered_postcode || '',
     });
   }, [data]);
 
   async function submit(event) {
     event.preventDefault();
-    await mutate('/organization-settings', form, 'PUT');
+    setFormError('');
+    if (form.vatEnabled) {
+      const requiredFields = [
+        form.vatRate,
+        form.registeredName,
+        form.registeredTaxId,
+        form.registeredSubdistrict,
+        form.registeredDistrict,
+        form.registeredProvince,
+        form.registeredPostcode,
+      ];
+      if (requiredFields.some((value) => String(value || '').trim() === '') || Number(form.vatRate) <= 0) {
+        setFormError('กรุณากรอกข้อมูล VAT ให้ครบถ้วน');
+        return;
+      }
+    }
+    await mutate('/organization-settings', { ...form, vatRate: Number(form.vatRate || 0) }, 'PUT');
     reload();
   }
 
@@ -1819,12 +2096,32 @@ function OrganizationSettingsPage() {
     <>
       <PageHeader title="ตั้งค่าองค์กร" description="กำหนดชื่อองค์กรและข้อมูลติดต่อหลักของบริษัทหรือองค์การ" />
       <Card>{loading ? <LoadingBlock /> : (
-        <FormPanel onSubmit={submit} loading={saving} error={error}>
+        <FormPanel onSubmit={submit} loading={saving} error={formError || error}>
           <TextInput label="ชื่อบริษัทหรือองค์การ" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
           <TextInput label="อีเมล" value={form.email} onChange={(value) => setForm((current) => ({ ...current, email: value }))} />
           <TextInput label="โทรศัพท์" value={form.phone} onChange={(value) => setForm((current) => ({ ...current, phone: value }))} />
           <TextInput label="Line ID" value={form.lineId} onChange={(value) => setForm((current) => ({ ...current, lineId: value }))} />
           <label className="block"><span className="mb-1.5 block text-sm font-bold text-slate-600">ที่อยู่</span><textarea value={form.address} onChange={(event) => setForm((current) => ({ ...current, address: event.target.value }))} rows={4} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600" /></label>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <label className="flex items-center justify-between gap-4">
+              <span>
+                <span className="block text-sm font-extrabold text-slate-800">คิด VAT สำหรับองค์กรนี้</span>
+                <span className="mt-1 block text-xs font-semibold text-slate-500">เมื่อเปิดใช้งาน ระบบจะคำนวณ VAT ในราคาบูธ ยอดจอง และค่าปรับใหม่ทั้งหมด</span>
+              </span>
+              <input type="checkbox" checked={form.vatEnabled} onChange={(event) => setForm((current) => ({ ...current, vatEnabled: event.target.checked }))} className="h-5 w-5 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500" />
+            </label>
+          </div>
+          {form.vatEnabled ? (
+            <div className="grid gap-4 rounded-2xl border border-cyan-100 bg-cyan-50/40 p-4 md:grid-cols-2">
+              <TextInput label="อัตรา VAT (%)" type="number" value={form.vatRate} onChange={(value) => setForm((current) => ({ ...current, vatRate: value }))} required />
+              <TextInput label="ชื่อจดทะเบียน" value={form.registeredName} onChange={(value) => setForm((current) => ({ ...current, registeredName: value }))} required />
+              <TextInput label="เลขประจำตัวผู้เสียภาษี" value={form.registeredTaxId} onChange={(value) => setForm((current) => ({ ...current, registeredTaxId: value }))} required />
+              <TextInput label="ตำบล/แขวง" value={form.registeredSubdistrict} onChange={(value) => setForm((current) => ({ ...current, registeredSubdistrict: value }))} required />
+              <TextInput label="อำเภอ/เขต" value={form.registeredDistrict} onChange={(value) => setForm((current) => ({ ...current, registeredDistrict: value }))} required />
+              <TextInput label="จังหวัด" value={form.registeredProvince} onChange={(value) => setForm((current) => ({ ...current, registeredProvince: value }))} required />
+              <TextInput label="รหัสไปรษณีย์" value={form.registeredPostcode} onChange={(value) => setForm((current) => ({ ...current, registeredPostcode: value }))} required />
+            </div>
+          ) : null}
         </FormPanel>
       )}</Card>
     </>
@@ -1882,9 +2179,12 @@ function validateTenantForm(form, mode = 'create') {
   return '';
 }
 
-function validateAdminForm(form) {
-  if (!form.username || form.username.trim().length < 3) return 'Username ต้องมีอย่างน้อย 3 ตัวอักษร';
-  if (!isStrongPassword(form.password)) return 'Password ต้องมีอย่างน้อย 10 ตัวอักษร และมีตัวพิมพ์ใหญ่ ตัวเลข และอักขระพิเศษ';
+function validateAdminForm(form, options = {}) {
+  const requireUsername = options.requireUsername !== false;
+  const requirePassword = options.requirePassword !== false;
+  if (requireUsername && (!form.username || form.username.trim().length < 3)) return 'Username ต้องมีอย่างน้อย 3 ตัวอักษร';
+  if (requirePassword && !isStrongPassword(form.password)) return 'Password ต้องมีอย่างน้อย 10 ตัวอักษร และมีตัวพิมพ์ใหญ่ ตัวเลข และอักขระพิเศษ';
+  if (!requirePassword && form.password && !isStrongPassword(form.password)) return 'Password ต้องมีอย่างน้อย 10 ตัวอักษร และมีตัวพิมพ์ใหญ่ ตัวเลข และอักขระพิเศษ';
   if (!form.name || !form.name.trim()) return 'กรุณากรอกชื่อ';
   if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(form.email).trim())) return 'อีเมลไม่ถูกต้อง';
   return '';
@@ -2239,7 +2539,7 @@ function BookingsPage({ marketId, mode }) {
                         key={booth.id}
                         tone={status}
                         label={booth.code || booth.name || booth.id}
-                        subLabel={`${boothAvailabilityLabel(status)} / ${formatMoney(booth.price)}`}
+                        subLabel={`${boothAvailabilityLabel(status)} / ${formatMoney(booth.gross_price ?? booth.price)}`}
                         disabled={!canSelect && !isSelected}
                         onClick={canSelect || isSelected ? () => setEditForm((current) => ({ ...current, boothId: String(booth.id) })) : undefined}
                       />
@@ -2305,7 +2605,7 @@ function BookingsPage({ marketId, mode }) {
                       key={booth.id}
                       tone={status}
                       label={booth.code || booth.name || booth.id}
-                      subLabel={`${boothAvailabilityLabel(status)} / ${formatMoney(booth.price)}`}
+                      subLabel={`${boothAvailabilityLabel(status)} / ${formatMoney(booth.gross_price ?? booth.price)}`}
                       disabled={!canSelect && !isSelected}
                       onClick={canSelect || isSelected ? () => setForm((current) => ({ ...current, boothId: isSelected ? '' : String(booth.id) })) : undefined}
                     />
@@ -2326,45 +2626,489 @@ function BookingsPage({ marketId, mode }) {
 function ReportsPage({ reportType }) {
   const [range, setRange] = useState({ startDate: '2026-05-01', endDate: '2026-05-31' });
   const isAvailableBoothReport = reportType === 'booths';
+  const isDailySalesReport = reportType === 'daily';
+  const isCustomerBookingsReport = reportType === 'person';
+  const [userQuery, setUserQuery] = useState('');
+  const [selectedUser, setSelectedUser] = useState(null);
+  const userPath = isCustomerBookingsReport ? `/mobile-users${userQuery.trim() ? `?keyword=${encodeURIComponent(userQuery.trim())}` : ''}` : null;
+  const { data: users = [] } = useApi(userPath, { initialData: [], skip: !isCustomerBookingsReport });
   const path = isAvailableBoothReport
     ? `/reports/available-booths?bookingDate=${range.startDate}`
-    : `/reports/bookings?startDate=${range.startDate}&endDate=${range.endDate}`;
+    : isDailySalesReport
+      ? `/reports/daily-sales?startDate=${range.startDate}&endDate=${range.endDate}`
+      : isCustomerBookingsReport
+        ? selectedUser?.id ? `/reports/customer-bookings?mobileUserId=${selectedUser.id}` : null
+        : `/reports/bookings?startDate=${range.startDate}&endDate=${range.endDate}`;
   const { data = [], loading, reload } = useApi(path, { initialData: [] });
+  const userRows = normalizeRows(users);
+  const reportRows = normalizeRows(data);
+
+  const reportTitle = isAvailableBoothReport
+    ? 'รายงาน Booth ว่าง'
+    : isDailySalesReport
+      ? 'รายงานการขายรายวัน'
+      : isCustomerBookingsReport
+        ? 'การจองรายบุคคล'
+        : 'รายงานการจอง';
+  const reportDescription = isAvailableBoothReport
+    ? 'แสดงเฉพาะ Booth ที่ว่างตามวันที่เลือก'
+    : isDailySalesReport
+      ? 'รายการขายรายวันตามช่วงวันที่เลือก'
+      : isCustomerBookingsReport
+        ? 'ค้นหาลูกค้าแล้วแสดงรายการจองเรียงจากใหม่ไปเก่า'
+        : 'รายการจองที่ยังไม่สำเร็จทั้งหมดตามวันที่จอง';
+
+  const exportColumns = isAvailableBoothReport
+    ? ['ลำดับ', 'ตลาด', 'วันที่', 'รหัส Booth', 'ชื่อ Booth', 'แบบ Booth', 'ประเภทสินค้า', 'ราคา', 'VAT', 'ราคารวม']
+    : isDailySalesReport || isCustomerBookingsReport
+      ? ['#', 'เลขที่ใบจอง', 'ตลาด', 'ชื่อผู้จอง', 'Tell', 'ชื่อ Booth', 'สินค้าขาย', 'VAT', 'ยอดรวม', 'วันที่ขาย']
+      : ['#', 'ตลาด', 'เลขจอง', 'วันที่จอง', 'Booth', 'สถานะ', 'แหล่งที่มา', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'ยอดรวม', 'วันที่ทำรายการ'];
+  const exportRows = isAvailableBoothReport
+    ? reportRows.map((row, index) => [index + 1, row.market_name || '-', formatDate(row.booking_date), row.booth_code || '-', row.booth_name || '-', row.floor_plan_name || '-', row.production_category_name || '-', formatMoney(row.price), formatMoney(row.vat_amount || 0), formatMoney(row.gross_price ?? row.price)])
+    : isDailySalesReport || isCustomerBookingsReport
+      ? reportRows.map((row, index) => [index + 1, row.booking_public_id || '-', row.market_name || '-', row.customer_name || '-', row.customer_phone || '-', row.booth_code || row.booth_name || '-', row.product_names || '-', formatMoney(row.vat_amount || 0), formatMoney(row.total_amount || 0), formatDate(row.booking_date)])
+      : reportRows.map((row, index) => [index + 1, row.market_name || '-', row.booking_public_id || '-', formatDate(row.booking_date), row.booth_code || row.booth_name || '-', row.status || 'pending_payment', row.source || '-', formatMoney(row.subtotal_amount || 0), formatMoney(row.discount_amount || 0), formatMoney(row.vat_amount || 0), formatMoney(row.total_amount || 0), formatDate(row.created_at)]);
+
+  function selectCustomer(user) {
+    setSelectedUser(user);
+    setUserQuery([user.name, user.phone, user.email, user.public_id].filter(Boolean).join(' / '));
+  }
+
   return (
     <>
       <PageHeader
-        title={isAvailableBoothReport ? 'รายงาน Booth ว่าง' : 'รายงานการจอง'}
-        description={isAvailableBoothReport ? 'แสดงเฉพาะ Booth ที่ว่างตามวันที่เลือก' : 'รายการจองที่ยังไม่สำเร็จทั้งหมดตามวันที่จอง'}
+        title={reportTitle}
+        description={reportDescription}
         action={(
-          <div className="flex gap-2">
-            <DatePickerBare value={range.startDate} onChange={(value) => setRange((current) => ({ ...current, startDate: value }))} />
-            {!isAvailableBoothReport ? <DatePickerBare value={range.endDate} onChange={(value) => setRange((current) => ({ ...current, endDate: value }))} /> : null}
-            <button onClick={reload} className="rounded-xl bg-slate-950 px-4 text-sm font-bold text-white">ค้นหา</button>
-          </div>
+          isCustomerBookingsReport ? (
+            <ReportFiltersBar>
+              <label className="relative block w-full xl:min-w-[360px]">
+                <input
+                  value={userQuery}
+                  onChange={(event) => {
+                    setUserQuery(event.target.value);
+                    setSelectedUser(null);
+                  }}
+                  placeholder="พิมพ์ชื่อ เบอร์โทร อีเมล หรือรหัสผู้จอง"
+                  className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+                />
+                {userQuery.trim() && !selectedUser ? (
+                  <div className="absolute z-20 mt-2 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
+                    {userRows.length ? userRows.map((user) => (
+                      <button key={user.id} type="button" onClick={() => selectCustomer(user)} className="block w-full px-4 py-3 text-left text-sm hover:bg-cyan-50">
+                        <span className="block font-bold text-slate-800">{user.name || user.public_id}</span>
+                        <span className="text-xs text-slate-500">{[user.phone, user.email, user.username].filter(Boolean).join(' / ')}</span>
+                      </button>
+                    )) : <div className="px-4 py-3 text-sm text-slate-500">ไม่พบผู้จอง</div>}
+                  </div>
+                ) : null}
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <ReportExportActions title={reportTitle} columns={exportColumns} rows={exportRows} disabled={!exportRows.length} />
+              </div>
+            </ReportFiltersBar>
+          ) : (
+            <ReportFiltersBar>
+              <div className="flex w-full flex-col items-end gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+                <DatePickerBare value={range.startDate} onChange={(value) => setRange((current) => ({ ...current, startDate: value }))} className="sm:w-[210px]" />
+                {!isAvailableBoothReport ? <DatePickerBare value={range.endDate} onChange={(value) => setRange((current) => ({ ...current, endDate: value }))} className="sm:w-[210px]" /> : null}
+                <ReportActionButton tone="slate" onClick={reload}>ค้นหา</ReportActionButton>
+              </div>
+              <ReportExportActions title={reportTitle} columns={exportColumns} rows={exportRows} disabled={!exportRows.length} />
+            </ReportFiltersBar>
+          )
         )}
       />
-      <Card>{loading ? <LoadingBlock /> : isAvailableBoothReport ? <AvailableBoothReportTable rows={normalizeRows(data)} /> : <ReportTable rows={normalizeRows(data)} />}</Card>
+      <Card>
+        {loading ? <LoadingBlock /> : isAvailableBoothReport ? (
+          <AvailableBoothReportTable rows={reportRows} />
+        ) : isDailySalesReport ? (
+          <DailySalesReportTable rows={reportRows} />
+        ) : isCustomerBookingsReport ? (
+          selectedUser ? <DailySalesReportTable rows={reportRows} /> : <EmptyState title="กรุณาเลือกลูกค้า" description="พิมพ์ค้นหาแล้วเลือกจาก suggestion เพื่อดูรายการจอง" />
+        ) : (
+          <ReportTable rows={reportRows} />
+        )}
+      </Card>
     </>
   );
 }
 
-function AuditPage({ marketId }) {
-  const { data = [], loading } = useApi(marketId ? `/markets/${marketId}/audit-checks` : null, { initialData: [] });
+function AuditPage({ marketId, mode }) {
+  const { user } = useAuth();
+  const [range, setRange] = useState({ startDate: '2026-05-01', endDate: '2026-05-31' });
+  const isFinePendingReport = mode === 'fines';
+  const isFinePaidReport = mode === 'paid';
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [selectedFine, setSelectedFine] = useState(null);
+  const [proofImage, setProofImage] = useState(null);
+  const path = marketId
+    ? isFinePendingReport
+      ? `/markets/${marketId}/audit-fines?startDate=${range.startDate}&endDate=${range.endDate}&paymentStatus=pending`
+      : isFinePaidReport
+        ? `/markets/${marketId}/audit-fines?startDate=${range.startDate}&endDate=${range.endDate}&paymentStatus=paid`
+        : `/markets/${marketId}/audit-checks?startDate=${range.startDate}&endDate=${range.endDate}`
+    : null;
+  const { data = [], loading, reload } = useApi(path, { initialData: [] });
+  const { mutate, loading: saving, error } = useMutation();
   if (!marketId) return <NeedMarket />;
+  const reportRows = normalizeRows(data);
+  const reportTitle = isFinePendingReport ? 'รายงานค่าปรับค้างจ่าย' : isFinePaidReport ? 'รายชื่อผู้จ่ายค่าปรับแบบโอน' : 'ข้อมูลการตรวจสอบตลาด';
+  const exportColumns = isFinePendingReport || isFinePaidReport
+    ? ['#', 'เลขที่ใบจอง', 'ตลาด', 'ชื่อผู้จอง', 'สถานะการตรวจสอบ', 'ค่าปรับ', 'VAT', 'จ่ายเงินเพิ่ม', 'ชื่อ Booth', 'สินค้าขาย', 'วันที่ขาย']
+    : ['#', 'เลขที่ใบจอง', 'ตลาด', 'ชื่อผู้จอง', 'ผลตรวจ', 'ค่าปรับ', 'VAT', 'ยอดรวม', 'ชื่อ Booth', 'สินค้าขาย', 'วันที่ขาย'];
+  const exportRows = reportRows.map((item, index) => isFinePendingReport || isFinePaidReport
+    ? [index + 1, item.booking_public_id, item.market_name || '-', item.customer_name || '-', auditResultLabel(item.result), formatMoney(Number(item.fine_amount || 0) + Number(item.accessories_fine_amount || 0) + Number(item.damage_fine_amount || 0)), formatMoney(item.vat_amount || 0), formatMoney(item.total_fine_amount), item.booth_code || item.booth_name || '-', item.product_names || '-', formatDate(item.booking_date)]
+    : [index + 1, item.booking_public_id, item.market_name || '-', item.customer_name || '-', auditResultLabel(item.result), formatMoney(Number(item.fine_amount || 0) + Number(item.accessories_fine_amount || 0) + Number(item.damage_fine_amount || 0)), formatMoney(item.vat_amount || 0), formatMoney(item.total_fine_amount), item.booth_code || item.booth_name || '-', item.product_names || '-', formatDate(item.booking_date)]);
+
+  function openPaymentModal(item) {
+    setSelectedFine(item);
+    setProofImage(null);
+    setPaymentModalOpen(true);
+  }
+
+  async function submitFinePayment(event) {
+    event.preventDefault();
+    if (!selectedFine || !proofImage) return;
+    const payload = new FormData();
+    payload.append('finePaymentStatus', 'paid');
+    payload.append('proofImage', proofImage);
+    await mutate(`/markets/${marketId}/audit-checks/${selectedFine.id}/fine-payment-status`, payload, 'PATCH');
+    setPaymentModalOpen(false);
+    setSelectedFine(null);
+    setProofImage(null);
+    reload();
+  }
+
   return (
     <>
-      <PageHeader title="ตรวจสอบตลาด" description="รายการตรวจสอบและผลการตรวจตลาด" />
-      <Card>{loading ? <LoadingBlock /> : <DataTable columns={['เลขจอง', 'Booth', 'วันที่จอง', 'ผลตรวจ', 'ค่าปรับ', 'ผู้ตรวจ', 'วันที่ตรวจ']} rows={normalizeRows(data).map((item) => [item.booking_public_id, item.booth_name, formatDate(item.booking_date), <StatusBadge value={item.result} />, formatMoney(item.total_fine_amount), item.checked_by_name || '-', formatDate(item.checked_at)])} />}</Card>
+      <PageHeader
+        title={isFinePendingReport ? 'รายงานค่าปรับค้างจ่าย' : isFinePaidReport ? 'รายชื่อผู้จ่ายค่าปรับแบบโอน' : 'ตรวจสอบตลาด'}
+        description={isFinePendingReport ? 'รายการค่าปรับที่ยังรอการชำระจากลูกค้า' : isFinePaidReport ? 'รายการค่าปรับที่ลูกค้าชำระแล้ว' : 'รายการตรวจสอบตลาดตามช่วงวันที่ขาย'}
+        action={(
+          <ReportFiltersBar>
+            <div className="flex w-full flex-col items-end gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+              <DatePickerBare value={range.startDate} onChange={(value) => setRange((current) => ({ ...current, startDate: value }))} className="sm:w-[210px]" />
+              <DatePickerBare value={range.endDate} onChange={(value) => setRange((current) => ({ ...current, endDate: value }))} className="sm:w-[210px]" />
+              <ReportActionButton tone="slate" onClick={reload}>ค้นหา</ReportActionButton>
+            </div>
+            <ReportExportActions title={reportTitle} columns={exportColumns} rows={exportRows} disabled={!exportRows.length} />
+          </ReportFiltersBar>
+        )}
+      />
+      <Card>{loading ? <LoadingBlock /> : isFinePendingReport || isFinePaidReport ? <DataTable columns={['#', 'เลขที่ใบจอง', 'ตลาด', 'ชื่อผู้จอง', 'สถานะการตรวจสอบ', 'ค่าปรับ', 'VAT', 'จ่ายเงินเพิ่ม', 'ชื่อ Booth', 'สินค้าขาย', 'วันที่ขาย', 'จัดการ']} rows={reportRows.map((item, index) => [index + 1, item.booking_public_id, item.market_name || '-', item.customer_name || '-', auditResultLabel(item.result), formatMoney(Number(item.fine_amount || 0) + Number(item.accessories_fine_amount || 0) + Number(item.damage_fine_amount || 0)), formatMoney(item.vat_amount || 0), formatMoney(item.total_fine_amount), item.booth_code || item.booth_name || '-', item.product_names || '-', formatDate(item.booking_date), isFinePendingReport ? <SmallButton tone="amber" onClick={() => openPaymentModal(item)} disabled={saving}>ลูกค้าจ่ายแล้ว</SmallButton> : <StatusBadge value="paid" />])} /> : <DataTable columns={['#', 'เลขที่ใบจอง', 'ตลาด', 'ชื่อผู้จอง', 'ผลตรวจ', 'ค่าปรับ', 'VAT', 'ยอดรวม', 'ชื่อ Booth', 'สินค้าขาย', 'วันที่ขาย']} rows={reportRows.map((item, index) => [index + 1, item.booking_public_id, item.market_name || '-', item.customer_name || '-', auditResultLabel(item.result), formatMoney(Number(item.fine_amount || 0) + Number(item.accessories_fine_amount || 0) + Number(item.damage_fine_amount || 0)), formatMoney(item.vat_amount || 0), formatMoney(item.total_fine_amount), item.booth_code || item.booth_name || '-', item.product_names || '-', formatDate(item.booking_date)])} />}</Card>
+      <Modal open={paymentModalOpen} title="รายละเอียด" onClose={() => setPaymentModalOpen(false)}>
+        <form onSubmit={submitFinePayment} className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-[180px_1fr] md:items-center">
+            <Label>ชื่อผู้จอง</Label>
+            <div className="rounded-xl border border-slate-200 bg-slate-100 px-3 py-3 text-sm text-slate-700">{selectedFine?.customer_name || '-'}</div>
+            <Label>ยอดเงินที่จ่าย</Label>
+            <div className="rounded-xl border border-slate-200 bg-slate-100 px-3 py-3 text-sm text-slate-700">{selectedFine ? formatMoney(selectedFine.total_fine_amount) : '-'}</div>
+            <Label>ชื่อ Booth</Label>
+            <div className="rounded-xl border border-slate-200 bg-slate-100 px-3 py-3 text-sm text-slate-700">{selectedFine?.booth_code || selectedFine?.booth_name || '-'}</div>
+            <Label>วันที่ขาย</Label>
+            <div className="rounded-xl border border-slate-200 bg-slate-100 px-3 py-3 text-sm text-slate-700">{selectedFine ? formatDate(selectedFine.booking_date) : '-'}</div>
+            <div className="md:col-span-2"><FileInput label="รูปหลักฐานการจ่าย" onChange={setProofImage} /></div>
+            <div className="md:col-start-2"><FileSummary file={proofImage} /></div>
+            <Label>ผู้ทำรายการ</Label>
+            <div className="rounded-xl border border-slate-200 bg-slate-100 px-3 py-3 text-sm text-slate-700">{user?.name || '-'}</div>
+          </div>
+          {error ? <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
+          <div className="flex justify-center gap-3 border-t border-slate-200 pt-4">
+            <button type="button" onClick={() => setPaymentModalOpen(false)} className="h-11 rounded-xl border border-slate-300 px-8 text-sm font-bold text-slate-700">ยกเลิก</button>
+            <button type="submit" disabled={saving || !proofImage} className="h-11 rounded-xl bg-cyan-600 px-8 text-sm font-bold text-white disabled:opacity-60">{saving ? 'กำลังบันทึก...' : 'บันทึก'}</button>
+          </div>
+        </form>
+      </Modal>
+    </>
+  );
+}
+
+function AccountingAllReportPage() {
+  const { data: markets = [] } = useApi('/markets', { initialData: [] });
+  const marketRows = normalizeRows(markets);
+  const [filters, setFilters] = useState({
+    startDate: '2026-05-01',
+    endDate: '2026-05-31',
+    marketId: '',
+    dateField: 'payment_date',
+    sortBy: 'payment_date',
+  });
+  const queryString = new URLSearchParams({
+    startDate: filters.startDate,
+    endDate: filters.endDate,
+    dateField: filters.dateField,
+    sortBy: filters.sortBy,
+    ...(filters.marketId ? { marketId: filters.marketId } : {}),
+  }).toString();
+  const { data = [], loading, reload } = useApi(`/accounting/report-all?${queryString}`, { initialData: [] });
+  const rows = normalizeRows(data);
+  const columns = ['ลำดับที่', 'เลขที่ใบจอง', 'วันที่จัดงาน', 'ลูกค้า', 'วันที่ชำระเงิน', 'ค่าบริการ Booth', 'ค่าบริการอื่นๆ', 'จำนวนเงินก่อน VAT', 'ส่วนลด', 'VAT 7%', 'ภาษีหัก ณ ที่จ่าย', 'ยอดที่ต้องชำระเงิน', 'สถานะ', 'เหตุผล'];
+  const exportRows = rows.map((item, index) => [
+    index + 1,
+    item.booking_public_id || '-',
+    item.booking_dates || formatDate(item.booking_date),
+    item.customer_name || '-',
+    item.paid_at ? formatDate(item.paid_at) : '-',
+    formatMoney(item.booth_service_amount || 0),
+    formatMoney(item.other_service_amount || 0),
+    formatMoney(item.subtotal_amount || 0),
+    formatMoney(item.discount_amount || 0),
+    formatMoney(item.vat_amount || 0),
+    formatMoney(item.withholding_tax_amount || 0),
+    formatMoney(item.total_amount || 0),
+    item.status || '-',
+    item.reason || '-',
+  ]);
+
+  function setFilter(name, value) {
+    setFilters((current) => ({ ...current, [name]: value }));
+  }
+
+  return (
+    <>
+      <PageHeader
+        title="รายงานแสดงข้อมูลทั้งหมด"
+        description="รายงานบัญชีรวมตามช่วงวันที่ ตลาด และเงื่อนไขการค้นหา"
+        action={(
+          <div className="w-full rounded-3xl border border-slate-200 bg-white p-4 shadow-soft xl:min-w-[720px]">
+            <div className="flex flex-col gap-3 xl:items-end">
+              <div className="flex w-full flex-col gap-3 sm:flex-row xl:justify-end">
+                <DatePickerBare value={filters.startDate} onChange={(value) => setFilter('startDate', value)} className="sm:w-[210px]" />
+                <DatePickerBare value={filters.endDate} onChange={(value) => setFilter('endDate', value)} className="sm:w-[210px]" />
+                <ReportActionButton tone="slate" onClick={reload}>ค้นหา</ReportActionButton>
+              </div>
+              <ReportExportActions title="รายงานแสดงข้อมูลทั้งหมด" columns={columns} rows={exportRows} disabled={!exportRows.length} />
+            </div>
+          </div>
+        )}
+      />
+      <Card>
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="grid gap-4 lg:grid-cols-3">
+              <select value={filters.marketId} onChange={(event) => setFilter('marketId', event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-slate-600 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100">
+                <option value="">ทุกตลาด</option>
+                {marketRows.map((market) => <option key={market.id} value={market.id}>{market.name}</option>)}
+              </select>
+              <select value={filters.dateField} onChange={(event) => setFilter('dateField', event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-slate-600 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100">
+                <option value="payment_date">ค้นหาด้วยวันที่ชำระเงิน</option>
+                <option value="booking_date">ค้นหาด้วยวันที่จัดงาน</option>
+                <option value="created_date">ค้นหาด้วยวันที่ทำรายการ</option>
+              </select>
+              <select value={filters.sortBy} onChange={(event) => setFilter('sortBy', event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-slate-600 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100">
+                <option value="payment_date">เรียงตามวันที่ชำระเงิน</option>
+                <option value="booking_public_id">เรียงตามเลขที่ใบจอง</option>
+                <option value="booking_date">เรียงตามวันที่จัดงาน</option>
+              </select>
+            </div>
+          </div>
+          {loading ? <LoadingBlock /> : <DataTable columns={columns} rows={rows.map((item, index) => [
+            index + 1,
+            item.booking_public_id || '-',
+            item.booking_dates || formatDate(item.booking_date),
+            item.customer_name || '-',
+            item.paid_at ? formatDate(item.paid_at) : '-',
+            formatMoney(item.booth_service_amount || 0),
+            formatMoney(item.other_service_amount || 0),
+            formatMoney(item.subtotal_amount || 0),
+            formatMoney(item.discount_amount || 0),
+            formatMoney(item.vat_amount || 0),
+            formatMoney(item.withholding_tax_amount || 0),
+            formatMoney(item.total_amount || 0),
+            <StatusBadge value={item.status} />,
+            item.reason || '-',
+          ])} />}
+        </div>
+      </Card>
+    </>
+  );
+}
+
+function AccountingSalesSummaryPage() {
+  const { data: markets = [] } = useApi('/markets', { initialData: [] });
+  const marketRows = normalizeRows(markets);
+  const [filters, setFilters] = useState({
+    startDate: '2026-05-01',
+    endDate: '2026-05-31',
+    marketId: '',
+    dateField: 'payment_date',
+    sortBy: 'payment_date',
+  });
+  const queryString = new URLSearchParams({
+    paidOnly: '1',
+    startDate: filters.startDate,
+    endDate: filters.endDate,
+    dateField: filters.dateField,
+    sortBy: filters.sortBy,
+    ...(filters.marketId ? { marketId: filters.marketId } : {}),
+  }).toString();
+  const { data = [], loading, reload } = useApi(`/accounting/report-all?${queryString}`, { initialData: [] });
+  const rows = normalizeRows(data);
+  const columns = ['#', 'เลขที่ใบจอง', 'วันที่จัดงาน', 'ลูกค้า', 'วันที่ชำระเงิน', 'ค่าบริการ Booth', 'ค่าบริการอื่นๆ', 'ค่าปรับ', 'จำนวนก่อน Vat'];
+  const exportRows = rows.map((item, index) => [
+    index + 1,
+    item.booking_public_id || '-',
+    item.booking_dates || formatDate(item.booking_date),
+    item.customer_name || '-',
+    item.paid_at ? formatDate(item.paid_at) : '-',
+    formatMoney(item.booth_service_amount || 0),
+    formatMoney(item.other_service_amount || 0),
+    formatMoney(item.fine_amount || 0),
+    formatMoney(item.amount_before_vat || 0),
+  ]);
+
+  function setFilter(name, value) {
+    setFilters((current) => ({ ...current, [name]: value }));
+  }
+
+  return (
+    <>
+      <PageHeader
+        title="รายงานสรุปยอดขาย"
+        description="สรุปยอดขายที่ชำระเงินแล้วตามช่วงวันที่และตลาด"
+        action={(
+          <div className="w-full rounded-3xl border border-slate-200 bg-white p-4 shadow-soft xl:min-w-[720px]">
+            <div className="flex flex-col gap-3 xl:items-end">
+              <div className="flex w-full flex-col gap-3 sm:flex-row xl:justify-end">
+                <DatePickerBare value={filters.startDate} onChange={(value) => setFilter('startDate', value)} className="sm:w-[210px]" />
+                <DatePickerBare value={filters.endDate} onChange={(value) => setFilter('endDate', value)} className="sm:w-[210px]" />
+                <ReportActionButton tone="slate" onClick={reload}>ค้นหา</ReportActionButton>
+              </div>
+              <ReportExportActions title="รายงานสรุปยอดขาย" columns={columns} rows={exportRows} disabled={!exportRows.length} />
+            </div>
+          </div>
+        )}
+      />
+      <Card>
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="grid gap-4 lg:grid-cols-3">
+              <select value={filters.marketId} onChange={(event) => setFilter('marketId', event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-slate-600 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100">
+                <option value="">ทุกตลาด</option>
+                {marketRows.map((market) => <option key={market.id} value={market.id}>{market.name}</option>)}
+              </select>
+              <select value={filters.dateField} onChange={(event) => setFilter('dateField', event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-slate-600 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100">
+                <option value="payment_date">ค้นหาด้วยวันที่ชำระเงิน</option>
+                <option value="booking_date">ค้นหาด้วยวันที่จัดงาน</option>
+                <option value="created_date">ค้นหาด้วยวันที่ทำรายการ</option>
+              </select>
+              <select value={filters.sortBy} onChange={(event) => setFilter('sortBy', event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-slate-600 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100">
+                <option value="payment_date">เรียงตามวันที่ชำระเงิน</option>
+                <option value="booking_public_id">เรียงตามเลขที่ใบจอง</option>
+                <option value="booking_date">เรียงตามวันที่จัดงาน</option>
+              </select>
+            </div>
+          </div>
+          {loading ? <LoadingBlock /> : <DataTable columns={columns} rows={rows.map((item, index) => [
+            index + 1,
+            item.booking_public_id || '-',
+            item.booking_dates || formatDate(item.booking_date),
+            item.customer_name || '-',
+            item.paid_at ? formatDate(item.paid_at) : '-',
+            formatMoney(item.booth_service_amount || 0),
+            formatMoney(item.other_service_amount || 0),
+            formatMoney(item.fine_amount || 0),
+            formatMoney(item.amount_before_vat || 0),
+          ])} />}
+        </div>
+      </Card>
     </>
   );
 }
 
 function AccountingPage({ paidOnly = false }) {
-  const { data = [], loading } = useApi(paidOnly ? '/accounting/payments?paidOnly=1' : '/accounting/payments', { initialData: [] });
+  const { data: markets = [] } = useApi('/markets', { initialData: [] });
+  const marketRows = normalizeRows(markets);
+  const [filters, setFilters] = useState({
+    startDate: '2026-05-01',
+    endDate: '2026-05-31',
+    marketId: '',
+    dateField: 'payment_date',
+    sortBy: 'payment_date',
+  });
+  const queryString = new URLSearchParams({
+    ...(paidOnly ? { paidOnly: '1' } : {}),
+    startDate: filters.startDate,
+    endDate: filters.endDate,
+    dateField: filters.dateField,
+    sortBy: filters.sortBy,
+    ...(filters.marketId ? { marketId: filters.marketId } : {}),
+  }).toString();
+  const { data = [], loading, reload } = useApi(`/accounting/payments?${queryString}`, { initialData: [] });
+  const { mutate: mutateDocument, loading: issuingDocument } = useMutation();
+  const rows = normalizeRows(data);
+  const exportColumns = ['เลขชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'Provider', 'สถานะ', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน'];
+  const exportRows = rows.map((payment) => [payment.public_id, payment.booking_public_id || '-', payment.market_name || '-', payment.booking_dates || '-', payment.booths || '-', payment.customer_name || '-', payment.provider, payment.status || '-', formatMoney(payment.subtotal_amount || 0), formatMoney(payment.discount_amount || 0), formatMoney(payment.vat_amount || 0), formatMoney(payment.amount), formatDate(payment.paid_at || payment.created_at)]);
+
+  function setFilter(name, value) {
+    setFilters((current) => ({ ...current, [name]: value }));
+  }
+
+  async function issueAndPrintPaymentDocument(payment) {
+    const payload = await mutateDocument(`/accounting/payments/${payment.id}/document`, {}, 'POST');
+    openPaymentDocumentWindow(payload);
+    reload();
+  }
+
   return (
     <>
-      <PageHeader title={paidOnly ? 'รายงานการชำระเงิน' : 'บัญชี'} description={paidOnly ? 'ข้อมูลการจองที่ชำระเงินสำเร็จแล้ว' : 'รายการชำระเงินทั้งหมด'} />
-      <Card>{loading ? <LoadingBlock /> : <DataTable columns={['เลขชำระเงิน', 'เลขจอง', 'วันที่จอง', 'Booth', 'Provider', 'สถานะ', 'จำนวนเงิน', 'วันที่ชำระ/ทำรายการ']} rows={normalizeRows(data).map((payment) => [payment.public_id, payment.booking_public_id || '-', payment.booking_dates || '-', payment.booths || '-', payment.provider, <StatusBadge value={payment.status} />, formatMoney(payment.amount), formatDate(payment.paid_at || payment.created_at)])} />}</Card>
+      <PageHeader
+        title={paidOnly ? 'รายงานการชำระเงิน' : 'บัญชี'}
+        description={paidOnly ? 'แสดงรายการที่ชำระเงินแล้วทั้งหมดตามช่วงวันที่และตลาด' : 'รายการชำระเงินทั้งหมด'}
+        action={(
+          <div className="w-full rounded-3xl border border-slate-200 bg-white p-4 shadow-soft xl:min-w-[720px]">
+            <div className="flex flex-col gap-3 xl:items-end">
+              <div className="flex w-full flex-col gap-3 sm:flex-row xl:justify-end">
+                <DatePickerBare value={filters.startDate} onChange={(value) => setFilter('startDate', value)} className="sm:w-[210px]" />
+                <DatePickerBare value={filters.endDate} onChange={(value) => setFilter('endDate', value)} className="sm:w-[210px]" />
+                <ReportActionButton tone="slate" onClick={reload}>ค้นหา</ReportActionButton>
+              </div>
+              <ReportExportActions title={paidOnly ? 'รายงานการชำระเงิน' : 'รายการชำระเงินทั้งหมด'} columns={exportColumns} rows={exportRows} disabled={!exportRows.length} />
+            </div>
+          </div>
+        )}
+      />
+      <Card>
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="grid gap-4 lg:grid-cols-3">
+              <select value={filters.marketId} onChange={(event) => setFilter('marketId', event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-slate-600 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100">
+                <option value="">ทุกตลาด</option>
+                {marketRows.map((market) => <option key={market.id} value={market.id}>{market.name}</option>)}
+              </select>
+              <select value={filters.dateField} onChange={(event) => setFilter('dateField', event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-slate-600 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100">
+                <option value="payment_date">ค้นหาด้วยวันที่ชำระเงิน</option>
+                <option value="booking_date">ค้นหาด้วยวันที่จัดงาน</option>
+                <option value="created_date">ค้นหาด้วยวันที่ทำรายการ</option>
+              </select>
+              <select value={filters.sortBy} onChange={(event) => setFilter('sortBy', event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-slate-600 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100">
+                <option value="payment_date">เรียงตามวันที่ชำระเงิน</option>
+                <option value="booking_public_id">เรียงตามเลขที่ใบจอง</option>
+                <option value="booking_date">เรียงตามวันที่จัดงาน</option>
+              </select>
+            </div>
+          </div>
+          {loading ? <LoadingBlock /> : <DataTable columns={['เลขชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'Provider', 'สถานะ', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน', 'จัดการ']} rows={rows.map((payment) => [
+            payment.public_id,
+            payment.booking_public_id || '-',
+            payment.market_name || '-',
+            payment.booking_dates || '-',
+            payment.booths || '-',
+            payment.customer_name || '-',
+            payment.provider,
+            <StatusBadge value={payment.status} />,
+            formatMoney(payment.subtotal_amount || 0),
+            formatMoney(payment.discount_amount || 0),
+            formatMoney(payment.vat_amount || 0),
+            formatMoney(payment.amount),
+            formatDate(payment.paid_at || payment.created_at),
+            <SmallButton tone={Number(payment.vat_enabled || 0) === 1 ? 'cyan' : 'amber'} onClick={() => issueAndPrintPaymentDocument(payment)} disabled={issuingDocument}>
+              {payment.document_no || (Number(payment.vat_enabled || 0) === 1 ? 'ใบกำกับภาษี' : 'ใบเสร็จ')}
+            </SmallButton>,
+          ])} />}
+        </div>
+      </Card>
     </>
   );
 }
@@ -2374,31 +3118,79 @@ function AdminsPage({ marketId }) {
   const { data: markets = [] } = useApi('/markets', { initialData: [] });
   const { mutate, loading, error } = useMutation();
   const [modalOpen, setModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingAdmin, setEditingAdmin] = useState(null);
   const marketRows = normalizeRows(markets);
-  const adminRows = normalizeRows(admins);
-  const [form, setForm] = useState({ username: '', password: 'Admin@123456', role: 'admin', name: '', email: '', phone: '', marketId: String(marketId || '') });
+  const adminRows = normalizeRows(admins).sort((left, right) => Number(left.id) - Number(right.id));
+  const [form, setForm] = useState({ username: '', password: 'Admin@123456', role: 'admin', name: '', email: '', phone: '', marketId: String(marketId || ''), status: 'active' });
   const [message, setMessage] = useState('');
   const [formError, setFormError] = useState('');
 
+  function resetForm() {
+    setForm({ username: '', password: 'Admin@123456', role: 'admin', name: '', email: '', phone: '', marketId: String(marketId || ''), status: 'active' });
+    setFormError('');
+    setEditingAdmin(null);
+  }
+
   async function submit(event) {
     event.preventDefault();
-    const validationError = validateAdminForm(form);
+    const validationError = validateAdminForm(form, { requireUsername: !editingAdmin, requirePassword: !editingAdmin });
     if (validationError) {
       setFormError(validationError);
       return;
     }
     const marketIds = form.role === 'accounting' || form.role === 'supervisor' ? [] : [Number(form.marketId || marketRows[0]?.id)].filter(Boolean);
-    await mutate('/admins', { ...form, marketIds });
-    setMessage('สร้างผู้ดูแลระบบสำเร็จ');
-    setModalOpen(false);
+    if (editingAdmin) {
+      const payload = { role: form.role, name: form.name, email: form.email, phone: form.phone, marketIds, status: form.status };
+      if (form.password) payload.password = form.password;
+      await mutate(`/admins/${editingAdmin.id}`, payload, 'PATCH');
+      setMessage('แก้ไขผู้ดูแลระบบสำเร็จ');
+      setEditModalOpen(false);
+    } else {
+      await mutate('/admins', { ...form, marketIds });
+      setMessage('สร้างผู้ดูแลระบบสำเร็จ');
+      setModalOpen(false);
+    }
+    resetForm();
+    reloadAdmins();
+  }
+
+  function openCreateModal() {
+    resetForm();
+    setModalOpen(true);
+  }
+
+  function openEditModal(item) {
+    setEditingAdmin(item);
+    setForm({
+      username: '',
+      password: '',
+      role: item.role || 'admin',
+      name: item.name || '',
+      email: item.email || '',
+      phone: item.phone || '',
+      marketId: String(item.assigned_market_ids?.[0] || marketId || marketRows[0]?.id || ''),
+      status: item.status || 'active',
+    });
     setFormError('');
-    setForm((current) => ({ ...current, username: '', name: '', email: '', phone: '' }));
+    setEditModalOpen(true);
+  }
+
+  async function updateStatus(item, status) {
+    await mutate(`/admins/${item.id}`, {
+      role: item.role,
+      name: item.name || '',
+      email: item.email || '',
+      phone: item.phone || '',
+      marketIds: item.role === 'accounting' || item.role === 'supervisor' ? [] : item.assigned_market_ids || [],
+      status,
+    }, 'PATCH');
     reloadAdmins();
   }
 
   return (
     <>
-      <PageHeader title="ผู้ดูแลระบบ" description="สร้างบัญชีผู้ดูแลและกำหนดสิทธิ์ตลาด" action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มผู้ดูแล</button>} />
+      <PageHeader title="ผู้ดูแลระบบ" description="สร้างบัญชีผู้ดูแลและกำหนดสิทธิ์ตลาด" action={<button onClick={openCreateModal} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มผู้ดูแล</button>} />
       <div className="grid gap-6">
         <Modal open={modalOpen} title="เพิ่มผู้ดูแล" onClose={() => setModalOpen(false)}>
         <FormPanel onSubmit={submit} loading={loading} error={formError || error}>
@@ -2410,6 +3202,20 @@ function AdminsPage({ marketId }) {
           <TextInput label="ชื่อ" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
           <TextInput label="Email" value={form.email} onChange={(value) => setForm((current) => ({ ...current, email: value }))} />
           <TextInput label="Phone" value={form.phone} onChange={(value) => setForm((current) => ({ ...current, phone: value }))} />
+          {['admin', 'audit'].includes(form.role) ? (
+            <SelectInput label="ตลาดที่รับผิดชอบ" value={form.marketId || marketRows[0]?.id || ''} onChange={(value) => setForm((current) => ({ ...current, marketId: value }))} options={marketRows.map((item) => [String(item.id), item.name])} />
+          ) : null}
+        </FormPanel>
+        </Modal>
+        <Modal open={editModalOpen} title="แก้ไขผู้ดูแล" onClose={() => setEditModalOpen(false)}>
+        <FormPanel onSubmit={submit} loading={loading} error={formError || error}>
+          <TextInput label="Password ใหม่" value={form.password} onChange={(value) => setForm((current) => ({ ...current, password: value }))} type="password" />
+          <PasswordPolicyHint />
+          <SelectInput label="Role" value={form.role} onChange={(value) => setForm((current) => ({ ...current, role: value }))} options={[['admin', 'admin'], ['supervisor', 'supervisor'], ['accounting', 'accounting'], ['audit', 'audit']]} />
+          <TextInput label="ชื่อ" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
+          <TextInput label="Email" value={form.email} onChange={(value) => setForm((current) => ({ ...current, email: value }))} />
+          <TextInput label="Phone" value={form.phone} onChange={(value) => setForm((current) => ({ ...current, phone: value }))} />
+          <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'active'], ['inactive', 'inactive']]} />
           {['admin', 'audit'].includes(form.role) ? (
             <SelectInput label="ตลาดที่รับผิดชอบ" value={form.marketId || marketRows[0]?.id || ''} onChange={(value) => setForm((current) => ({ ...current, marketId: value }))} options={marketRows.map((item) => [String(item.id), item.name])} />
           ) : null}
@@ -2428,16 +3234,20 @@ function AdminsPage({ marketId }) {
           <SectionTitle title="รายการผู้ดูแลระบบ" description="ข้อมูลบัญชีผู้ดูแลทั้งหมดภายในองค์กร" icon={Users} />
           {adminsLoading ? <LoadingBlock /> : (
             <DataTable
-              columns={['ID', 'ชื่อ', 'Role', 'Email', 'Phone', 'ตลาดที่ดูแล', 'สถานะ', 'สร้างเมื่อ']}
+              columns={['ID', 'ชื่อ', 'Role', 'Email', 'Phone', 'สถานะ', 'จัดการ']}
               rows={adminRows.map((item) => [
                 item.id,
                 item.name || '-',
                 item.role,
                 item.email || '-',
                 item.phone || '-',
-                item.role === 'accounting' ? 'ทุกตลาดในองค์กร' : item.role === 'supervisor' ? 'ทุกตลาดในองค์กร' : item.assigned_markets || '-',
                 <StatusBadge value={item.status} />,
-                formatDate(item.created_at),
+                <div className="flex flex-wrap gap-2">
+                  <SmallButton tone="amber" onClick={() => openEditModal(item)}>แก้ไข</SmallButton>
+                  {item.status === 'active'
+                    ? <SmallButton tone="red" onClick={() => updateStatus(item, 'inactive')}>ปิดใช้งาน</SmallButton>
+                    : <SmallButton tone="cyan" onClick={() => updateStatus(item, 'active')}>เปิดใช้งาน</SmallButton>}
+                </div>,
               ])}
             />
           )}
@@ -2461,11 +3271,15 @@ function RoleCard({ role, description }) {
 }
 
 function ReportTable({ rows }) {
-  return <DataTable columns={['ลำดับ', 'ตลาด', 'เลขจอง', 'วันที่จอง', 'Booth', 'สถานะ', 'แหล่งที่มา', 'ยอดจอง', 'วันที่ทำรายการ']} rows={rows.map((row, index) => [index + 1, row.market_name, row.booking_public_id || '-', formatDate(row.booking_date), row.booth_code || row.booth_name || '-', <StatusBadge value={row.status || 'pending_payment'} />, row.source || '-', formatMoney(row.total_amount), formatDate(row.created_at)])} />;
+  return <DataTable columns={['ลำดับ', 'ตลาด', 'เลขจอง', 'วันที่จอง', 'Booth', 'สถานะ', 'แหล่งที่มา', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'ยอดรวม', 'วันที่ทำรายการ']} rows={rows.map((row, index) => [index + 1, row.market_name, row.booking_public_id || '-', formatDate(row.booking_date), row.booth_code || row.booth_name || '-', <StatusBadge value={row.status || 'pending_payment'} />, row.source || '-', formatMoney(row.subtotal_amount || row.booth_amount || 0), formatMoney(row.discount_amount || 0), formatMoney(row.vat_amount || 0), formatMoney(row.total_amount), formatDate(row.created_at)])} />;
 }
 
 function AvailableBoothReportTable({ rows }) {
-  return <DataTable columns={['ลำดับ', 'ตลาด', 'วันที่', 'รหัส Booth', 'ชื่อ Booth', 'แบบ Booth', 'ประเภทสินค้า', 'ราคา']} rows={rows.map((row, index) => [index + 1, row.market_name || '-', formatDate(row.booking_date), row.booth_code || '-', row.booth_name || '-', row.floor_plan_name || '-', row.production_category_name || '-', formatMoney(row.price)])} />;
+  return <DataTable columns={['ลำดับ', 'ตลาด', 'วันที่', 'รหัส Booth', 'ชื่อ Booth', 'แบบ Booth', 'ประเภทสินค้า', 'ราคา', 'VAT', 'ราคารวม']} rows={rows.map((row, index) => [index + 1, row.market_name || '-', formatDate(row.booking_date), row.booth_code || '-', row.booth_name || '-', row.floor_plan_name || '-', row.production_category_name || '-', formatMoney(row.price), formatMoney(row.vat_amount || 0), formatMoney(row.gross_price ?? row.price)])} />;
+}
+
+function DailySalesReportTable({ rows }) {
+  return <DataTable columns={['#', 'เลขที่ใบจอง', 'ตลาด', 'ชื่อผู้จอง', 'Tell', 'ชื่อ Booth', 'สินค้าขาย', 'VAT', 'ยอดรวม', 'วันที่ขาย']} rows={rows.map((row, index) => [index + 1, row.booking_public_id || '-', row.market_name || '-', row.customer_name || '-', row.customer_phone || '-', row.booth_code || row.booth_name || '-', row.product_names || '-', formatMoney(row.vat_amount || 0), formatMoney(row.total_amount || 0), formatDate(row.booking_date)])} />;
 }
 
 function PaymentList({ rows }) {
@@ -2496,6 +3310,48 @@ function Toolbar({ keyword, onKeyword }) {
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input value={keyword} onChange={(event) => onKeyword(event.target.value)} placeholder="Search" className="h-11 w-full rounded-xl border border-slate-200 pl-10 pr-3 text-sm outline-none focus:border-cyan-600" />
       </label>
+    </div>
+  );
+}
+
+function ReportFiltersBar({ children }) {
+  return <div className="flex w-full flex-col items-end gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-soft sm:p-4 xl:w-auto xl:min-w-[720px]">{children}</div>;
+}
+
+function ReportActionButton({ children, tone = 'slate', onClick, disabled = false }) {
+  const tones = {
+    slate: 'bg-slate-950 text-white hover:bg-slate-800',
+    cyan: 'bg-cyan-600 text-white hover:bg-cyan-700',
+    amber: 'bg-amber-500 text-slate-950 hover:bg-amber-400',
+    red: 'bg-rose-600 text-white hover:bg-rose-700',
+  };
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={classNames('inline-flex h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-bold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50', tones[tone])}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ReportExportActions({ title, columns, rows, disabled = false }) {
+  return (
+    <div className="flex flex-nowrap justify-end gap-2 overflow-x-auto">
+      <ReportActionButton tone="cyan" onClick={() => exportReportExcel(title, columns, rows)} disabled={disabled}>
+        <FileSpreadsheet size={16} />
+        Excel
+      </ReportActionButton>
+      <ReportActionButton tone="amber" onClick={() => openReportPrintWindow(title, columns, rows, 'pdf')} disabled={disabled}>
+        <FileText size={16} />
+        PDF
+      </ReportActionButton>
+      <ReportActionButton tone="red" onClick={() => openReportPrintWindow(title, columns, rows, 'print')} disabled={disabled}>
+        <Printer size={16} />
+        พิมพ์
+      </ReportActionButton>
     </div>
   );
 }
@@ -2618,8 +3474,8 @@ function DatePicker({ label, value, onChange, required = false }) {
   );
 }
 
-function DatePickerBare({ value, onChange, required = false }) {
-  return <input type="date" value={value} required={required} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" />;
+function DatePickerBare({ value, onChange, required = false, className = '' }) {
+  return <input type="date" value={value} required={required} onChange={(event) => onChange(event.target.value)} className={classNames('h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100', className)} />;
 }
 
 function TimePicker({ label, value, onChange, required = false }) {
