@@ -624,7 +624,7 @@ function ErrorNotice({ error, hint }) {
 function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ username: 'admin', password: 'Admin@123456' });
+  const [form, setForm] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -2350,14 +2350,14 @@ function TenantsPage({ status }) {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [tenantError, setTenantError] = useState('');
   const [editingTenant, setEditingTenant] = useState(null);
-  const [form, setForm] = useState({ username: '', password: 'Vendor@123456', tenantTypeId: '', name: '', phone: '', email: '', idCard: '', address: '' });
+  const [form, setForm] = useState({ username: '', password: '', tenantTypeId: '', name: '', phone: '', email: '', idCard: '', address: '' });
   const [editForm, setEditForm] = useState({ username: '', password: '', tenantTypeId: '', name: '', phone: '', email: '', idCard: '', address: '', status: 'active' });
   const typeRows = normalizeRows(tenantTypes);
   const rows = normalizeRows(data).filter((item) => !status || item.status === status);
 
   function openCreateModal() {
     setTenantError('');
-    setForm({ username: '', password: 'Vendor@123456', tenantTypeId: typeRows[0]?.id ? String(typeRows[0].id) : '', name: '', phone: '', email: '', idCard: '', address: '' });
+    setForm({ username: '', password: '', tenantTypeId: typeRows[0]?.id ? String(typeRows[0].id) : '', name: '', phone: '', email: '', idCard: '', address: '' });
     setModalOpen(true);
   }
 
@@ -2386,7 +2386,7 @@ function TenantsPage({ status }) {
       return;
     }
     await mutate('/tenants', { ...form, tenantTypeId: Number(form.tenantTypeId) });
-    setForm({ username: '', password: 'Vendor@123456', tenantTypeId: '', name: '', phone: '', email: '', idCard: '', address: '' });
+    setForm({ username: '', password: '', tenantTypeId: '', name: '', phone: '', email: '', idCard: '', address: '' });
     setTenantError('');
     setModalOpen(false);
     reload();
@@ -3435,12 +3435,12 @@ function AdminsPage({ marketId }) {
   const [editingAdmin, setEditingAdmin] = useState(null);
   const marketRows = normalizeRows(markets);
   const adminRows = normalizeRows(admins).sort((left, right) => Number(left.id) - Number(right.id));
-  const [form, setForm] = useState({ username: '', password: 'Admin@123456', role: 'admin', name: '', email: '', phone: '', marketId: String(marketId || ''), status: 'active' });
+  const [form, setForm] = useState({ username: '', password: '', role: 'admin', name: '', email: '', phone: '', marketId: String(marketId || ''), status: 'active' });
   const [message, setMessage] = useState('');
   const [formError, setFormError] = useState('');
 
   function resetForm() {
-    setForm({ username: '', password: 'Admin@123456', role: 'admin', name: '', email: '', phone: '', marketId: String(marketId || ''), status: 'active' });
+    setForm({ username: '', password: '', role: 'admin', name: '', email: '', phone: '', marketId: String(marketId || ''), status: 'active' });
     setFormError('');
     setEditingAdmin(null);
   }
