@@ -143,6 +143,11 @@ const menu = [
       { path: '/accounting', label: 'รายงานแสดงข้อมูลทั้งหมด' },
       { path: '/accounting-payments', label: 'รายงานการชำระเงิน' },
       { path: '/accounting-summary', label: 'รายงานสรุปยอดขาย' },
+      { path: '/accounting-documents', label: 'ทะเบียนเอกสารบัญชี' },
+      { path: '/accounting-tax-sales', label: 'รายงานภาษีขาย' },
+      { path: '/accounting-receivables', label: 'ลูกหนี้ค้างชำระ' },
+      { path: '/accounting-reconciliation', label: 'กระทบยอดชำระเงิน' },
+      { path: '/accounting-refunds', label: 'คืนเงิน/ใบลดหนี้' },
       { path: '/accounting-product-types', label: 'รายงานประเภทสินค้าที่ขาย' },
     ],
   },
@@ -196,6 +201,23 @@ function auditResultLabel(value) {
     failed: 'ทำผิดกฎ',
   };
   return labels[String(value || '').toLowerCase()] || value || '-';
+}
+
+function accountingDocumentLabel(value) {
+  const labels = {
+    receipt: 'ใบเสร็จรับเงิน',
+    tax_invoice: 'ใบกำกับภาษี / ใบเสร็จรับเงิน',
+    credit_note: 'ใบลดหนี้',
+  };
+  return labels[String(value || '').toLowerCase()] || value || '-';
+}
+
+function receivableTypeLabel(value) {
+  return value === 'fine' ? 'ค่าปรับ' : value === 'booking' ? 'ค่าจอง' : value || '-';
+}
+
+function reconciliationLabel(value) {
+  return value === 'matched' ? 'ตรงกัน' : 'ต้องตรวจสอบ';
 }
 
 function dateKeyFromValue(value) {
@@ -675,6 +697,11 @@ function Shell() {
             <Route path="/accounting-payments" element={<AccountingPage />} />
             <Route path="/accounting-summary" element={<AccountingSalesSummaryPage />} />
             <Route path="/accounting-sap" element={<ReportsPage reportType="sap" />} />
+            <Route path="/accounting-documents" element={<AccountingStandardReportPage reportType="documents" />} />
+            <Route path="/accounting-tax-sales" element={<AccountingStandardReportPage reportType="tax-sales" />} />
+            <Route path="/accounting-receivables" element={<AccountingStandardReportPage reportType="receivables" />} />
+            <Route path="/accounting-reconciliation" element={<AccountingStandardReportPage reportType="reconciliation" />} />
+            <Route path="/accounting-refunds" element={<AccountingStandardReportPage reportType="refunds" />} />
             <Route path="/accounting-product-types" element={<ReportsPage reportType="product-types" />} />
             <Route path="/organization-settings" element={<OrganizationSettingsPage />} />
             <Route path="/pdpa" element={<PdpaPage />} />
@@ -3011,6 +3038,138 @@ function AccountingSalesSummaryPage() {
             formatMoney(item.fine_amount || 0),
             formatMoney(item.amount_before_vat || 0),
           ])} />}
+        </div>
+      </Card>
+    </>
+  );
+}
+
+function AccountingStandardReportPage({ reportType }) {
+  const { data: markets = [] } = useApi('/markets', { initialData: [] });
+  const marketRows = normalizeRows(markets);
+  const [filters, setFilters] = useState({
+    startDate: '2026-05-01',
+    endDate: '2026-05-31',
+    asOfDate: '2026-05-31',
+    marketId: '',
+    documentType: 'all',
+    documentStatus: 'all',
+    keyword: '',
+  });
+  const reportMap = {
+    documents: {
+      title: 'ทะเบียนเอกสารบัญชี',
+      description: 'ตรวจสอบใบเสร็จ ใบกำกับภาษี ใบลดหนี้ และสถานะเอกสาร',
+      path: '/accounting/documents',
+      columns: ['เลขเอกสาร', 'ประเภท', 'สถานะ', 'วันที่ออก', 'เลขที่ใบจอง', 'เลขชำระเงิน', 'ลูกค้า', 'ก่อน VAT', 'ส่วนลด', 'VAT', 'ยอดรวม', 'เอกสารอ้างอิง', 'ผู้ทำรายการ', 'เหตุผล'],
+      row: (item) => [item.document_no || '-', accountingDocumentLabel(item.document_type), item.document_status || '-', formatDate(item.issue_date), item.booking_public_id || '-', item.payment_public_id || '-', item.customer_name || '-', formatMoney(item.subtotal_amount || 0), formatMoney(item.discount_amount || 0), formatMoney(item.vat_amount || 0), formatMoney(item.total_amount || 0), item.source_document_no || '-', item.issued_by_name || '-', item.cancel_reason || '-'],
+    },
+    'tax-sales': {
+      title: 'รายงานภาษีขาย',
+      description: 'อ้างอิงจากใบกำกับภาษีและใบลดหนี้ที่ออกจริง',
+      path: '/accounting/tax-sales',
+      columns: ['วันที่', 'เลขที่เอกสาร', 'ประเภท', 'สถานะ', 'เลขที่ใบจอง', 'ลูกค้า', 'มูลค่าก่อน VAT', 'VAT', 'ยอดรวม', 'เอกสารอ้างอิง'],
+      row: (item) => [formatDate(item.issue_date), item.document_no || '-', accountingDocumentLabel(item.document_type), item.document_status || '-', item.booking_public_id || '-', item.customer_name || '-', formatMoney(item.taxable_amount || 0), formatMoney(item.vat_report_amount || 0), formatMoney(item.total_report_amount || 0), item.source_document_no || '-'],
+    },
+    receivables: {
+      title: 'ลูกหนี้ค้างชำระ',
+      description: 'รวมค่าจองและค่าปรับที่ยังค้างชำระ พร้อมช่วงอายุหนี้',
+      path: '/accounting/receivables-aging',
+      columns: ['ประเภท', 'เลขที่อ้างอิง', 'ตลาด', 'ลูกค้า', 'วันที่ขาย', 'วันครบกำหนด', 'อายุหนี้', 'ช่วงอายุหนี้', 'สถานะ', 'ยอดค้างชำระ'],
+      row: (item) => [receivableTypeLabel(item.receivable_type), item.source_public_id || '-', item.market_name || '-', item.customer_name || '-', item.booking_dates || '-', formatDate(item.due_date), `${Math.max(Number(item.aging_days || 0), 0)} วัน`, item.aging_bucket || '-', item.status || '-', formatMoney(item.outstanding_amount || 0)],
+    },
+    reconciliation: {
+      title: 'กระทบยอดชำระเงิน',
+      description: 'ตรวจสอบยอด payment เทียบ booking, callback และเอกสารบัญชี',
+      path: '/accounting/reconciliation',
+      columns: ['เลขชำระเงิน', 'Provider', 'Reference', 'เลขที่ใบจอง', 'ตลาด', 'สถานะชำระเงิน', 'สถานะจอง', 'ยอดชำระ', 'ยอดจอง', 'Callback', 'เอกสาร', 'ผลกระทบยอด', 'วันที่ทำรายการ'],
+      row: (item) => [item.payment_public_id || '-', item.provider || '-', item.provider_reference || '-', item.booking_public_id || '-', item.market_name || '-', item.payment_status || '-', item.booking_status || '-', formatMoney(item.payment_amount || 0), formatMoney(item.booking_amount || 0), Number(item.callback_count || 0), item.document_no || '-', reconciliationLabel(item.reconciliation_status), formatDate(item.paid_at || item.created_at)],
+    },
+    refunds: {
+      title: 'คืนเงิน/ใบลดหนี้',
+      description: 'รายการใบลดหนี้และรายการชำระเงินที่ถูกคืนหรือยกเลิก',
+      path: '/accounting/refunds',
+      columns: ['วันที่', 'ประเภท', 'เลขที่เอกสาร', 'สถานะ', 'เลขที่ใบจอง', 'เลขชำระเงิน', 'ลูกค้า', 'ยอดเงิน', 'เอกสารอ้างอิง', 'ผู้ทำรายการ', 'เหตุผล'],
+      row: (item) => [formatDate(item.issue_date), item.refund_type === 'credit_note' ? 'ใบลดหนี้' : 'คืน/ยกเลิกชำระเงิน', item.document_no || '-', item.document_status || '-', item.booking_public_id || '-', item.payment_public_id || '-', item.customer_name || '-', formatMoney(item.total_amount || 0), item.source_document_no || '-', item.issued_by_name || '-', item.reason || '-'],
+    },
+  };
+  const config = reportMap[reportType] || reportMap.documents;
+  const params = new URLSearchParams();
+  if (reportType === 'receivables') {
+    params.set('asOfDate', filters.asOfDate);
+    if (filters.marketId) params.set('marketId', filters.marketId);
+  } else {
+    params.set('startDate', filters.startDate);
+    params.set('endDate', filters.endDate);
+    if (reportType === 'documents') {
+      params.set('documentType', filters.documentType);
+      params.set('documentStatus', filters.documentStatus);
+      if (filters.keyword.trim()) params.set('keyword', filters.keyword.trim());
+    }
+    if (reportType === 'reconciliation' && filters.marketId) params.set('marketId', filters.marketId);
+  }
+  const { data = [], loading, reload } = useApi(`${config.path}?${params.toString()}`, { initialData: [] });
+  const rows = normalizeRows(data);
+  const exportRows = rows.map(config.row);
+
+  function setFilter(name, value) {
+    setFilters((current) => ({ ...current, [name]: value }));
+  }
+
+  return (
+    <>
+      <PageHeader
+        title={config.title}
+        description={config.description}
+        action={(
+          <div className="w-full rounded-3xl border border-slate-200 bg-white p-4 shadow-soft xl:min-w-[780px]">
+            <div className="flex flex-col gap-3 xl:items-end">
+              <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap xl:justify-end">
+                {reportType === 'receivables' ? (
+                  <DatePickerBare value={filters.asOfDate} onChange={(value) => setFilter('asOfDate', value)} className="sm:w-[210px]" />
+                ) : (
+                  <>
+                    <DatePickerBare value={filters.startDate} onChange={(value) => setFilter('startDate', value)} className="sm:w-[210px]" />
+                    <DatePickerBare value={filters.endDate} onChange={(value) => setFilter('endDate', value)} className="sm:w-[210px]" />
+                  </>
+                )}
+                <ReportActionButton tone="slate" onClick={reload}>ค้นหา</ReportActionButton>
+              </div>
+              <ReportExportActions title={config.title} columns={config.columns} rows={exportRows} disabled={!exportRows.length} />
+            </div>
+          </div>
+        )}
+      />
+      <Card>
+        <div className="space-y-6">
+          {reportType === 'documents' ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="grid gap-4 lg:grid-cols-3">
+                <select value={filters.documentType} onChange={(event) => setFilter('documentType', event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-slate-600 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100">
+                  <option value="all">ทุกประเภทเอกสาร</option>
+                  <option value="receipt">ใบเสร็จรับเงิน</option>
+                  <option value="tax_invoice">ใบกำกับภาษี / ใบเสร็จรับเงิน</option>
+                  <option value="credit_note">ใบลดหนี้</option>
+                </select>
+                <select value={filters.documentStatus} onChange={(event) => setFilter('documentStatus', event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-slate-600 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100">
+                  <option value="all">ทุกสถานะ</option>
+                  <option value="issued">ออกเอกสารแล้ว</option>
+                  <option value="cancelled">ยกเลิก</option>
+                  <option value="void">ไม่ใช้เอกสาร</option>
+                </select>
+                <input value={filters.keyword} onChange={(event) => setFilter('keyword', event.target.value)} placeholder="ค้นหาเลขเอกสาร ลูกค้า ใบจอง หรือเลขชำระเงิน" className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" />
+              </div>
+            </div>
+          ) : null}
+          {['receivables', 'reconciliation'].includes(reportType) ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <select value={filters.marketId} onChange={(event) => setFilter('marketId', event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-slate-600 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100 lg:max-w-sm">
+                <option value="">ทุกตลาด</option>
+                {marketRows.map((market) => <option key={market.id} value={market.id}>{market.name}</option>)}
+              </select>
+            </div>
+          ) : null}
+          {loading ? <LoadingBlock /> : <DataTable columns={config.columns} rows={exportRows} />}
         </div>
       </Card>
     </>
