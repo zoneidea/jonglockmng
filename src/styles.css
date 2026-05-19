@@ -12,6 +12,10 @@ body {
   font-family: Inter, 'Noto Sans Thai', ui-sans-serif, system-ui, sans-serif;
 }
 button, input, select, textarea { font: inherit; }
+.subscription-locked button:not([data-subscription-ignore="true"]) {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
 ::-webkit-scrollbar-track { background: transparent; }

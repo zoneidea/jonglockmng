@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import {
   BadgeCheck,
@@ -183,6 +183,69 @@ const boothSamples = [
 
 function classNames(...values) {
   return values.filter(Boolean).join(' ');
+}
+
+const SubscriptionContext = createContext({
+  subscription: null,
+  featureKey: 'dashboard',
+  actionBlocked: false,
+  blockedMessage: '',
+});
+
+const subscriptionFeatureByPath = [
+  [/^\/organization-settings/, 'organization_settings'],
+  [/^\/admins/, 'admin_management'],
+  [/^\/pdpa/, 'pdpa_management'],
+  [/^\/announcements/, 'announcements'],
+  [/^\/tenant/, 'tenant_management'],
+  [/^\/market-info|^\/markets|^\/holidays|^\/holiday-calendar|^\/market-images|^\/accessories/, 'market_management'],
+  [/^\/booth-types|^\/booths/, 'booth_management'],
+  [/^\/product-categories|^\/product-groups|^\/products/, 'product_management'],
+  [/^\/coupons|^\/coupon-assignments/, 'coupon_management'],
+  [/^\/bookings|^\/booking-edit|^\/booking-edits/, 'booking_management'],
+  [/^\/reports|^\/report-/, 'reports'],
+  [/^\/audit/, 'market_audit'],
+  [/^\/accounting/, 'accounting'],
+];
+
+function resolveSubscriptionFeature(pathname = '/') {
+  return subscriptionFeatureByPath.find(([pattern]) => pattern.test(pathname))?.[1] || 'dashboard';
+}
+
+function buildSubscriptionGate(subscription, featureKey) {
+  if (!subscription) {
+    return {
+      actionBlocked: false,
+      blockedMessage: '',
+    };
+  }
+  if (!subscription.writeAllowed) {
+    return {
+      actionBlocked: true,
+      blockedMessage: 'แพ็คเกจหมดอายุหรือยังไม่พร้อมใช้งาน ระบบเปิดให้ดูข้อมูลได้เท่านั้น',
+    };
+  }
+  if (subscription.fullFunction || subscription.plan?.isFullFunction) {
+    return {
+      actionBlocked: false,
+      blockedMessage: '',
+    };
+  }
+  const entitlement = subscription.entitlements?.[featureKey];
+  if (!entitlement || entitlement.enabled === false) {
+    return {
+      actionBlocked: true,
+      blockedMessage: 'แพ็คเกจปัจจุบันไม่รองรับฟังก์ชั่นนี้',
+    };
+  }
+  return {
+    actionBlocked: false,
+    blockedMessage: '',
+  };
+}
+
+function useSubscription() {
+  return useContext(SubscriptionContext);
 }
 
 function formatMoney(value) {
@@ -630,86 +693,116 @@ function ProtectedRoute({ children }) {
 
 function Shell() {
   const { user, logout } = useAuth();
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [subscriptionNotice, setSubscriptionNotice] = useState('');
   const canLoadMarkets = ['supervisor', 'admin', 'accounting'].includes(user?.role);
   const { data: markets = [], loading: marketsLoading, reload: reloadMarkets } = useApi(canLoadMarkets ? '/markets' : null, {
     initialData: [],
     skip: !canLoadMarkets,
   });
+  const { data: subscription = null, loading: subscriptionLoading } = useApi('/subscription/current', {
+    initialData: null,
+  });
   const marketRows = normalizeRows(markets);
   const [selectedMarketId, setSelectedMarketId] = useState('');
   const currentMarketId = selectedMarketId || marketRows?.[0]?.id || '';
   const currentMarket = marketRows.find((market) => String(market.id) === String(currentMarketId)) || marketRows?.[0] || null;
+  const featureKey = resolveSubscriptionFeature(location.pathname);
+  const subscriptionGate = buildSubscriptionGate(subscription, featureKey);
+  const subscriptionContextValue = useMemo(() => ({
+    subscription,
+    featureKey,
+    subscriptionLoading,
+    ...subscriptionGate,
+  }), [subscription, featureKey, subscriptionLoading, subscriptionGate.actionBlocked, subscriptionGate.blockedMessage]);
 
   const availableMenu = useMemo(() => {
     const allowed = new Set([...(user?.menus || []), 'dashboard']);
     return menu.filter((item) => allowed.has(item.menuKey) || item.roles?.includes(user?.role));
   }, [user]);
 
+  function handleMainClickCapture(event) {
+    if (!subscriptionContextValue.actionBlocked) return;
+    const button = event.target.closest?.('button');
+    if (!button || button.dataset.subscriptionIgnore === 'true') return;
+    event.preventDefault();
+    event.stopPropagation();
+    setSubscriptionNotice(subscriptionContextValue.blockedMessage);
+  }
+
   return (
-    <div className="min-h-screen bg-slate-100">
-      <Sidebar items={availableMenu} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="lg:pl-72">
-        <Topbar
-          user={user}
-          markets={marketRows}
-          currentMarketId={currentMarketId}
-          marketsLoading={marketsLoading}
-          showMarketSelector={user?.role !== 'accounting'}
-          onSelectMarket={setSelectedMarketId}
-          onOpenSidebar={() => setSidebarOpen(true)}
-          onLogout={logout}
-        />
-        <main className="px-4 py-6 sm:px-6 lg:px-8">
-          <Routes>
-            <Route path="/" element={<Dashboard marketId={currentMarketId} markets={marketRows} />} />
-            <Route path="/markets" element={<MarketsPage markets={marketRows} reloadMarkets={reloadMarkets} />} />
-            <Route path="/market-info" element={<MarketInfoPage marketId={currentMarketId} market={currentMarket} reloadMarkets={reloadMarkets} />} />
-            <Route path="/booth-types" element={<BoothTypesPage marketId={currentMarketId} />} />
-            <Route path="/booths" element={<BoothsPage marketId={currentMarketId} />} />
-            <Route path="/holidays" element={<MarketHolidaysPage marketId={currentMarketId} />} />
-            <Route path="/holiday-calendar" element={<HolidayCalendarPage marketId={currentMarketId} />} />
-            <Route path="/market-images" element={<MarketImagesPage marketId={currentMarketId} />} />
-            <Route path="/accessories" element={<AccessoriesPage marketId={currentMarketId} />} />
-            <Route path="/product-categories" element={<ProductCategoriesPage marketId={currentMarketId} />} />
-            <Route path="/product-groups" element={<ProductGroupsPage marketId={currentMarketId} />} />
-            <Route path="/products" element={<ProductsPage marketId={currentMarketId} />} />
-            <Route path="/coupons" element={<CouponsPage marketId={currentMarketId} />} />
-            <Route path="/coupon-assignments" element={<CouponsPage marketId={currentMarketId} mode="assignments" />} />
-            <Route path="/bookings" element={<BookingsPage marketId={currentMarketId} />} />
-            <Route path="/booking-edit" element={<BookingsPage marketId={currentMarketId} mode="edit" />} />
-            <Route path="/booking-edits" element={<BookingsPage marketId={currentMarketId} mode="history" />} />
-            <Route path="/reports" element={<ReportsPage />} />
-            <Route path="/report-booths" element={<ReportsPage reportType="booths" />} />
-            <Route path="/report-payments" element={<AccountingPage paidOnly />} />
-            <Route path="/report-daily" element={<ReportsPage reportType="daily" />} />
-            <Route path="/report-person" element={<ReportsPage reportType="person" />} />
-            <Route path="/audit" element={<AuditPage marketId={currentMarketId} />} />
-            <Route path="/audit-fines" element={<AuditPage marketId={currentMarketId} mode="fines" />} />
-            <Route path="/audit-fines-paid" element={<AuditPage marketId={currentMarketId} mode="paid" />} />
-            <Route path="/audit-defective" element={<AuditPage marketId={currentMarketId} mode="defective" />} />
-            <Route path="/announcements/news" element={<AnnouncementsPage type="news" />} />
-            <Route path="/tenant-types" element={<TenantTypesPage />} />
-            <Route path="/tenants" element={<TenantsPage />} />
-            <Route path="/tenants/pending" element={<TenantsPage status="pending" />} />
-            <Route path="/accounting" element={<AccountingAllReportPage />} />
-            <Route path="/accounting-bookings" element={<ReportsPage reportType="accounting-bookings" />} />
-            <Route path="/accounting-payments" element={<AccountingPage />} />
-            <Route path="/accounting-summary" element={<AccountingSalesSummaryPage />} />
-            <Route path="/accounting-sap" element={<ReportsPage reportType="sap" />} />
-            <Route path="/accounting-documents" element={<AccountingStandardReportPage reportType="documents" />} />
-            <Route path="/accounting-tax-sales" element={<AccountingStandardReportPage reportType="tax-sales" />} />
-            <Route path="/accounting-receivables" element={<AccountingStandardReportPage reportType="receivables" />} />
-            <Route path="/accounting-reconciliation" element={<AccountingStandardReportPage reportType="reconciliation" />} />
-            <Route path="/accounting-refunds" element={<AccountingStandardReportPage reportType="refunds" />} />
-            <Route path="/accounting-product-types" element={<ReportsPage reportType="product-types" />} />
-            <Route path="/organization-settings" element={<OrganizationSettingsPage />} />
-            <Route path="/pdpa" element={<PdpaPage />} />
-            <Route path="/admins" element={<AdminsPage marketId={currentMarketId} />} />
-          </Routes>
-        </main>
+    <SubscriptionContext.Provider value={subscriptionContextValue}>
+      <div className="min-h-screen bg-slate-100">
+        <Sidebar items={availableMenu} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <div className="lg:pl-72">
+          <Topbar
+            user={user}
+            markets={marketRows}
+            currentMarketId={currentMarketId}
+            marketsLoading={marketsLoading}
+            showMarketSelector={user?.role !== 'accounting'}
+            subscription={subscription}
+            subscriptionLoading={subscriptionLoading}
+            onSelectMarket={setSelectedMarketId}
+            onOpenSidebar={() => setSidebarOpen(true)}
+            onLogout={logout}
+          />
+          <main
+            onClickCapture={handleMainClickCapture}
+            className={classNames('px-4 py-6 sm:px-6 lg:px-8', subscriptionContextValue.actionBlocked ? 'subscription-locked' : '')}
+          >
+            <SubscriptionNotice message={subscriptionNotice || subscriptionContextValue.blockedMessage} onDismiss={() => setSubscriptionNotice('')} persistent={subscriptionContextValue.actionBlocked} />
+            <Routes>
+              <Route path="/" element={<Dashboard marketId={currentMarketId} markets={marketRows} />} />
+              <Route path="/markets" element={<MarketsPage markets={marketRows} reloadMarkets={reloadMarkets} />} />
+              <Route path="/market-info" element={<MarketInfoPage marketId={currentMarketId} market={currentMarket} reloadMarkets={reloadMarkets} />} />
+              <Route path="/booth-types" element={<BoothTypesPage marketId={currentMarketId} />} />
+              <Route path="/booths" element={<BoothsPage marketId={currentMarketId} />} />
+              <Route path="/holidays" element={<MarketHolidaysPage marketId={currentMarketId} />} />
+              <Route path="/holiday-calendar" element={<HolidayCalendarPage marketId={currentMarketId} />} />
+              <Route path="/market-images" element={<MarketImagesPage marketId={currentMarketId} />} />
+              <Route path="/accessories" element={<AccessoriesPage marketId={currentMarketId} />} />
+              <Route path="/product-categories" element={<ProductCategoriesPage marketId={currentMarketId} />} />
+              <Route path="/product-groups" element={<ProductGroupsPage marketId={currentMarketId} />} />
+              <Route path="/products" element={<ProductsPage marketId={currentMarketId} />} />
+              <Route path="/coupons" element={<CouponsPage marketId={currentMarketId} />} />
+              <Route path="/coupon-assignments" element={<CouponsPage marketId={currentMarketId} mode="assignments" />} />
+              <Route path="/bookings" element={<BookingsPage marketId={currentMarketId} />} />
+              <Route path="/booking-edit" element={<BookingsPage marketId={currentMarketId} mode="edit" />} />
+              <Route path="/booking-edits" element={<BookingsPage marketId={currentMarketId} mode="history" />} />
+              <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/report-booths" element={<ReportsPage reportType="booths" />} />
+              <Route path="/report-payments" element={<AccountingPage paidOnly />} />
+              <Route path="/report-daily" element={<ReportsPage reportType="daily" />} />
+              <Route path="/report-person" element={<ReportsPage reportType="person" />} />
+              <Route path="/audit" element={<AuditPage marketId={currentMarketId} />} />
+              <Route path="/audit-fines" element={<AuditPage marketId={currentMarketId} mode="fines" />} />
+              <Route path="/audit-fines-paid" element={<AuditPage marketId={currentMarketId} mode="paid" />} />
+              <Route path="/audit-defective" element={<AuditPage marketId={currentMarketId} mode="defective" />} />
+              <Route path="/announcements/news" element={<AnnouncementsPage type="news" />} />
+              <Route path="/tenant-types" element={<TenantTypesPage />} />
+              <Route path="/tenants" element={<TenantsPage />} />
+              <Route path="/tenants/pending" element={<TenantsPage status="pending" />} />
+              <Route path="/accounting" element={<AccountingAllReportPage />} />
+              <Route path="/accounting-bookings" element={<ReportsPage reportType="accounting-bookings" />} />
+              <Route path="/accounting-payments" element={<AccountingPage />} />
+              <Route path="/accounting-summary" element={<AccountingSalesSummaryPage />} />
+              <Route path="/accounting-sap" element={<ReportsPage reportType="sap" />} />
+              <Route path="/accounting-documents" element={<AccountingStandardReportPage reportType="documents" />} />
+              <Route path="/accounting-tax-sales" element={<AccountingStandardReportPage reportType="tax-sales" />} />
+              <Route path="/accounting-receivables" element={<AccountingStandardReportPage reportType="receivables" />} />
+              <Route path="/accounting-reconciliation" element={<AccountingStandardReportPage reportType="reconciliation" />} />
+              <Route path="/accounting-refunds" element={<AccountingStandardReportPage reportType="refunds" />} />
+              <Route path="/accounting-product-types" element={<ReportsPage reportType="product-types" />} />
+              <Route path="/organization-settings" element={<OrganizationSettingsPage />} />
+              <Route path="/pdpa" element={<PdpaPage />} />
+              <Route path="/admins" element={<AdminsPage marketId={currentMarketId} />} />
+            </Routes>
+          </main>
+        </div>
       </div>
-    </div>
+    </SubscriptionContext.Provider>
   );
 }
 
@@ -787,14 +880,21 @@ function Sidebar({ items, open, onClose }) {
   );
 }
 
-function Topbar({ user, markets, currentMarketId, marketsLoading, showMarketSelector, onSelectMarket, onOpenSidebar, onLogout }) {
+function Topbar({ user, markets, currentMarketId, marketsLoading, showMarketSelector, subscription, subscriptionLoading, onSelectMarket, onOpenSidebar, onLogout }) {
+  const endAt = subscription?.effectiveEndAt ? formatDate(subscription.effectiveEndAt) : '-';
+  const statusText = subscriptionLoading
+    ? 'กำลังโหลดแพ็คเกจ'
+    : subscription?.plan?.name
+      ? `${subscription.plan.name} · ${subscription.accessStatus === 'expired' ? 'หมดอายุ' : `ใช้ได้ถึง ${endAt}`}`
+      : 'ยังไม่มีแพ็คเกจ';
+
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
       <div className="flex h-20 items-center gap-4 px-4 sm:px-6 lg:px-8">
-        <button onClick={onOpenSidebar} className="rounded-xl border border-slate-200 p-2 lg:hidden"><Menu size={20} /></button>
+        <button data-subscription-ignore="true" onClick={onOpenSidebar} className="rounded-xl border border-slate-200 p-2 lg:hidden"><Menu size={20} /></button>
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-lg font-extrabold text-slate-950">ระบบจัดการตลาด</h1>
-          <p className="text-xs text-slate-500">Role: {user?.role || '-'} · API connected</p>
+          <p className="text-xs text-slate-500">Role: {user?.role || '-'} · {statusText}</p>
         </div>
         {showMarketSelector && (marketsLoading || markets.length) ? (
           <select value={currentMarketId} onChange={(event) => onSelectMarket(event.target.value)} className="hidden h-11 min-w-64 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 sm:block">
@@ -804,12 +904,29 @@ function Topbar({ user, markets, currentMarketId, marketsLoading, showMarketSele
             ))}
           </select>
         ) : null}
-        <button onClick={onLogout} className="inline-flex h-11 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800">
+        <button data-subscription-ignore="true" onClick={onLogout} className="inline-flex h-11 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800">
           <LogOut size={16} />
           <span className="hidden sm:inline">ออกจากระบบ</span>
         </button>
       </div>
     </header>
+  );
+}
+
+function SubscriptionNotice({ message, onDismiss, persistent = false }) {
+  if (!message) return null;
+  return (
+    <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="font-bold">จำกัดการใช้งานตามแพ็คเกจ</p>
+        <p className="mt-1">{message}</p>
+      </div>
+      {!persistent ? (
+        <button data-subscription-ignore="true" type="button" onClick={onDismiss} className="h-9 rounded-xl bg-amber-600 px-4 text-xs font-bold text-white">
+          ปิด
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -3602,7 +3719,7 @@ function Modal({ open, title, children, onClose }) {
       <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
           <h2 className="text-lg font-extrabold text-slate-950">{title}</h2>
-          <button type="button" onClick={onClose} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100">
+          <button data-subscription-ignore="true" type="button" onClick={onClose} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100">
             <X size={20} />
           </button>
         </div>
@@ -3613,13 +3730,15 @@ function Modal({ open, title, children, onClose }) {
 }
 
 function FormPanel({ title, children, onSubmit, loading, error }) {
+  const { actionBlocked, blockedMessage } = useSubscription();
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       {title ? <h2 className="mb-5 text-lg font-extrabold text-slate-950">{title}</h2> : null}
       {children}
       {error ? <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
-      <button disabled={loading} className="h-11 w-full rounded-xl bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60">
-        {loading ? 'กำลังบันทึก...' : 'บันทึก'}
+      {actionBlocked ? <div className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">{blockedMessage}</div> : null}
+      <button disabled={loading || actionBlocked} className="h-11 w-full rounded-xl bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
+        {loading ? 'กำลังบันทึก...' : actionBlocked ? 'ไม่สามารถบันทึกได้' : 'บันทึก'}
       </button>
     </form>
   );
