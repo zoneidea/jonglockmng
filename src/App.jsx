@@ -2651,10 +2651,14 @@ function BookingsPage({ marketId, mode }) {
 }
 
 function ReportsPage({ reportType }) {
+  const { data: markets = [] } = useApi('/markets', { initialData: [] });
+  const marketRows = normalizeRows(markets);
   const [range, setRange] = useState({ startDate: '2026-05-01', endDate: '2026-05-31' });
   const isAvailableBoothReport = reportType === 'booths';
   const isDailySalesReport = reportType === 'daily';
   const isCustomerBookingsReport = reportType === 'person';
+  const isProductTypesReport = reportType === 'product-types';
+  const [marketId, setMarketId] = useState('');
   const [userQuery, setUserQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
   const userPath = isCustomerBookingsReport ? `/mobile-users${userQuery.trim() ? `?keyword=${encodeURIComponent(userQuery.trim())}` : ''}` : null;
@@ -2663,6 +2667,8 @@ function ReportsPage({ reportType }) {
     ? `/reports/available-booths?bookingDate=${range.startDate}`
     : isDailySalesReport
       ? `/reports/daily-sales?startDate=${range.startDate}&endDate=${range.endDate}`
+      : isProductTypesReport
+        ? `/accounting/product-types?startDate=${range.startDate}&endDate=${range.endDate}${marketId ? `&marketId=${marketId}` : ''}`
       : isCustomerBookingsReport
         ? selectedUser?.id ? `/reports/customer-bookings?mobileUserId=${selectedUser.id}` : null
         : `/reports/bookings?startDate=${range.startDate}&endDate=${range.endDate}`;
@@ -2674,6 +2680,8 @@ function ReportsPage({ reportType }) {
     ? 'รายงาน Booth ว่าง'
     : isDailySalesReport
       ? 'รายงานการขายรายวัน'
+      : isProductTypesReport
+        ? 'รายงานประเภทสินค้าที่ขาย'
       : isCustomerBookingsReport
         ? 'การจองรายบุคคล'
         : 'รายงานการจอง';
@@ -2681,17 +2689,23 @@ function ReportsPage({ reportType }) {
     ? 'แสดงเฉพาะ Booth ที่ว่างตามวันที่เลือก'
     : isDailySalesReport
       ? 'รายการขายรายวันตามช่วงวันที่เลือก'
+      : isProductTypesReport
+        ? 'แสดงรายการขายแยกตามประเภทสินค้าที่ขายและวันที่ชำระเงิน'
       : isCustomerBookingsReport
         ? 'ค้นหาลูกค้าแล้วแสดงรายการจองเรียงจากใหม่ไปเก่า'
         : 'รายการจองที่ยังไม่สำเร็จทั้งหมดตามวันที่จอง';
 
   const exportColumns = isAvailableBoothReport
     ? ['ลำดับ', 'ตลาด', 'วันที่', 'รหัส Booth', 'ชื่อ Booth', 'แบบ Booth', 'ประเภทสินค้า', 'ราคา', 'VAT', 'ราคารวม']
+    : isProductTypesReport
+      ? ['ลำดับที่', 'เลขที่ใบจอง', 'ประเภทสินค้าที่ขาย', 'ลูกค้า', 'วันที่ชำระเงิน', 'จำนวนเงินก่อน VAT']
     : isDailySalesReport || isCustomerBookingsReport
       ? ['#', 'เลขที่ใบจอง', 'ตลาด', 'ชื่อผู้จอง', 'Tell', 'ชื่อ Booth', 'สินค้าขาย', 'VAT', 'ยอดรวม', 'วันที่ขาย']
       : ['#', 'ตลาด', 'เลขจอง', 'วันที่จอง', 'Booth', 'สถานะ', 'แหล่งที่มา', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'ยอดรวม', 'วันที่ทำรายการ'];
   const exportRows = isAvailableBoothReport
     ? reportRows.map((row, index) => [index + 1, row.market_name || '-', formatDate(row.booking_date), row.booth_code || '-', row.booth_name || '-', row.floor_plan_name || '-', row.production_category_name || '-', formatMoney(row.price), formatMoney(row.vat_amount || 0), formatMoney(row.gross_price ?? row.price)])
+    : isProductTypesReport
+      ? reportRows.map((row, index) => [index + 1, row.booking_public_id || '-', row.product_names || '-', row.customer_name || '-', formatDate(row.paid_date), formatMoney(row.amount_before_vat || 0)])
     : isDailySalesReport || isCustomerBookingsReport
       ? reportRows.map((row, index) => [index + 1, row.booking_public_id || '-', row.market_name || '-', row.customer_name || '-', row.customer_phone || '-', row.booth_code || row.booth_name || '-', row.product_names || '-', formatMoney(row.vat_amount || 0), formatMoney(row.total_amount || 0), formatDate(row.booking_date)])
       : reportRows.map((row, index) => [index + 1, row.market_name || '-', row.booking_public_id || '-', formatDate(row.booking_date), row.booth_code || row.booth_name || '-', row.status || 'pending_payment', row.source || '-', formatMoney(row.subtotal_amount || 0), formatMoney(row.discount_amount || 0), formatMoney(row.vat_amount || 0), formatMoney(row.total_amount || 0), formatDate(row.created_at)]);
@@ -2739,6 +2753,12 @@ function ReportsPage({ reportType }) {
               <div className="flex w-full flex-col items-end gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
                 <DatePickerBare value={range.startDate} onChange={(value) => setRange((current) => ({ ...current, startDate: value }))} className="sm:w-[210px]" />
                 {!isAvailableBoothReport ? <DatePickerBare value={range.endDate} onChange={(value) => setRange((current) => ({ ...current, endDate: value }))} className="sm:w-[210px]" /> : null}
+                {isProductTypesReport ? (
+                  <select value={marketId} onChange={(event) => setMarketId(event.target.value)} className="h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100 sm:w-[240px]">
+                    <option value="">ทุกตลาด</option>
+                    {marketRows.map((market) => <option key={market.id} value={market.id}>{market.name}</option>)}
+                  </select>
+                ) : null}
                 <ReportActionButton tone="slate" onClick={reload}>ค้นหา</ReportActionButton>
               </div>
               <ReportExportActions title={reportTitle} columns={exportColumns} rows={exportRows} disabled={!exportRows.length} />
@@ -2749,6 +2769,15 @@ function ReportsPage({ reportType }) {
       <Card>
         {loading ? <LoadingBlock /> : isAvailableBoothReport ? (
           <AvailableBoothReportTable rows={reportRows} />
+        ) : isProductTypesReport ? (
+          <DataTable columns={['ลำดับที่', 'เลขที่ใบจอง', 'ประเภทสินค้าที่ขาย', 'ลูกค้า', 'วันที่ชำระเงิน', 'จำนวนเงินก่อน VAT']} rows={reportRows.map((row, index) => [
+            index + 1,
+            row.booking_public_id || '-',
+            row.product_names || '-',
+            row.customer_name || '-',
+            formatDate(row.paid_date),
+            formatMoney(row.amount_before_vat || 0),
+          ])} />
         ) : isDailySalesReport ? (
           <DailySalesReportTable rows={reportRows} />
         ) : isCustomerBookingsReport ? (
