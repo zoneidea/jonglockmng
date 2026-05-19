@@ -55,9 +55,8 @@ const menu = [
     children: [
       { path: '/markets', label: 'รายชื่อตลาด' },
       { path: '/market-info', label: 'ข้อมูลทั่วไป' },
-      { path: '/booth-types', label: 'แบบ Booth' },
-      { path: '/booths', label: 'จัดการ Booth' },
-      { path: '/holidays', label: 'จัดการวันหยุด' },
+      { path: '/booth-types', label: 'แผนผังบูธ' },
+      { path: '/booths', label: 'จัดการบูธ' },
       { path: '/holiday-calendar', label: 'ปฏิทินวันหยุด' },
       { path: '/market-images', label: 'จัดการรูปภาพตลาด' },
       { path: '/accessories', label: 'จัดการบริการเสริม' },
@@ -759,7 +758,7 @@ function Shell() {
               <Route path="/market-info" element={<MarketInfoPage marketId={currentMarketId} market={currentMarket} reloadMarkets={reloadMarkets} />} />
               <Route path="/booth-types" element={<BoothTypesPage marketId={currentMarketId} />} />
               <Route path="/booths" element={<BoothsPage marketId={currentMarketId} />} />
-              <Route path="/holidays" element={<MarketHolidaysPage marketId={currentMarketId} />} />
+              <Route path="/holidays" element={<Navigate to="/holiday-calendar" replace />} />
               <Route path="/holiday-calendar" element={<HolidayCalendarPage marketId={currentMarketId} />} />
               <Route path="/market-images" element={<MarketImagesPage marketId={currentMarketId} />} />
               <Route path="/accessories" element={<AccessoriesPage marketId={currentMarketId} />} />
@@ -1288,7 +1287,7 @@ function BoothTypesPage({ marketId }) {
 
   return (
     <>
-      <PageHeader title="แบบ Booth" description="จัดการรูปแบบบูธและช่วงวันที่เปิดใช้งาน" action={<div className="flex gap-2"><OutlineButton onClick={openCopyModal}>Copy Booth</OutlineButton><button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มแบบ Booth</button></div>} />
+      <PageHeader title="แผนผังบูธ" description="จัดการรูปแบบแผนผังบูธและช่วงวันที่เปิดใช้งาน" action={<div className="flex gap-2"><OutlineButton onClick={openCopyModal}>Copy Booth</OutlineButton><button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มแผนผังบูธ</button></div>} />
       <div className="grid gap-6">
         <Card>
           <ErrorNotice error={error} hint="ถ้ายังไม่มี endpoint นี้ ให้เพิ่ม backend endpoint /markets/:marketId/booth-types" />
@@ -1307,9 +1306,9 @@ function BoothTypesPage({ marketId }) {
             />
           )}
         </Card>
-        <Modal open={modalOpen} title="เพิ่มแบบ Booth" onClose={() => setModalOpen(false)}>
+        <Modal open={modalOpen} title="เพิ่มแผนผังบูธ" onClose={() => setModalOpen(false)}>
         <FormPanel onSubmit={submit} loading={saving} error={saveError}>
-          <TextInput label="ชื่อแบบ Booth" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
+          <TextInput label="ชื่อแผนผังบูธ" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
           <FileInput label="แผนผังภาพรวมของตลาด" onChange={setPlanImageFile} />
           {planImageFile ? <FileSummary file={planImageFile} /> : null}
           <DatePicker label="วันที่เริ่มต้น" value={form.startDate} onChange={(value) => setForm((current) => ({ ...current, startDate: value }))} />
@@ -1317,9 +1316,9 @@ function BoothTypesPage({ marketId }) {
           <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['inactive', 'ระงับการใช้']]} />
         </FormPanel>
         </Modal>
-        <Modal open={editModalOpen} title="แก้ไขแบบ Booth" onClose={() => setEditModalOpen(false)}>
+        <Modal open={editModalOpen} title="แก้ไขแผนผังบูธ" onClose={() => setEditModalOpen(false)}>
         <FormPanel onSubmit={submitEdit} loading={saving} error={saveError}>
-          <TextInput label="ชื่อแบบ Booth" value={editForm.name} onChange={(value) => setEditForm((current) => ({ ...current, name: value }))} required />
+          <TextInput label="ชื่อแผนผังบูธ" value={editForm.name} onChange={(value) => setEditForm((current) => ({ ...current, name: value }))} required />
           {editingBoothType?.plan_image_url ? <img src={editingBoothType.plan_image_url} className="h-48 w-full rounded-2xl object-cover" /> : null}
           <FileInput label="แผนผังภาพรวมของตลาด" onChange={setEditPlanImageFile} />
           {editPlanImageFile ? <FileSummary file={editPlanImageFile} /> : null}
@@ -1330,8 +1329,8 @@ function BoothTypesPage({ marketId }) {
         </Modal>
         <Modal open={copyModalOpen} title="Copy Booth" onClose={() => setCopyModalOpen(false)}>
         <FormPanel onSubmit={submitCopy} loading={saving} error={saveError}>
-          <SelectInput label="แบบ Booth ต้นแบบ" value={copyForm.sourceBoothTypeId} onChange={(value) => setCopyForm((current) => ({ ...current, sourceBoothTypeId: value }))} options={rows.map((item) => [String(item.id), item.name || item.title])} />
-          <TextInput label="ชื่อแบบ Booth ใหม่" value={copyForm.name} onChange={(value) => setCopyForm((current) => ({ ...current, name: value }))} required />
+          <SelectInput label="แผนผังบูธต้นแบบ" value={copyForm.sourceBoothTypeId} onChange={(value) => setCopyForm((current) => ({ ...current, sourceBoothTypeId: value }))} options={rows.map((item) => [String(item.id), item.name || item.title])} />
+          <TextInput label="ชื่อแผนผังบูธใหม่" value={copyForm.name} onChange={(value) => setCopyForm((current) => ({ ...current, name: value }))} required />
           <FileInput label="รูปภาพแผนผัง" onChange={setCopyPlanImageFile} />
           {copyPlanImageFile ? <FileSummary file={copyPlanImageFile} /> : null}
           <DatePicker label="วันที่เริ่มต้น" value={copyForm.startDate} onChange={(value) => setCopyForm((current) => ({ ...current, startDate: value }))} required />
@@ -1437,12 +1436,12 @@ function BoothsPage({ marketId }) {
 
   return (
     <>
-      <PageHeader title="จัดการ Booth ต่างๆ" description="เลือกแบบ Booth ก่อน แล้วกรองตามประเภทสินค้าที่ผูกกับบูธ" action={<button onClick={openCreateModal} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่ม Booth</button>} />
+      <PageHeader title="จัดการบูธ" description="เลือกแผนผังบูธก่อน แล้วกรองตามประเภทสินค้าที่ผูกกับบูธ" action={<button onClick={openCreateModal} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มบูธ</button>} />
       <Card>
         <ErrorNotice error={error} hint="ตรวจสอบ endpoint /markets/:marketId/booths และความสัมพันธ์ booths.category_id -> product_categories.id" />
         <div className="mb-8 grid gap-4 xl:grid-cols-[1fr_1.2fr]">
           <select value={selectedType} onChange={(event) => setSelectedType(event.target.value)} className="h-12 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-cyan-600">
-            <option value="">กรุณาเลือก แบบ Booth</option>
+            <option value="">กรุณาเลือกแผนผังบูธ</option>
             {typeRows.map((item) => (
               <option key={item.id} value={item.id}>{item.name}</option>
             ))}
@@ -1457,7 +1456,7 @@ function BoothsPage({ marketId }) {
           </div>
         </div>
         {!selectedType ? (
-          <EmptyState title="ยังไม่ได้เลือกแบบ Booth" description="เลือกแบบ Booth จากรายการด้านซ้ายก่อน เพื่อแสดงผังและรายการบูธ" />
+          <EmptyState title="ยังไม่ได้เลือกแผนผังบูธ" description="เลือกแผนผังบูธจากรายการด้านซ้ายก่อน เพื่อแสดงผังและรายการบูธ" />
         ) : loading ? <LoadingBlock /> : filteredRows.length ? (
           <div className="flex flex-wrap gap-5">
             {filteredRows.map((booth) => (
@@ -1471,26 +1470,26 @@ function BoothsPage({ marketId }) {
             ))}
           </div>
         ) : (
-          <EmptyState title="ไม่พบบูธตามเงื่อนไข" description="แบบ Booth นี้ยังไม่มีบูธ หรือไม่มีบูธในประเภทที่เลือก" />
+          <EmptyState title="ไม่พบบูธตามเงื่อนไข" description="แผนผังบูธนี้ยังไม่มีบูธ หรือไม่มีบูธในประเภทที่เลือก" />
         )}
       </Card>
-      <Modal open={modalOpen} title="เพิ่ม Booth" onClose={() => setModalOpen(false)}>
+      <Modal open={modalOpen} title="เพิ่มบูธ" onClose={() => setModalOpen(false)}>
         <FormPanel onSubmit={submit} loading={saving} error={saveError}>
-          <SelectInput label="แบบ Booth" value={form.floorPlanId || selectedType || typeRows[0]?.id || ''} onChange={(value) => setForm((current) => ({ ...current, floorPlanId: value }))} options={typeRows.map((item) => [String(item.id), item.name])} />
+          <SelectInput label="แผนผังบูธ" value={form.floorPlanId || selectedType || typeRows[0]?.id || ''} onChange={(value) => setForm((current) => ({ ...current, floorPlanId: value }))} options={typeRows.map((item) => [String(item.id), item.name])} />
           <SelectInput label="ประเภทสินค้า" value={form.categoryId || categoryRows[0]?.id || ''} onChange={(value) => setForm((current) => ({ ...current, categoryId: value }))} options={categoryRows.map((item) => [String(item.id), item.name])} />
-          <TextInput label="รหัส Booth" value={form.code} onChange={(value) => setForm((current) => ({ ...current, code: value }))} required />
-          <TextInput label="ชื่อ Booth" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
+          <TextInput label="รหัสบูธ" value={form.code} onChange={(value) => setForm((current) => ({ ...current, code: value }))} required />
+          <TextInput label="ชื่อบูธ" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
           <TextInput label="ราคา" type="number" value={form.price} onChange={(value) => setForm((current) => ({ ...current, price: value }))} />
           <TextInput label="ลำดับ" type="number" value={form.sortOrder} onChange={(value) => setForm((current) => ({ ...current, sortOrder: value }))} />
           <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['inactive', 'ปิดการใช้งาน'], ['maintenance', 'ซ่อมบำรุง']]} />
         </FormPanel>
       </Modal>
-      <Modal open={editModalOpen} title="แก้ไข Booth" onClose={() => setEditModalOpen(false)}>
+      <Modal open={editModalOpen} title="แก้ไขบูธ" onClose={() => setEditModalOpen(false)}>
         <FormPanel onSubmit={submitEdit} loading={saving} error={saveError}>
-          <SelectInput label="แบบ Booth" value={editForm.floorPlanId || ''} onChange={(value) => setEditForm((current) => ({ ...current, floorPlanId: value }))} options={typeRows.map((item) => [String(item.id), item.name])} />
+          <SelectInput label="แผนผังบูธ" value={editForm.floorPlanId || ''} onChange={(value) => setEditForm((current) => ({ ...current, floorPlanId: value }))} options={typeRows.map((item) => [String(item.id), item.name])} />
           <SelectInput label="ประเภทสินค้า" value={editForm.categoryId || ''} onChange={(value) => setEditForm((current) => ({ ...current, categoryId: value }))} options={categoryRows.map((item) => [String(item.id), item.name])} />
-          <TextInput label="รหัส Booth" value={editForm.code} onChange={(value) => setEditForm((current) => ({ ...current, code: value }))} required />
-          <TextInput label="ชื่อ Booth" value={editForm.name} onChange={(value) => setEditForm((current) => ({ ...current, name: value }))} required />
+          <TextInput label="รหัสบูธ" value={editForm.code} onChange={(value) => setEditForm((current) => ({ ...current, code: value }))} required />
+          <TextInput label="ชื่อบูธ" value={editForm.name} onChange={(value) => setEditForm((current) => ({ ...current, name: value }))} required />
           <TextInput label="ราคา" type="number" value={editForm.price} onChange={(value) => setEditForm((current) => ({ ...current, price: value }))} />
           <TextInput label="ลำดับ" type="number" value={editForm.sortOrder} onChange={(value) => setEditForm((current) => ({ ...current, sortOrder: value }))} />
           <SelectInput label="สถานะ" value={editForm.status} onChange={(value) => setEditForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['inactive', 'ปิดการใช้งาน'], ['maintenance', 'ซ่อมบำรุง']]} />
@@ -1542,45 +1541,11 @@ function BoothBox({ label, subLabel, danger = false, tone = '', onClick, disable
   );
 }
 
-function MarketHolidaysPage({ marketId }) {
+function HolidayCalendarPage({ marketId }) {
   const { data = [], loading, error, reload } = useApi(marketId ? `/markets/${marketId}/holidays` : null, { initialData: [] });
   const { mutate, loading: saving, error: saveError } = useMutation();
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ title: '', startDate: '', endDate: '' });
-  const rows = normalizeRows(data);
-
-  if (!marketId) return <NeedMarket />;
-
-  async function submit(event) {
-    event.preventDefault();
-    await mutate(`/markets/${marketId}/holidays`, form);
-    setForm({ title: '', startDate: '', endDate: '' });
-    setModalOpen(false);
-    reload();
-  }
-
-  return (
-    <>
-      <PageHeader title="จัดการวันหยุดตลาด" description="เพิ่ม แก้ไข และตรวจสอบวันหยุดของตลาด" action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มวันหยุด</button>} />
-      <div className="grid gap-6">
-        <Card>
-          <ErrorNotice error={error} hint="ถ้ายังไม่มี endpoint นี้ ให้เพิ่ม backend endpoint /markets/:marketId/holidays" />
-          {loading ? <LoadingBlock /> : <DataTable columns={['ลำดับ', 'ชื่อวันหยุด', 'วันที่เริ่ม', 'วันที่สิ้นสุด', 'สถานะ']} rows={rows.map((item, index) => [index + 1, item.title || item.name, formatDate(item.start_date || item.startDate), formatDate(item.end_date || item.endDate), <StatusBadge value={item.status || 'active'} />])} />}
-        </Card>
-        <Modal open={modalOpen} title="เพิ่มวันหยุด" onClose={() => setModalOpen(false)}>
-        <FormPanel onSubmit={submit} loading={saving} error={saveError}>
-          <TextInput label="ชื่อวันหยุด" value={form.title} onChange={(value) => setForm((current) => ({ ...current, title: value }))} required />
-          <DatePicker label="วันที่เริ่ม" value={form.startDate} onChange={(value) => setForm((current) => ({ ...current, startDate: value }))} required />
-          <DatePicker label="วันที่สิ้นสุด" value={form.endDate} onChange={(value) => setForm((current) => ({ ...current, endDate: value }))} required />
-        </FormPanel>
-        </Modal>
-      </div>
-    </>
-  );
-}
-
-function HolidayCalendarPage({ marketId }) {
-  const { data = [], loading, error } = useApi(marketId ? `/markets/${marketId}/holidays` : null, { initialData: [] });
   const rows = normalizeRows(data);
   const today = new Date();
   const year = today.getFullYear();
@@ -1610,14 +1575,26 @@ function HolidayCalendarPage({ marketId }) {
 
   if (!marketId) return <NeedMarket />;
 
+  async function submit(event) {
+    event.preventDefault();
+    await mutate(`/markets/${marketId}/holidays`, form);
+    setForm({ title: '', startDate: '', endDate: '' });
+    setModalOpen(false);
+    reload();
+  }
+
   return (
     <>
-      <PageHeader title="ปฏิทินวันหยุดตลาด" description="ภาพรวมวันหยุดตลาดทั้งหมด" action={<div className="flex overflow-hidden rounded-xl border border-slate-200 bg-white"><button className="bg-blue-600 px-4 py-2 text-sm font-bold text-white">Month</button><button className="px-4 py-2 text-sm font-bold text-slate-600">Week</button><button className="px-4 py-2 text-sm font-bold text-slate-600">Day</button></div>} />
+      <PageHeader
+        title="ปฏิทินวันหยุดตลาด"
+        description="ภาพรวมวันหยุดตลาดทั้งหมดและเพิ่มวันหยุดจากหน้าปฏิทิน"
+        action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มวันหยุด</button>}
+      />
       <Card>
         <ErrorNotice error={error} hint="ถ้า endpoint วันหยุดยังไม่พร้อม ปฏิทินจะแสดงเฉพาะโครง UI ก่อน" />
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-extrabold">{new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(today)}</h2>
-          <button className="rounded-xl bg-blue-500 px-4 py-2 text-sm font-bold text-white">Today</button>
+          <span className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-bold text-slate-600">Month view</span>
         </div>
         {loading ? (
           <LoadingBlock />
@@ -1642,6 +1619,13 @@ function HolidayCalendarPage({ marketId }) {
           </div>
         )}
       </Card>
+      <Modal open={modalOpen} title="เพิ่มวันหยุด" onClose={() => setModalOpen(false)}>
+        <FormPanel onSubmit={submit} loading={saving} error={saveError}>
+          <TextInput label="ชื่อวันหยุด" value={form.title} onChange={(value) => setForm((current) => ({ ...current, title: value }))} required />
+          <DatePicker label="วันที่เริ่ม" value={form.startDate} onChange={(value) => setForm((current) => ({ ...current, startDate: value }))} required />
+          <DatePicker label="วันที่สิ้นสุด" value={form.endDate} onChange={(value) => setForm((current) => ({ ...current, endDate: value }))} required />
+        </FormPanel>
+      </Modal>
     </>
   );
 }
@@ -1656,6 +1640,7 @@ function MarketImagesPage({ marketId }) {
   const [editForm, setEditForm] = useState({ title: '', sortOrder: '0', status: 'active' });
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [selectedEditFile, setSelectedEditFile] = useState(null);
+  const [previewImage, setPreviewImage] = useState(null);
   const [uploadError, setUploadError] = useState('');
   const rows = normalizeRows(data);
 
@@ -1742,7 +1727,7 @@ function MarketImagesPage({ marketId }) {
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2 p-4">
-                    <SmallButton tone="slate" onClick={() => window.open(item.image_url, '_blank', 'noopener,noreferrer')}><Eye size={14} /> ดู</SmallButton>
+                    <SmallButton tone="slate" onClick={() => setPreviewImage(item)}><Eye size={14} /> ดู</SmallButton>
                     <SmallButton tone="amber" onClick={() => openEditModal(item)}>แก้ไข</SmallButton>
                     <SmallButton tone="cyan" onClick={() => toggleStatus(item)}>{item.status === 'active' ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}</SmallButton>
                   </div>
@@ -1796,7 +1781,30 @@ function MarketImagesPage({ marketId }) {
           <SelectInput label="สถานะ" value={editForm.status} onChange={(value) => setEditForm((current) => ({ ...current, status: value }))} options={[['active', 'เปิดใช้งาน'], ['inactive', 'ปิดการใช้งาน']]} />
         </FormPanel>
       </Modal>
+      <ImageLightbox image={previewImage} onClose={() => setPreviewImage(null)} />
     </>
+  );
+}
+
+function ImageLightbox({ image, onClose }) {
+  if (!image?.image_url) return null;
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/80 px-4 py-6" onClick={onClose}>
+      <div className="relative max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-3xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <div className="min-w-0">
+            <h2 className="truncate text-lg font-extrabold text-slate-950">{image.title || 'ตัวอย่างรูปภาพตลาด'}</h2>
+            <p className="mt-1 text-xs text-slate-500">Preview</p>
+          </div>
+          <button data-subscription-ignore="true" type="button" onClick={onClose} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100">
+            <X size={22} />
+          </button>
+        </div>
+        <div className="max-h-[calc(92vh-76px)] overflow-auto bg-slate-950 p-4">
+          <img src={image.image_url} alt={image.title || 'market'} className="mx-auto max-h-[calc(92vh-108px)] w-auto max-w-full rounded-2xl object-contain" />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -2813,7 +2821,7 @@ function ReportsPage({ reportType }) {
         : 'รายการจองที่ยังไม่สำเร็จทั้งหมดตามวันที่จอง';
 
   const exportColumns = isAvailableBoothReport
-    ? ['ลำดับ', 'ตลาด', 'วันที่', 'รหัส Booth', 'ชื่อ Booth', 'แบบ Booth', 'ประเภทสินค้า', 'ราคา', 'VAT', 'ราคารวม']
+    ? ['ลำดับ', 'ตลาด', 'วันที่', 'รหัส Booth', 'ชื่อ Booth', 'แผนผังบูธ', 'ประเภทสินค้า', 'ราคา', 'VAT', 'ราคารวม']
     : isProductTypesReport
       ? ['ลำดับที่', 'เลขที่ใบจอง', 'ประเภทสินค้าที่ขาย', 'ลูกค้า', 'วันที่ชำระเงิน', 'จำนวนเงินก่อน VAT']
     : isDailySalesReport || isCustomerBookingsReport
@@ -3580,7 +3588,7 @@ function ReportTable({ rows }) {
 }
 
 function AvailableBoothReportTable({ rows }) {
-  return <DataTable columns={['ลำดับ', 'ตลาด', 'วันที่', 'รหัส Booth', 'ชื่อ Booth', 'แบบ Booth', 'ประเภทสินค้า', 'ราคา', 'VAT', 'ราคารวม']} rows={rows.map((row, index) => [index + 1, row.market_name || '-', formatDate(row.booking_date), row.booth_code || '-', row.booth_name || '-', row.floor_plan_name || '-', row.production_category_name || '-', formatMoney(row.price), formatMoney(row.vat_amount || 0), formatMoney(row.gross_price ?? row.price)])} />;
+  return <DataTable columns={['ลำดับ', 'ตลาด', 'วันที่', 'รหัส Booth', 'ชื่อ Booth', 'แผนผังบูธ', 'ประเภทสินค้า', 'ราคา', 'VAT', 'ราคารวม']} rows={rows.map((row, index) => [index + 1, row.market_name || '-', formatDate(row.booking_date), row.booth_code || '-', row.booth_name || '-', row.floor_plan_name || '-', row.production_category_name || '-', formatMoney(row.price), formatMoney(row.vat_amount || 0), formatMoney(row.gross_price ?? row.price)])} />;
 }
 
 function DailySalesReportTable({ rows }) {
