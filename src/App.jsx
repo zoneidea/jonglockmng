@@ -1061,6 +1061,10 @@ function MarketsPage({ markets, reloadMarkets }) {
 
   async function submit(event) {
     event.preventDefault();
+    if (isNews && !form.marketId) {
+      window.alert('กรุณาเลือกตลาดสำหรับข่าวสาร');
+      return;
+    }
     const payload = new FormData();
     payload.append('code', form.code);
     payload.append('name', form.name);
@@ -2000,25 +2004,30 @@ function AnnouncementsPage({ type }) {
   const isNews = type === 'news';
   const title = type === 'banner' ? 'Banner' : 'ข่าวสาร';
   const { data = [], loading, reload } = useApi(`/announcements?type=${type}`, { initialData: [] });
+  const { data: markets = [] } = useApi('/markets', { initialData: [] });
   const { mutate, loading: saving, error } = useMutation();
   const [modalOpen, setModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
   const [editingAnnouncement, setEditingAnnouncement] = useState(null);
-  const [form, setForm] = useState({ title: '', description: '', startDate: '', endDate: '', status: 'active' });
-  const [editForm, setEditForm] = useState({ title: '', description: '', startDate: '', endDate: '', status: 'active', coverImageId: '' });
+  const [form, setForm] = useState({ marketId: '', title: '', description: '', startDate: '', endDate: '', status: 'active' });
+  const [editForm, setEditForm] = useState({ marketId: '', title: '', description: '', startDate: '', endDate: '', status: 'active', coverImageId: '' });
   const [imageFile, setImageFile] = useState(null);
   const [imageFiles, setImageFiles] = useState([]);
   const [editImageFile, setEditImageFile] = useState(null);
   const [editImageFiles, setEditImageFiles] = useState([]);
   const [editImages, setEditImages] = useState([]);
   const rows = normalizeRows(data);
+  const marketOptions = [['', isNews ? 'เลือกตลาด' : 'ทุกตลาด / ไม่ระบุ']].concat(
+    normalizeRows(markets).map((market) => [String(market.id), `${market.code} - ${market.name}`]),
+  );
 
   async function submit(event) {
     event.preventDefault();
     const payload = new FormData();
     payload.append('type', type);
+    if (form.marketId) payload.append('marketId', form.marketId);
     payload.append('title', form.title);
     payload.append('description', form.description);
     if (form.startDate) payload.append('startDate', form.startDate);
@@ -2030,7 +2039,7 @@ function AnnouncementsPage({ type }) {
       payload.append('image', imageFile);
     }
     await mutate('/announcements', payload);
-    setForm({ title: '', description: '', startDate: '', endDate: '', status: 'active' });
+    setForm({ marketId: '', title: '', description: '', startDate: '', endDate: '', status: 'active' });
     setImageFile(null);
     setImageFiles([]);
     setModalOpen(false);
@@ -2045,6 +2054,7 @@ function AnnouncementsPage({ type }) {
       const item = payload.data;
       setEditingAnnouncement(item);
       setEditForm({
+        marketId: item.market_id ? String(item.market_id) : '',
         title: item.title || '',
         description: item.description || '',
         startDate: item.start_date ? String(item.start_date).slice(0, 10) : '',
@@ -2066,7 +2076,12 @@ function AnnouncementsPage({ type }) {
   async function submitEdit(event) {
     event.preventDefault();
     if (!editingAnnouncement) return;
+    if (isNews && !editForm.marketId) {
+      window.alert('กรุณาเลือกตลาดสำหรับข่าวสาร');
+      return;
+    }
     const payload = new FormData();
+    if (editForm.marketId) payload.append('marketId', editForm.marketId);
     payload.append('title', editForm.title);
     payload.append('description', editForm.description);
     if (editForm.startDate) payload.append('startDate', editForm.startDate);
@@ -2112,10 +2127,16 @@ function AnnouncementsPage({ type }) {
       <Card>
         {loading ? <LoadingBlock /> : (
           <DataTable
-            columns={['ลำดับ', 'รูปภาพ', 'หัวข้อ', 'ช่วงวันที่', 'สถานะ', 'จัดการ']}
+            columns={['ลำดับ', 'รูปภาพ', 'ตลาด', 'หัวข้อ', 'ช่วงวันที่', 'สถานะ', 'จัดการ']}
             rows={rows.map((item, index) => [
               index + 1,
               item.image_url ? <img src={item.image_url} className="h-16 w-24 rounded-xl object-cover" /> : <div className="flex h-16 w-24 items-center justify-center rounded-xl bg-slate-100"><Image size={20} /></div>,
+              item.market_name ? (
+                <div className="space-y-1">
+                  <div className="text-sm font-bold text-slate-800">{item.market_name}</div>
+                  <div className="text-xs font-semibold text-slate-500">{item.market_code || '-'}</div>
+                </div>
+              ) : <span className="text-sm font-semibold text-slate-400">ไม่ระบุ</span>,
               item.title,
               `${formatDate(item.start_date)} - ${formatDate(item.end_date)}`,
               <StatusBadge value={item.status} />,
@@ -2126,6 +2147,7 @@ function AnnouncementsPage({ type }) {
       </Card>
       <Modal open={modalOpen} title={`เพิ่ม${title}`} onClose={() => setModalOpen(false)}>
         <FormPanel onSubmit={submit} loading={saving} error={error}>
+          <SelectInput label="ตลาด" value={form.marketId} onChange={(value) => setForm((current) => ({ ...current, marketId: value }))} options={marketOptions} />
           <TextInput label="หัวข้อ" value={form.title} onChange={(value) => setForm((current) => ({ ...current, title: value }))} required />
           {isNews ? (
             <RichTextEditor label="รายละเอียดข่าวสาร" value={form.description} onChange={(value) => setForm((current) => ({ ...current, description: value }))} />
@@ -2145,6 +2167,7 @@ function AnnouncementsPage({ type }) {
       <Modal open={editModalOpen} title={`แก้ไข${title}`} onClose={() => setEditModalOpen(false)}>
         {detailLoading ? <LoadingBlock /> : (
           <FormPanel onSubmit={submitEdit} loading={saving} error={detailError || error}>
+            <SelectInput label="ตลาด" value={editForm.marketId} onChange={(value) => setEditForm((current) => ({ ...current, marketId: value }))} options={marketOptions} />
             <TextInput label="หัวข้อ" value={editForm.title} onChange={(value) => setEditForm((current) => ({ ...current, title: value }))} required />
             {isNews ? (
               <RichTextEditor label="รายละเอียดข่าวสาร" value={editForm.description} onChange={(value) => setEditForm((current) => ({ ...current, description: value }))} />
