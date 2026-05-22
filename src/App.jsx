@@ -2886,6 +2886,7 @@ function ReportsPage({ reportType }) {
   const { data: markets = [] } = useApi('/markets', { initialData: [] });
   const marketRows = normalizeRows(markets);
   const [range, setRange] = useState({ startDate: '2026-05-01', endDate: '2026-05-31' });
+  const [keyword, setKeyword] = useState('');
   const isAvailableBoothReport = reportType === 'booths';
   const isDailySalesReport = reportType === 'daily';
   const isCustomerBookingsReport = reportType === 'person';
@@ -2907,6 +2908,7 @@ function ReportsPage({ reportType }) {
   const { data = [], loading, reload } = useApi(path, { initialData: [] });
   const userRows = normalizeRows(users);
   const reportRows = normalizeRows(data);
+  const filteredReportRows = filterRowsByKeyword(reportRows, keyword);
 
   const reportTitle = isAvailableBoothReport
     ? 'รายงาน Booth ว่าง'
@@ -2925,7 +2927,7 @@ function ReportsPage({ reportType }) {
         ? 'แสดงรายการขายแยกตามประเภทสินค้าที่ขายและวันที่ชำระเงิน'
       : isCustomerBookingsReport
         ? 'ค้นหาลูกค้าแล้วแสดงรายการจองเรียงจากใหม่ไปเก่า'
-        : 'รายการจองที่ยังไม่สำเร็จทั้งหมดตามวันที่จอง';
+        : 'รายการจองที่ยังไม่สำเร็จทั้งหมดตามวันที่ทำรายการ';
 
   const exportColumns = isAvailableBoothReport
     ? ['ลำดับ', 'ตลาด', 'วันที่', 'รหัส Booth', 'ชื่อ Booth', 'แผนผังบูธ', 'ประเภทสินค้า', 'ราคา', 'VAT', 'ราคารวม']
@@ -2933,14 +2935,14 @@ function ReportsPage({ reportType }) {
       ? ['ลำดับที่', 'เลขที่ใบจอง', 'ประเภทสินค้าที่ขาย', 'ลูกค้า', 'วันที่ชำระเงิน', 'จำนวนเงินก่อน VAT']
     : isDailySalesReport || isCustomerBookingsReport
       ? ['#', 'เลขที่ใบจอง', 'ตลาด', 'ชื่อผู้จอง', 'Tell', 'ชื่อ Booth', 'สินค้าขาย', 'VAT', 'ยอดรวม', 'วันที่ขาย']
-      : ['#', 'ตลาด', 'เลขจอง', 'วันที่จอง', 'Booth', 'สถานะ', 'แหล่งที่มา', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'ยอดรวม', 'วันที่ทำรายการ'];
+      : ['#', 'ตลาด', 'เลขจอง', 'ลูกค้า', 'วันที่ทำรายการ', 'วันที่จอง', 'Booth', 'สถานะ', 'แหล่งที่มา', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'ยอดรวม'];
   const exportRows = isAvailableBoothReport
-    ? reportRows.map((row, index) => [index + 1, row.market_name || '-', formatDate(row.booking_date), row.booth_code || '-', row.booth_name || '-', row.floor_plan_name || '-', row.production_category_name || '-', formatMoney(row.price), formatMoney(row.vat_amount || 0), formatMoney(row.gross_price ?? row.price)])
+    ? filteredReportRows.map((row, index) => [index + 1, row.market_name || '-', formatDate(row.booking_date), row.booth_code || '-', row.booth_name || '-', row.floor_plan_name || '-', row.production_category_name || '-', formatMoney(row.price), formatMoney(row.vat_amount || 0), formatMoney(row.gross_price ?? row.price)])
     : isProductTypesReport
-      ? reportRows.map((row, index) => [index + 1, row.booking_public_id || '-', row.product_names || '-', row.customer_name || '-', formatDate(row.paid_date), formatMoney(row.amount_before_vat || 0)])
+      ? filteredReportRows.map((row, index) => [index + 1, row.booking_public_id || '-', row.product_names || '-', row.customer_name || '-', formatDate(row.paid_date), formatMoney(row.amount_before_vat || 0)])
     : isDailySalesReport || isCustomerBookingsReport
-      ? reportRows.map((row, index) => [index + 1, row.booking_public_id || '-', row.market_name || '-', row.customer_name || '-', row.customer_phone || '-', row.booth_code || row.booth_name || '-', row.product_names || '-', formatMoney(row.vat_amount || 0), formatMoney(row.total_amount || 0), formatDate(row.booking_date)])
-      : reportRows.map((row, index) => [index + 1, row.market_name || '-', row.booking_public_id || '-', formatDate(row.booking_date), row.booth_code || row.booth_name || '-', row.status || 'pending_payment', row.source || '-', formatMoney(row.subtotal_amount || 0), formatMoney(row.discount_amount || 0), formatMoney(row.vat_amount || 0), formatMoney(row.total_amount || 0), formatDate(row.created_at)]);
+      ? filteredReportRows.map((row, index) => [index + 1, row.booking_public_id || '-', row.market_name || '-', row.customer_name || '-', row.customer_phone || '-', row.booth_code || row.booth_name || '-', row.product_names || '-', formatMoney(row.vat_amount || 0), formatMoney(row.total_amount || 0), formatDate(row.booking_date)])
+      : filteredReportRows.map((row, index) => [index + 1, row.market_name || '-', row.booking_public_id || '-', row.customer_name || '-', formatDate(row.created_at), formatDate(row.booking_date), row.booth_code || row.booth_name || '-', row.status || 'pending_payment', row.source || '-', formatMoney(row.subtotal_amount || 0), formatMoney(row.discount_amount || 0), formatMoney(row.vat_amount || 0), formatMoney(row.total_amount || 0)]);
 
   function selectCustomer(user) {
     setSelectedUser(user);
@@ -2955,6 +2957,7 @@ function ReportsPage({ reportType }) {
         action={(
           isCustomerBookingsReport ? (
             <ReportFiltersBar>
+              <SearchInput value={keyword} onChange={setKeyword} placeholder="ค้นหาชื่อลูกค้า เลขที่จอง ตลาด หรือ Booth" />
               <label className="relative block w-full xl:min-w-[360px]">
                 <input
                   value={userQuery}
@@ -2983,6 +2986,7 @@ function ReportsPage({ reportType }) {
           ) : (
             <ReportFiltersBar>
               <div className="flex w-full flex-col items-end gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+                <SearchInput value={keyword} onChange={setKeyword} placeholder="ค้นหาชื่อลูกค้า เลขที่จอง ตลาด หรือ Booth" />
                 <DatePickerBare value={range.startDate} onChange={(value) => setRange((current) => ({ ...current, startDate: value }))} className="sm:w-[210px]" />
                 {!isAvailableBoothReport ? <DatePickerBare value={range.endDate} onChange={(value) => setRange((current) => ({ ...current, endDate: value }))} className="sm:w-[210px]" /> : null}
                 {isProductTypesReport ? (
@@ -3000,9 +3004,9 @@ function ReportsPage({ reportType }) {
       />
       <Card>
         {loading ? <LoadingBlock /> : isAvailableBoothReport ? (
-          <AvailableBoothReportTable rows={reportRows} />
+          <AvailableBoothReportTable rows={filteredReportRows} />
         ) : isProductTypesReport ? (
-          <DataTable columns={['ลำดับที่', 'เลขที่ใบจอง', 'ประเภทสินค้าที่ขาย', 'ลูกค้า', 'วันที่ชำระเงิน', 'จำนวนเงินก่อน VAT']} rows={reportRows.map((row, index) => [
+          <DataTable columns={['ลำดับที่', 'เลขที่ใบจอง', 'ประเภทสินค้าที่ขาย', 'ลูกค้า', 'วันที่ชำระเงิน', 'จำนวนเงินก่อน VAT']} rows={filteredReportRows.map((row, index) => [
             index + 1,
             row.booking_public_id || '-',
             row.product_names || '-',
@@ -3011,11 +3015,11 @@ function ReportsPage({ reportType }) {
             formatMoney(row.amount_before_vat || 0),
           ])} />
         ) : isDailySalesReport ? (
-          <DailySalesReportTable rows={reportRows} />
+          <DailySalesReportTable rows={filteredReportRows} />
         ) : isCustomerBookingsReport ? (
-          selectedUser ? <DailySalesReportTable rows={reportRows} /> : <EmptyState title="กรุณาเลือกลูกค้า" description="พิมพ์ค้นหาแล้วเลือกจาก suggestion เพื่อดูรายการจอง" />
+          selectedUser ? <DailySalesReportTable rows={filteredReportRows} /> : <EmptyState title="กรุณาเลือกลูกค้า" description="พิมพ์ค้นหาแล้วเลือกจาก suggestion เพื่อดูรายการจอง" />
         ) : (
-          <ReportTable rows={reportRows} />
+          <ReportTable rows={filteredReportRows} />
         )}
       </Card>
     </>
@@ -3039,13 +3043,15 @@ function AuditPage({ marketId, mode }) {
     : null;
   const { data = [], loading, reload } = useApi(path, { initialData: [] });
   const { mutate, loading: saving, error } = useMutation();
+  const [keyword, setKeyword] = useState('');
   if (!marketId) return <NeedMarket />;
   const reportRows = normalizeRows(data);
+  const filteredReportRows = filterRowsByKeyword(reportRows, keyword);
   const reportTitle = isFinePendingReport ? 'รายงานค่าปรับค้างจ่าย' : isFinePaidReport ? 'รายชื่อผู้จ่ายค่าปรับแบบโอน' : 'ข้อมูลการตรวจสอบตลาด';
   const exportColumns = isFinePendingReport || isFinePaidReport
     ? ['#', 'เลขที่ใบจอง', 'ตลาด', 'ชื่อผู้จอง', 'สถานะการตรวจสอบ', 'ค่าปรับ', 'VAT', 'จ่ายเงินเพิ่ม', 'ชื่อ Booth', 'สินค้าขาย', 'วันที่ขาย']
     : ['#', 'เลขที่ใบจอง', 'ตลาด', 'ชื่อผู้จอง', 'ผลตรวจ', 'ค่าปรับ', 'VAT', 'ยอดรวม', 'ชื่อ Booth', 'สินค้าขาย', 'วันที่ขาย'];
-  const exportRows = reportRows.map((item, index) => isFinePendingReport || isFinePaidReport
+  const exportRows = filteredReportRows.map((item, index) => isFinePendingReport || isFinePaidReport
     ? [index + 1, item.booking_public_id, item.market_name || '-', item.customer_name || '-', auditResultLabel(item.result), formatMoney(Number(item.fine_amount || 0) + Number(item.accessories_fine_amount || 0) + Number(item.damage_fine_amount || 0)), formatMoney(item.vat_amount || 0), formatMoney(item.total_fine_amount), item.booth_code || item.booth_name || '-', item.product_names || '-', formatDate(item.booking_date)]
     : [index + 1, item.booking_public_id, item.market_name || '-', item.customer_name || '-', auditResultLabel(item.result), formatMoney(Number(item.fine_amount || 0) + Number(item.accessories_fine_amount || 0) + Number(item.damage_fine_amount || 0)), formatMoney(item.vat_amount || 0), formatMoney(item.total_fine_amount), item.booth_code || item.booth_name || '-', item.product_names || '-', formatDate(item.booking_date)]);
 
@@ -3076,6 +3082,7 @@ function AuditPage({ marketId, mode }) {
         action={(
           <ReportFiltersBar>
             <div className="flex w-full flex-col items-end gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+              <SearchInput value={keyword} onChange={setKeyword} placeholder="ค้นหาชื่อลูกค้า เลขที่จอง ตลาด หรือ Booth" />
               <DatePickerBare value={range.startDate} onChange={(value) => setRange((current) => ({ ...current, startDate: value }))} className="sm:w-[210px]" />
               <DatePickerBare value={range.endDate} onChange={(value) => setRange((current) => ({ ...current, endDate: value }))} className="sm:w-[210px]" />
               <ReportActionButton tone="slate" onClick={reload}>ค้นหา</ReportActionButton>
@@ -3084,7 +3091,7 @@ function AuditPage({ marketId, mode }) {
           </ReportFiltersBar>
         )}
       />
-      <Card>{loading ? <LoadingBlock /> : isFinePendingReport || isFinePaidReport ? <DataTable columns={['#', 'เลขที่ใบจอง', 'ตลาด', 'ชื่อผู้จอง', 'สถานะการตรวจสอบ', 'ค่าปรับ', 'VAT', 'จ่ายเงินเพิ่ม', 'ชื่อ Booth', 'สินค้าขาย', 'วันที่ขาย', 'จัดการ']} rows={reportRows.map((item, index) => [index + 1, item.booking_public_id, item.market_name || '-', item.customer_name || '-', auditResultLabel(item.result), formatMoney(Number(item.fine_amount || 0) + Number(item.accessories_fine_amount || 0) + Number(item.damage_fine_amount || 0)), formatMoney(item.vat_amount || 0), formatMoney(item.total_fine_amount), item.booth_code || item.booth_name || '-', item.product_names || '-', formatDate(item.booking_date), isFinePendingReport ? <SmallButton tone="amber" onClick={() => openPaymentModal(item)} disabled={saving}>ลูกค้าจ่ายแล้ว</SmallButton> : <StatusBadge value="paid" />])} /> : <DataTable columns={['#', 'เลขที่ใบจอง', 'ตลาด', 'ชื่อผู้จอง', 'ผลตรวจ', 'ค่าปรับ', 'VAT', 'ยอดรวม', 'ชื่อ Booth', 'สินค้าขาย', 'วันที่ขาย']} rows={reportRows.map((item, index) => [index + 1, item.booking_public_id, item.market_name || '-', item.customer_name || '-', auditResultLabel(item.result), formatMoney(Number(item.fine_amount || 0) + Number(item.accessories_fine_amount || 0) + Number(item.damage_fine_amount || 0)), formatMoney(item.vat_amount || 0), formatMoney(item.total_fine_amount), item.booth_code || item.booth_name || '-', item.product_names || '-', formatDate(item.booking_date)])} />}</Card>
+      <Card>{loading ? <LoadingBlock /> : isFinePendingReport || isFinePaidReport ? <DataTable columns={['#', 'เลขที่ใบจอง', 'ตลาด', 'ชื่อผู้จอง', 'สถานะการตรวจสอบ', 'ค่าปรับ', 'VAT', 'จ่ายเงินเพิ่ม', 'ชื่อ Booth', 'สินค้าขาย', 'วันที่ขาย', 'จัดการ']} rows={filteredReportRows.map((item, index) => [index + 1, item.booking_public_id, item.market_name || '-', item.customer_name || '-', auditResultLabel(item.result), formatMoney(Number(item.fine_amount || 0) + Number(item.accessories_fine_amount || 0) + Number(item.damage_fine_amount || 0)), formatMoney(item.vat_amount || 0), formatMoney(item.total_fine_amount), item.booth_code || item.booth_name || '-', item.product_names || '-', formatDate(item.booking_date), isFinePendingReport ? <SmallButton tone="amber" onClick={() => openPaymentModal(item)} disabled={saving}>ลูกค้าจ่ายแล้ว</SmallButton> : <StatusBadge value="paid" />])} /> : <DataTable columns={['#', 'เลขที่ใบจอง', 'ตลาด', 'ชื่อผู้จอง', 'ผลตรวจ', 'ค่าปรับ', 'VAT', 'ยอดรวม', 'ชื่อ Booth', 'สินค้าขาย', 'วันที่ขาย']} rows={filteredReportRows.map((item, index) => [index + 1, item.booking_public_id, item.market_name || '-', item.customer_name || '-', auditResultLabel(item.result), formatMoney(Number(item.fine_amount || 0) + Number(item.accessories_fine_amount || 0) + Number(item.damage_fine_amount || 0)), formatMoney(item.vat_amount || 0), formatMoney(item.total_fine_amount), item.booth_code || item.booth_name || '-', item.product_names || '-', formatDate(item.booking_date)])} />}</Card>
       <Modal open={paymentModalOpen} title="รายละเอียด" onClose={() => setPaymentModalOpen(false)}>
         <form onSubmit={submitFinePayment} className="space-y-4">
           <div className="grid gap-4 md:grid-cols-[180px_1fr] md:items-center">
@@ -3121,6 +3128,7 @@ function AccountingAllReportPage() {
     marketId: '',
     dateField: 'payment_date',
     sortBy: 'payment_date',
+    keyword: '',
   });
   const queryString = new URLSearchParams({
     startDate: filters.startDate,
@@ -3131,8 +3139,9 @@ function AccountingAllReportPage() {
   }).toString();
   const { data = [], loading, reload } = useApi(`/accounting/report-all?${queryString}`, { initialData: [] });
   const rows = normalizeRows(data);
+  const filteredRows = filterRowsByKeyword(rows, filters.keyword);
   const columns = ['ลำดับที่', 'เลขที่ใบจอง', 'วันที่จัดงาน', 'ลูกค้า', 'วันที่ชำระเงิน', 'ค่าบริการ Booth', 'ค่าบริการอื่นๆ', 'จำนวนเงินก่อน VAT', 'ส่วนลด', 'VAT 7%', 'ภาษีหัก ณ ที่จ่าย', 'ยอดที่ต้องชำระเงิน', 'สถานะ', 'เหตุผล'];
-  const exportRows = rows.map((item, index) => [
+  const exportRows = filteredRows.map((item, index) => [
     index + 1,
     item.booking_public_id || '-',
     item.booking_dates || formatDate(item.booking_date),
@@ -3162,6 +3171,7 @@ function AccountingAllReportPage() {
           <div className="w-full rounded-3xl border border-slate-200 bg-white p-4 shadow-soft xl:min-w-[720px]">
             <div className="flex flex-col gap-3 xl:items-end">
               <div className="flex w-full flex-col gap-3 sm:flex-row xl:justify-end">
+                <SearchInput value={filters.keyword} onChange={(value) => setFilter('keyword', value)} placeholder="ค้นหาลูกค้า เลขที่ใบจอง ตลาด หรือสถานะ" />
                 <DatePickerBare value={filters.startDate} onChange={(value) => setFilter('startDate', value)} className="sm:w-[210px]" />
                 <DatePickerBare value={filters.endDate} onChange={(value) => setFilter('endDate', value)} className="sm:w-[210px]" />
                 <ReportActionButton tone="slate" onClick={reload}>ค้นหา</ReportActionButton>
@@ -3191,7 +3201,7 @@ function AccountingAllReportPage() {
               </select>
             </div>
           </div>
-          {loading ? <LoadingBlock /> : <DataTable columns={columns} rows={rows.map((item, index) => [
+          {loading ? <LoadingBlock /> : <DataTable columns={columns} rows={filteredRows.map((item, index) => [
             index + 1,
             item.booking_public_id || '-',
             item.booking_dates || formatDate(item.booking_date),
@@ -3222,6 +3232,7 @@ function AccountingSalesSummaryPage() {
     marketId: '',
     dateField: 'payment_date',
     sortBy: 'payment_date',
+    keyword: '',
   });
   const queryString = new URLSearchParams({
     paidOnly: '1',
@@ -3233,8 +3244,9 @@ function AccountingSalesSummaryPage() {
   }).toString();
   const { data = [], loading, reload } = useApi(`/accounting/report-all?${queryString}`, { initialData: [] });
   const rows = normalizeRows(data);
+  const filteredRows = filterRowsByKeyword(rows, filters.keyword);
   const columns = ['#', 'เลขที่ใบจอง', 'วันที่จัดงาน', 'ลูกค้า', 'วันที่ชำระเงิน', 'ค่าบริการ Booth', 'ค่าบริการอื่นๆ', 'ค่าปรับ', 'จำนวนก่อน Vat'];
-  const exportRows = rows.map((item, index) => [
+  const exportRows = filteredRows.map((item, index) => [
     index + 1,
     item.booking_public_id || '-',
     item.booking_dates || formatDate(item.booking_date),
@@ -3259,6 +3271,7 @@ function AccountingSalesSummaryPage() {
           <div className="w-full rounded-3xl border border-slate-200 bg-white p-4 shadow-soft xl:min-w-[720px]">
             <div className="flex flex-col gap-3 xl:items-end">
               <div className="flex w-full flex-col gap-3 sm:flex-row xl:justify-end">
+                <SearchInput value={filters.keyword} onChange={(value) => setFilter('keyword', value)} placeholder="ค้นหาลูกค้า เลขที่ใบจอง หรือตลาด" />
                 <DatePickerBare value={filters.startDate} onChange={(value) => setFilter('startDate', value)} className="sm:w-[210px]" />
                 <DatePickerBare value={filters.endDate} onChange={(value) => setFilter('endDate', value)} className="sm:w-[210px]" />
                 <ReportActionButton tone="slate" onClick={reload}>ค้นหา</ReportActionButton>
@@ -3288,7 +3301,7 @@ function AccountingSalesSummaryPage() {
               </select>
             </div>
           </div>
-          {loading ? <LoadingBlock /> : <DataTable columns={columns} rows={rows.map((item, index) => [
+          {loading ? <LoadingBlock /> : <DataTable columns={columns} rows={filteredRows.map((item, index) => [
             index + 1,
             item.booking_public_id || '-',
             item.booking_dates || formatDate(item.booking_date),
@@ -3371,7 +3384,8 @@ function AccountingStandardReportPage({ reportType }) {
   }
   const { data = [], loading, reload } = useApi(`${config.path}?${params.toString()}`, { initialData: [] });
   const rows = normalizeRows(data);
-  const exportRows = rows.map(config.row);
+  const filteredRows = filterRowsByKeyword(rows, filters.keyword);
+  const exportRows = filteredRows.map(config.row);
 
   function setFilter(name, value) {
     setFilters((current) => ({ ...current, [name]: value }));
@@ -3386,6 +3400,7 @@ function AccountingStandardReportPage({ reportType }) {
           <div className="w-full rounded-3xl border border-slate-200 bg-white p-4 shadow-soft xl:min-w-[780px]">
             <div className="flex flex-col gap-3 xl:items-end">
               <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap xl:justify-end">
+                <SearchInput value={filters.keyword} onChange={(value) => setFilter('keyword', value)} placeholder="ค้นหาเลขเอกสาร ลูกค้า ใบจอง หรือตลาด" />
                 {reportType === 'receivables' ? (
                   <DatePickerBare value={filters.asOfDate} onChange={(value) => setFilter('asOfDate', value)} className="sm:w-[210px]" />
                 ) : (
@@ -3418,7 +3433,6 @@ function AccountingStandardReportPage({ reportType }) {
                   <option value="cancelled">ยกเลิก</option>
                   <option value="void">ไม่ใช้เอกสาร</option>
                 </select>
-                <input value={filters.keyword} onChange={(event) => setFilter('keyword', event.target.value)} placeholder="ค้นหาเลขเอกสาร ลูกค้า ใบจอง หรือเลขชำระเงิน" className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" />
               </div>
             </div>
           ) : null}
@@ -3446,6 +3460,7 @@ function AccountingPage({ paidOnly = false }) {
     marketId: '',
     dateField: 'payment_date',
     sortBy: 'payment_date',
+    keyword: '',
   });
   const queryString = new URLSearchParams({
     ...(paidOnly ? { paidOnly: '1' } : {}),
@@ -3458,8 +3473,9 @@ function AccountingPage({ paidOnly = false }) {
   const { data = [], loading, reload } = useApi(`/accounting/payments?${queryString}`, { initialData: [] });
   const { mutate: mutateDocument, loading: issuingDocument } = useMutation();
   const rows = normalizeRows(data);
+  const filteredRows = filterRowsByKeyword(rows, filters.keyword);
   const exportColumns = ['เลขชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'Provider', 'สถานะ', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน'];
-  const exportRows = rows.map((payment) => [payment.public_id, payment.booking_public_id || '-', payment.market_name || '-', payment.booking_dates || '-', payment.booths || '-', payment.customer_name || '-', payment.provider, payment.status || '-', formatMoney(payment.subtotal_amount || 0), formatMoney(payment.discount_amount || 0), formatMoney(payment.vat_amount || 0), formatMoney(payment.amount), formatDate(payment.paid_at || payment.created_at)]);
+  const exportRows = filteredRows.map((payment) => [payment.public_id, payment.booking_public_id || '-', payment.market_name || '-', payment.booking_dates || '-', payment.booths || '-', payment.customer_name || '-', payment.provider, payment.status || '-', formatMoney(payment.subtotal_amount || 0), formatMoney(payment.discount_amount || 0), formatMoney(payment.vat_amount || 0), formatMoney(payment.amount), formatDate(payment.paid_at || payment.created_at)]);
 
   function setFilter(name, value) {
     setFilters((current) => ({ ...current, [name]: value }));
@@ -3480,6 +3496,7 @@ function AccountingPage({ paidOnly = false }) {
           <div className="w-full rounded-3xl border border-slate-200 bg-white p-4 shadow-soft xl:min-w-[720px]">
             <div className="flex flex-col gap-3 xl:items-end">
               <div className="flex w-full flex-col gap-3 sm:flex-row xl:justify-end">
+                <SearchInput value={filters.keyword} onChange={(value) => setFilter('keyword', value)} placeholder="ค้นหาลูกค้า เลขจอง เลขชำระเงิน หรือตลาด" />
                 <DatePickerBare value={filters.startDate} onChange={(value) => setFilter('startDate', value)} className="sm:w-[210px]" />
                 <DatePickerBare value={filters.endDate} onChange={(value) => setFilter('endDate', value)} className="sm:w-[210px]" />
                 <ReportActionButton tone="slate" onClick={reload}>ค้นหา</ReportActionButton>
@@ -3509,7 +3526,7 @@ function AccountingPage({ paidOnly = false }) {
               </select>
             </div>
           </div>
-          {loading ? <LoadingBlock /> : <DataTable columns={['เลขชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'Provider', 'สถานะ', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน', 'จัดการ']} rows={rows.map((payment) => [
+          {loading ? <LoadingBlock /> : <DataTable columns={['เลขชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'Provider', 'สถานะ', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน', 'จัดการ']} rows={filteredRows.map((payment) => [
             payment.public_id,
             payment.booking_public_id || '-',
             payment.market_name || '-',
@@ -3691,7 +3708,7 @@ function RoleCard({ role, description }) {
 }
 
 function ReportTable({ rows }) {
-  return <DataTable columns={['ลำดับ', 'ตลาด', 'เลขจอง', 'วันที่จอง', 'Booth', 'สถานะ', 'แหล่งที่มา', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'ยอดรวม', 'วันที่ทำรายการ']} rows={rows.map((row, index) => [index + 1, row.market_name, row.booking_public_id || '-', formatDate(row.booking_date), row.booth_code || row.booth_name || '-', <StatusBadge value={row.status || 'pending_payment'} />, row.source || '-', formatMoney(row.subtotal_amount || row.booth_amount || 0), formatMoney(row.discount_amount || 0), formatMoney(row.vat_amount || 0), formatMoney(row.total_amount), formatDate(row.created_at)])} />;
+  return <DataTable columns={['ลำดับ', 'ตลาด', 'เลขจอง', 'ลูกค้า', 'วันที่ทำรายการ', 'วันที่จอง', 'Booth', 'สถานะ', 'แหล่งที่มา', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'ยอดรวม']} rows={rows.map((row, index) => [index + 1, row.market_name, row.booking_public_id || '-', row.customer_name || '-', formatDate(row.created_at), formatDate(row.booking_date), row.booth_code || row.booth_name || '-', <StatusBadge value={row.status || 'pending_payment'} />, row.source || '-', formatMoney(row.subtotal_amount || row.booth_amount || 0), formatMoney(row.discount_amount || 0), formatMoney(row.vat_amount || 0), formatMoney(row.total_amount)])} />;
 }
 
 function AvailableBoothReportTable({ rows }) {
@@ -3732,6 +3749,26 @@ function Toolbar({ keyword, onKeyword }) {
       </label>
     </div>
   );
+}
+
+function SearchInput({ value, onChange, placeholder = 'ค้นหา' }) {
+  return (
+    <label className="relative block w-full sm:w-[280px]">
+      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="h-11 w-full rounded-xl border border-slate-300 bg-white pl-10 pr-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+      />
+    </label>
+  );
+}
+
+function filterRowsByKeyword(rows = [], keyword = '') {
+  const needle = keyword.trim().toLowerCase();
+  if (!needle) return rows;
+  return rows.filter((row) => Object.values(row || {}).some((value) => String(value ?? '').toLowerCase().includes(needle)));
 }
 
 function ReportFiltersBar({ children }) {
