@@ -257,6 +257,32 @@ function formatDate(value) {
   return new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeZone: 'Asia/Bangkok' }).format(new Date(value));
 }
 
+function parseBookingDateList(value) {
+  if (!value) return [];
+  return String(value)
+    .split(',')
+    .map((date) => date.trim())
+    .filter(Boolean)
+    .sort();
+}
+
+function formatBookingDateValue(value) {
+  if (!value) return '-';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) {
+    return formatDate(`${value}T00:00:00+07:00`);
+  }
+  return formatDate(value);
+}
+
+function formatBookingDateSummary(value) {
+  const dates = parseBookingDateList(value);
+  if (!dates.length) return '-';
+  if (dates.length === 1) return formatBookingDateValue(dates[0]);
+  const firstDate = formatBookingDateValue(dates[0]);
+  const lastDate = formatBookingDateValue(dates[dates.length - 1]);
+  return `${firstDate} - ${lastDate} (${dates.length} วัน)`;
+}
+
 function auditResultLabel(value) {
   const labels = {
     pass: 'ผ่านการประเมิน',
@@ -2935,14 +2961,14 @@ function ReportsPage({ reportType }) {
       ? ['ลำดับที่', 'เลขที่ใบจอง', 'ประเภทสินค้าที่ขาย', 'ลูกค้า', 'วันที่ชำระเงิน', 'จำนวนเงินก่อน VAT']
     : isDailySalesReport || isCustomerBookingsReport
       ? ['#', 'เลขที่ใบจอง', 'ตลาด', 'ชื่อผู้จอง', 'Tell', 'ชื่อ Booth', 'สินค้าขาย', 'VAT', 'ยอดรวม', 'วันที่ขาย']
-      : ['#', 'ตลาด', 'เลขจอง', 'ลูกค้า', 'วันที่ทำรายการ', 'วันที่จอง', 'Booth', 'สถานะ', 'แหล่งที่มา', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'ยอดรวม'];
+      : ['#', 'ตลาด', 'เลขจอง', 'ลูกค้า', 'วันที่ทำรายการ', 'วันที่จอง', 'Booth', 'จำนวนรายการ', 'สถานะ', 'แหล่งที่มา', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'ยอดรวม'];
   const exportRows = isAvailableBoothReport
     ? filteredReportRows.map((row, index) => [index + 1, row.market_name || '-', formatDate(row.booking_date), row.booth_code || '-', row.booth_name || '-', row.floor_plan_name || '-', row.production_category_name || '-', formatMoney(row.price), formatMoney(row.vat_amount || 0), formatMoney(row.gross_price ?? row.price)])
     : isProductTypesReport
       ? filteredReportRows.map((row, index) => [index + 1, row.booking_public_id || '-', row.product_names || '-', row.customer_name || '-', formatDate(row.paid_date), formatMoney(row.amount_before_vat || 0)])
     : isDailySalesReport || isCustomerBookingsReport
       ? filteredReportRows.map((row, index) => [index + 1, row.booking_public_id || '-', row.market_name || '-', row.customer_name || '-', row.customer_phone || '-', row.booth_code || row.booth_name || '-', row.product_names || '-', formatMoney(row.vat_amount || 0), formatMoney(row.total_amount || 0), formatDate(row.booking_date)])
-      : filteredReportRows.map((row, index) => [index + 1, row.market_name || '-', row.booking_public_id || '-', row.customer_name || '-', formatDate(row.created_at), formatDate(row.booking_date), row.booth_code || row.booth_name || '-', row.status || 'pending_payment', row.source || '-', formatMoney(row.subtotal_amount || 0), formatMoney(row.discount_amount || 0), formatMoney(row.vat_amount || 0), formatMoney(row.total_amount || 0)]);
+      : filteredReportRows.map((row, index) => [index + 1, row.market_name || '-', row.booking_public_id || '-', row.customer_name || '-', formatDate(row.created_at), formatBookingDateSummary(row.booking_dates || row.booking_date), row.booths || row.booth_code || row.booth_name || '-', Number(row.booking_count || 0), row.status || 'pending_payment', row.source || '-', formatMoney(row.subtotal_amount || 0), formatMoney(row.discount_amount || 0), formatMoney(row.vat_amount || 0), formatMoney(row.total_amount || 0)]);
 
   function selectCustomer(user) {
     setSelectedUser(user);
@@ -3474,8 +3500,14 @@ function AccountingPage({ paidOnly = false }) {
   const { mutate: mutateDocument, loading: issuingDocument } = useMutation();
   const rows = normalizeRows(data);
   const filteredRows = filterRowsByKeyword(rows, filters.keyword);
-  const exportColumns = ['เลขชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'Provider', 'สถานะ', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน'];
-  const exportRows = filteredRows.map((payment) => [payment.public_id, payment.booking_public_id || '-', payment.market_name || '-', payment.booking_dates || '-', payment.booths || '-', payment.customer_name || '-', payment.provider, payment.status || '-', formatMoney(payment.subtotal_amount || 0), formatMoney(payment.discount_amount || 0), formatMoney(payment.vat_amount || 0), formatMoney(payment.amount), formatDate(payment.paid_at || payment.created_at)]);
+  const exportColumns = paidOnly
+    ? ['เลขชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน']
+    : ['เลขชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'Provider', 'สถานะ', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน'];
+  const exportRows = filteredRows.map((payment) => {
+    const baseRow = [payment.public_id, payment.booking_public_id || '-', payment.market_name || '-', formatBookingDateSummary(payment.booking_dates), payment.booths || '-', payment.customer_name || '-'];
+    const amountRow = [formatMoney(payment.subtotal_amount || 0), formatMoney(payment.discount_amount || 0), formatMoney(payment.vat_amount || 0), formatMoney(payment.amount), formatDate(payment.paid_at || payment.created_at)];
+    return paidOnly ? [...baseRow, ...amountRow] : [...baseRow, payment.provider, payment.status || '-', ...amountRow];
+  });
 
   function setFilter(name, value) {
     setFilters((current) => ({ ...current, [name]: value }));
@@ -3526,24 +3558,27 @@ function AccountingPage({ paidOnly = false }) {
               </select>
             </div>
           </div>
-          {loading ? <LoadingBlock /> : <DataTable columns={['เลขชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'Provider', 'สถานะ', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน', 'จัดการ']} rows={filteredRows.map((payment) => [
-            payment.public_id,
-            payment.booking_public_id || '-',
-            payment.market_name || '-',
-            payment.booking_dates || '-',
-            payment.booths || '-',
-            payment.customer_name || '-',
-            payment.provider,
-            <StatusBadge value={payment.status} />,
-            formatMoney(payment.subtotal_amount || 0),
-            formatMoney(payment.discount_amount || 0),
-            formatMoney(payment.vat_amount || 0),
-            formatMoney(payment.amount),
-            formatDate(payment.paid_at || payment.created_at),
-            <SmallButton tone={Number(payment.vat_enabled || 0) === 1 ? 'cyan' : 'amber'} onClick={() => issueAndPrintPaymentDocument(payment)} disabled={issuingDocument}>
-              {payment.document_no || (Number(payment.vat_enabled || 0) === 1 ? 'ใบกำกับภาษี' : 'ใบเสร็จ')}
-            </SmallButton>,
-          ])} />}
+          {loading ? <LoadingBlock /> : <DataTable columns={paidOnly ? ['เลขชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน', 'จัดการ'] : ['เลขชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'Provider', 'สถานะ', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน', 'จัดการ']} rows={filteredRows.map((payment) => {
+            const baseRow = [
+              payment.public_id,
+              payment.booking_public_id || '-',
+              payment.market_name || '-',
+              <BookingDateSummary value={payment.booking_dates} />,
+              payment.booths || '-',
+              payment.customer_name || '-',
+            ];
+            const amountRow = [
+              formatMoney(payment.subtotal_amount || 0),
+              formatMoney(payment.discount_amount || 0),
+              formatMoney(payment.vat_amount || 0),
+              formatMoney(payment.amount),
+              formatDate(payment.paid_at || payment.created_at),
+              <SmallButton tone={Number(payment.vat_enabled || 0) === 1 ? 'cyan' : 'amber'} onClick={() => issueAndPrintPaymentDocument(payment)} disabled={issuingDocument}>
+                {payment.document_no || (Number(payment.vat_enabled || 0) === 1 ? 'ใบกำกับภาษี' : 'ใบเสร็จ')}
+              </SmallButton>,
+            ];
+            return paidOnly ? [...baseRow, ...amountRow] : [...baseRow, payment.provider, <StatusBadge value={payment.status} />, ...amountRow];
+          })} />}
         </div>
       </Card>
     </>
@@ -3708,7 +3743,7 @@ function RoleCard({ role, description }) {
 }
 
 function ReportTable({ rows }) {
-  return <DataTable columns={['ลำดับ', 'ตลาด', 'เลขจอง', 'ลูกค้า', 'วันที่ทำรายการ', 'วันที่จอง', 'Booth', 'สถานะ', 'แหล่งที่มา', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'ยอดรวม']} rows={rows.map((row, index) => [index + 1, row.market_name, row.booking_public_id || '-', row.customer_name || '-', formatDate(row.created_at), formatDate(row.booking_date), row.booth_code || row.booth_name || '-', <StatusBadge value={row.status || 'pending_payment'} />, row.source || '-', formatMoney(row.subtotal_amount || row.booth_amount || 0), formatMoney(row.discount_amount || 0), formatMoney(row.vat_amount || 0), formatMoney(row.total_amount)])} />;
+  return <DataTable columns={['ลำดับ', 'ตลาด', 'เลขจอง', 'ลูกค้า', 'วันที่ทำรายการ', 'วันที่จอง', 'Booth', 'จำนวนรายการ', 'สถานะ', 'แหล่งที่มา', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'ยอดรวม']} rows={rows.map((row, index) => [index + 1, row.market_name, row.booking_public_id || '-', row.customer_name || '-', formatDate(row.created_at), <BookingDateSummary value={row.booking_dates || row.booking_date} />, row.booths || row.booth_code || row.booth_name || '-', Number(row.booking_count || 0), <StatusBadge value={row.status || 'pending_payment'} />, row.source || '-', formatMoney(row.subtotal_amount || row.booth_amount || 0), formatMoney(row.discount_amount || 0), formatMoney(row.vat_amount || 0), formatMoney(row.total_amount)])} />;
 }
 
 function AvailableBoothReportTable({ rows }) {
@@ -3717,6 +3752,17 @@ function AvailableBoothReportTable({ rows }) {
 
 function DailySalesReportTable({ rows }) {
   return <DataTable columns={['#', 'เลขที่ใบจอง', 'ตลาด', 'ชื่อผู้จอง', 'Tell', 'ชื่อ Booth', 'สินค้าขาย', 'VAT', 'ยอดรวม', 'วันที่ขาย']} rows={rows.map((row, index) => [index + 1, row.booking_public_id || '-', row.market_name || '-', row.customer_name || '-', row.customer_phone || '-', row.booth_code || row.booth_name || '-', row.product_names || '-', formatMoney(row.vat_amount || 0), formatMoney(row.total_amount || 0), formatDate(row.booking_date)])} />;
+}
+
+function BookingDateSummary({ value }) {
+  const dates = parseBookingDateList(value);
+  if (!dates.length) return '-';
+  return (
+    <div className="min-w-[170px]">
+      <div className="font-bold text-slate-800">{formatBookingDateSummary(value)}</div>
+      {dates.length > 1 ? <div className="mt-1 text-xs text-slate-500">{dates.map(formatBookingDateValue).join(', ')}</div> : null}
+    </div>
+  );
 }
 
 function PaymentList({ rows }) {
