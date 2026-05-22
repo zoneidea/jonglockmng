@@ -140,6 +140,7 @@ const menu = [
     menuKey: 'accounting',
     children: [
       { path: '/accounting', label: 'รายงานแสดงข้อมูลทั้งหมด' },
+      { path: '/accounting-payment-proofs', label: 'ตรวจสลิปโอนเงิน' },
       { path: '/accounting-payments', label: 'รายงานการชำระเงิน' },
       { path: '/accounting-summary', label: 'รายงานสรุปยอดขาย' },
       { path: '/accounting-documents', label: 'ทะเบียนเอกสารบัญชี' },
@@ -784,6 +785,7 @@ function Shell() {
               <Route path="/tenants" element={<TenantsPage />} />
               <Route path="/tenants/pending" element={<TenantsPage status="pending" />} />
               <Route path="/accounting" element={<AccountingAllReportPage />} />
+              <Route path="/accounting-payment-proofs" element={<PaymentProofReviewPage />} />
               <Route path="/accounting-bookings" element={<ReportsPage reportType="accounting-bookings" />} />
               <Route path="/accounting-payments" element={<AccountingPage />} />
               <Route path="/accounting-summary" element={<AccountingSalesSummaryPage />} />
@@ -2225,6 +2227,11 @@ function OrganizationSettingsPage() {
     registeredDistrict: '',
     registeredProvince: '',
     registeredPostcode: '',
+    paymentPromptpayId: '',
+    paymentBankName: '',
+    paymentBankAccountName: '',
+    paymentBankAccountNo: '',
+    paymentInstructions: '',
   });
 
   useEffect(() => {
@@ -2242,6 +2249,11 @@ function OrganizationSettingsPage() {
       registeredDistrict: data?.registered_district || '',
       registeredProvince: data?.registered_province || '',
       registeredPostcode: data?.registered_postcode || '',
+      paymentPromptpayId: data?.payment_promptpay_id || '',
+      paymentBankName: data?.payment_bank_name || '',
+      paymentBankAccountName: data?.payment_bank_account_name || '',
+      paymentBankAccountNo: data?.payment_bank_account_no || '',
+      paymentInstructions: data?.payment_instructions || '',
     });
   }, [data]);
 
@@ -2297,8 +2309,79 @@ function OrganizationSettingsPage() {
               <TextInput label="รหัสไปรษณีย์" value={form.registeredPostcode} onChange={(value) => setForm((current) => ({ ...current, registeredPostcode: value }))} required />
             </div>
           ) : null}
+          <div className="grid gap-4 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <div className="text-sm font-extrabold text-slate-800">บัญชีรับเงินสำหรับแอปฯ</div>
+              <div className="mt-1 text-xs font-semibold text-slate-500">ใช้แสดงให้ผู้จองโอนเงินและอัปโหลดสลิปในตะกร้า</div>
+            </div>
+            <TextInput label="PromptPay" value={form.paymentPromptpayId} onChange={(value) => setForm((current) => ({ ...current, paymentPromptpayId: value }))} />
+            <TextInput label="ธนาคาร" value={form.paymentBankName} onChange={(value) => setForm((current) => ({ ...current, paymentBankName: value }))} />
+            <TextInput label="ชื่อบัญชี" value={form.paymentBankAccountName} onChange={(value) => setForm((current) => ({ ...current, paymentBankAccountName: value }))} />
+            <TextInput label="เลขบัญชี" value={form.paymentBankAccountNo} onChange={(value) => setForm((current) => ({ ...current, paymentBankAccountNo: value }))} />
+            <label className="block md:col-span-2"><span className="mb-1.5 block text-sm font-bold text-slate-600">คำแนะนำการชำระเงิน</span><textarea value={form.paymentInstructions} onChange={(event) => setForm((current) => ({ ...current, paymentInstructions: event.target.value }))} rows={3} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600" /></label>
+          </div>
         </FormPanel>
       )}</Card>
+    </>
+  );
+}
+
+function PaymentProofReviewPage() {
+  const [status, setStatus] = useState('waiting');
+  const { data = [], loading, reload } = useApi(`/payment-proofs?status=${status}`, { initialData: [] });
+  const { mutate, loading: saving, error } = useMutation();
+  const rows = normalizeRows(data);
+
+  async function review(payment, nextStatus) {
+    await mutate(`/payments/${payment.id}/proof-status`, { status: nextStatus }, 'PATCH');
+    reload();
+  }
+
+  return (
+    <>
+      <PageHeader title="ตรวจสลิปโอนเงิน" description="ตรวจหลักฐานการโอนเงินจากแอปฯ ก่อนยืนยันการชำระเงิน" />
+      <Card>
+        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="inline-flex rounded-2xl bg-slate-100 p-1">
+            {[
+              ['waiting', 'รอตรวจ'],
+              ['failed', 'ไม่ผ่าน'],
+              ['paid', 'ผ่านแล้ว'],
+              ['all', 'ทั้งหมด'],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setStatus(value)}
+                className={classNames('rounded-xl px-4 py-2 text-sm font-bold', status === value ? 'bg-slate-950 text-white' : 'text-slate-600 hover:text-slate-950')}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {error ? <div className="text-sm font-bold text-rose-600">{error}</div> : null}
+        </div>
+        {loading ? <LoadingBlock /> : (
+          <DataTable
+            columns={['เลขที่ใบจอง', 'ตลาด', 'ลูกค้า', 'ยอดเงิน', 'สถานะ', 'หลักฐาน', 'วันที่ส่ง', 'จัดการ']}
+            rows={rows.map((item) => [
+              item.booking_public_id || '-',
+              item.market_name || '-',
+              item.customer_name || '-',
+              formatMoney(item.amount || 0),
+              <StatusBadge value={item.status} />,
+              item.proof_image_url ? <button type="button" onClick={() => window.open(item.proof_image_url, '_blank', 'noopener,noreferrer')} className="rounded-xl bg-cyan-600 px-3 py-2 text-xs font-bold text-white">ดูสลิป</button> : '-',
+              formatDate(item.proof_uploaded_at),
+              item.status === 'waiting' ? (
+                <div className="flex flex-wrap gap-2">
+                  <button disabled={saving} type="button" onClick={() => review(item, 'paid')} className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">ผ่าน</button>
+                  <button disabled={saving} type="button" onClick={() => review(item, 'failed')} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">ไม่ผ่าน</button>
+                </div>
+              ) : '-',
+            ])}
+          />
+        )}
+      </Card>
     </>
   );
 }
