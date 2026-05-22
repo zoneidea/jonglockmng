@@ -89,6 +89,7 @@ const menu = [
       { path: '/bookings', label: 'จอง Booth แทนสมาชิก' },
       { path: '/booking-edit', label: 'แก้ไขการจอง' },
       { path: '/booking-edits', label: 'รายการแก้ไขการจอง' },
+      { path: '/booking-payment-proofs', label: 'ตรวจสลิปโอนเงิน' },
     ],
   },
   {
@@ -140,7 +141,6 @@ const menu = [
     menuKey: 'accounting',
     children: [
       { path: '/accounting', label: 'รายงานแสดงข้อมูลทั้งหมด' },
-      { path: '/accounting-payment-proofs', label: 'ตรวจสลิปโอนเงิน' },
       { path: '/accounting-payments', label: 'รายงานการชำระเงิน' },
       { path: '/accounting-summary', label: 'รายงานสรุปยอดขาย' },
       { path: '/accounting-documents', label: 'ทะเบียนเอกสารบัญชี' },
@@ -202,7 +202,7 @@ const subscriptionFeatureByPath = [
   [/^\/booth-types|^\/booths/, 'booth_management'],
   [/^\/product-categories|^\/product-groups|^\/products/, 'product_management'],
   [/^\/coupons|^\/coupon-assignments/, 'coupon_management'],
-  [/^\/bookings|^\/booking-edit|^\/booking-edits/, 'booking_management'],
+  [/^\/bookings|^\/booking-edit|^\/booking-edits|^\/booking-payment-proofs/, 'booking_management'],
   [/^\/reports|^\/report-/, 'reports'],
   [/^\/audit/, 'market_audit'],
   [/^\/accounting/, 'accounting'],
@@ -771,6 +771,7 @@ function Shell() {
               <Route path="/bookings" element={<BookingsPage marketId={currentMarketId} />} />
               <Route path="/booking-edit" element={<BookingsPage marketId={currentMarketId} mode="edit" />} />
               <Route path="/booking-edits" element={<BookingsPage marketId={currentMarketId} mode="history" />} />
+              <Route path="/booking-payment-proofs" element={<PaymentProofReviewPage />} />
               <Route path="/reports" element={<ReportsPage />} />
               <Route path="/report-booths" element={<ReportsPage reportType="booths" />} />
               <Route path="/report-payments" element={<AccountingPage paidOnly />} />
@@ -785,7 +786,7 @@ function Shell() {
               <Route path="/tenants" element={<TenantsPage />} />
               <Route path="/tenants/pending" element={<TenantsPage status="pending" />} />
               <Route path="/accounting" element={<AccountingAllReportPage />} />
-              <Route path="/accounting-payment-proofs" element={<PaymentProofReviewPage />} />
+              <Route path="/accounting-payment-proofs" element={<Navigate to="/booking-payment-proofs" replace />} />
               <Route path="/accounting-bookings" element={<ReportsPage reportType="accounting-bookings" />} />
               <Route path="/accounting-payments" element={<AccountingPage />} />
               <Route path="/accounting-summary" element={<AccountingSalesSummaryPage />} />
