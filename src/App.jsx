@@ -86,7 +86,7 @@ const menu = [
     icon: CalendarCheck,
     menuKey: 'bookings',
     children: [
-      { path: '/bookings', label: 'จอง Booth แทนสมาชิก' },
+      { path: '/bookings', label: 'จองแทนสมาชิก' },
       { path: '/booking-edit', label: 'แก้ไขการจอง' },
       { path: '/booking-edits', label: 'รายการแก้ไขการจอง' },
       { path: '/booking-payment-proofs', label: 'ตรวจสลิปโอนเงิน' },
@@ -98,7 +98,7 @@ const menu = [
     menuKey: 'reports',
     children: [
       { path: '/reports', label: 'รายงานการจอง' },
-      { path: '/report-booths', label: 'รายงาน Booth ว่าง' },
+      { path: '/report-booths', label: 'รายงานบูธว่าง' },
       { path: '/report-payments', label: 'รายงานการชำระเงิน' },
       { path: '/report-daily', label: 'รายงานการขายรายวัน' },
       { path: '/report-person', label: 'การจองรายบุคคล' },
@@ -2240,6 +2240,7 @@ function OrganizationSettingsPage() {
   const { data = {}, loading, reload } = useApi('/organization-settings', { initialData: {} });
   const { mutate, loading: saving, error } = useMutation();
   const [formError, setFormError] = useState('');
+  const [paymentQrCodeImage, setPaymentQrCodeImage] = useState(null);
   const [form, setForm] = useState({
     name: '',
     address: '',
@@ -2282,6 +2283,7 @@ function OrganizationSettingsPage() {
       paymentBankAccountNo: data?.payment_bank_account_no || '',
       paymentInstructions: data?.payment_instructions || '',
     });
+    setPaymentQrCodeImage(null);
   }, [data]);
 
   async function submit(event) {
@@ -2302,7 +2304,15 @@ function OrganizationSettingsPage() {
         return;
       }
     }
-    await mutate('/organization-settings', { ...form, vatRate: Number(form.vatRate || 0) }, 'PUT');
+    const payload = paymentQrCodeImage ? new FormData() : { ...form, vatRate: Number(form.vatRate || 0) };
+    if (paymentQrCodeImage) {
+      Object.entries({ ...form, vatRate: Number(form.vatRate || 0) }).forEach(([key, value]) => {
+        payload.append(key, value ?? '');
+      });
+      payload.append('paymentQrCodeImage', paymentQrCodeImage);
+    }
+    await mutate('/organization-settings', payload, 'PUT');
+    setPaymentQrCodeImage(null);
     reload();
   }
 
@@ -2345,6 +2355,19 @@ function OrganizationSettingsPage() {
             <TextInput label="ธนาคาร" value={form.paymentBankName} onChange={(value) => setForm((current) => ({ ...current, paymentBankName: value }))} />
             <TextInput label="ชื่อบัญชี" value={form.paymentBankAccountName} onChange={(value) => setForm((current) => ({ ...current, paymentBankAccountName: value }))} />
             <TextInput label="เลขบัญชี" value={form.paymentBankAccountNo} onChange={(value) => setForm((current) => ({ ...current, paymentBankAccountNo: value }))} />
+            <div className="md:col-span-2">
+              <FileInput label="รูปภาพ QR Code สำหรับรับชำระเงิน" onChange={setPaymentQrCodeImage} />
+              {paymentQrCodeImage ? <FileSummary file={paymentQrCodeImage} /> : null}
+              {data?.payment_qrcode_image_url ? (
+                <div className="mt-3 flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-3">
+                  <img src={data.payment_qrcode_image_url} alt="Payment QR Code" className="h-24 w-24 rounded-xl border border-slate-200 object-contain" />
+                  <div>
+                    <div className="text-sm font-extrabold text-slate-800">QR Code ปัจจุบัน</div>
+                    <button type="button" onClick={() => window.open(data.payment_qrcode_image_url, '_blank', 'noopener,noreferrer')} className="mt-2 rounded-xl bg-slate-950 px-3 py-2 text-xs font-bold text-white">ดูรูปภาพ</button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
             <label className="block md:col-span-2"><span className="mb-1.5 block text-sm font-bold text-slate-600">คำแนะนำการชำระเงิน</span><textarea value={form.paymentInstructions} onChange={(event) => setForm((current) => ({ ...current, paymentInstructions: event.target.value }))} rows={3} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600" /></label>
           </div>
         </FormPanel>
@@ -2937,7 +2960,7 @@ function ReportsPage({ reportType }) {
   const filteredReportRows = filterRowsByKeyword(reportRows, keyword);
 
   const reportTitle = isAvailableBoothReport
-    ? 'รายงาน Booth ว่าง'
+    ? 'รายงานบูธว่าง'
     : isDailySalesReport
       ? 'รายงานการขายรายวัน'
       : isProductTypesReport
