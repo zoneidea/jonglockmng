@@ -46,6 +46,8 @@ import { API_BASE_URL, request } from './api/client.js';
 import { useApi, useMutation } from './hooks/useApi.js';
 import { useAuth } from './state/auth.jsx';
 
+const POWERED_BY_TEXT = 'Powered by zone-idea innovation co.,ltd.';
+
 const menu = [
   { path: '/', label: 'ภาพรวม', icon: LayoutDashboard, menuKey: 'dashboard', roles: ['supervisor', 'admin', 'accounting'] },
   {
@@ -705,6 +707,7 @@ function LoginPage() {
               {loading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}
             </button>
             <p className="mt-4 break-all text-xs text-slate-400">API: {API_BASE_URL}</p>
+            <p className="mt-6 text-center text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{POWERED_BY_TEXT}</p>
           </form>
         </section>
       </div>
@@ -827,6 +830,7 @@ function Shell() {
               <Route path="/pdpa" element={<PdpaPage />} />
               <Route path="/admins" element={<AdminsPage marketId={currentMarketId} />} />
             </Routes>
+            <p className="mt-10 pb-2 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{POWERED_BY_TEXT}</p>
           </main>
         </div>
       </div>
@@ -903,6 +907,9 @@ function Sidebar({ items, open, onClose }) {
             );
           })}
         </nav>
+        <div className="border-t border-white/10 px-6 py-4 text-[10px] font-semibold uppercase leading-5 tracking-[0.16em] text-slate-500">
+          {POWERED_BY_TEXT}
+        </div>
       </aside>
     </>
   );
