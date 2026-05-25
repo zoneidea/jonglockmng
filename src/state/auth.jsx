@@ -6,11 +6,27 @@ const AuthContext = createContext(null);
 
 function readStoredSession() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
+}
+
+function persistSession(nextSession, rememberMe) {
+  const serialized = JSON.stringify(nextSession);
+  if (rememberMe) {
+    localStorage.setItem(STORAGE_KEY, serialized);
+    sessionStorage.removeItem(STORAGE_KEY);
+    return;
+  }
+  sessionStorage.setItem(STORAGE_KEY, serialized);
+  localStorage.removeItem(STORAGE_KEY);
+}
+
+function removeStoredSession() {
+  localStorage.removeItem(STORAGE_KEY);
+  sessionStorage.removeItem(STORAGE_KEY);
 }
 
 export function AuthProvider({ children }) {
@@ -33,19 +49,19 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  async function login(username, password) {
+  async function login(username, password, rememberMe = false) {
     const payload = await request('/auth/login', {
       method: 'POST',
       body: { username, password },
     });
     const nextSession = payload.data;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextSession));
+    persistSession(nextSession, rememberMe);
     setSession(nextSession);
     return nextSession;
   }
 
   function logout() {
-    localStorage.removeItem(STORAGE_KEY);
+    removeStoredSession();
     setSession(null);
   }
 

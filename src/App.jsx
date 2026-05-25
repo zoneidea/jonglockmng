@@ -654,6 +654,7 @@ function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ username: '', password: '' });
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -662,7 +663,7 @@ function LoginPage() {
     setLoading(true);
     setError('');
     try {
-      await login(form.username, form.password);
+      await login(form.username, form.password, rememberMe);
       navigate('/');
     } catch (err) {
       setError(err.message || 'เข้าสู่ระบบไม่สำเร็จ');
@@ -702,6 +703,18 @@ function LoginPage() {
               <TextInput label="Username" value={form.username} onChange={(value) => setForm((current) => ({ ...current, username: value }))} required />
               <TextInput label="Password" value={form.password} onChange={(value) => setForm((current) => ({ ...current, password: value }))} type="password" required />
             </div>
+            <label className="mt-4 flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-cyan-200 hover:bg-cyan-50/40">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(event) => setRememberMe(event.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-600"
+              />
+              <span className="flex-1">Remember me</span>
+              <span className="text-xs font-medium text-slate-400">
+                {rememberMe ? 'เก็บ session ไว้ในเครื่องนี้' : 'อยู่จนกว่าจะปิดแท็บ'}
+              </span>
+            </label>
             {error ? <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
             <button disabled={loading} className="mt-6 h-12 w-full rounded-xl bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
               {loading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}

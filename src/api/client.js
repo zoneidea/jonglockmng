@@ -14,6 +14,7 @@ function expireSession() {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.removeItem(SESSION_STORAGE_KEY);
+    window.sessionStorage.removeItem(SESSION_STORAGE_KEY);
   } catch {}
   window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
   if (window.location.pathname !== '/login') {
