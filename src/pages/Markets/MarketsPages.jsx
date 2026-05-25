@@ -1,0 +1,794 @@
+import { useEffect, useState } from 'react';
+import { Eye, Image, Plus, X } from 'lucide-react';
+import { request } from '../../api/client.js';
+import { Card } from '../../components/Card.jsx';
+import { DataTable } from '../../components/DataTable.jsx';
+import { EmptyState } from '../../components/EmptyState.jsx';
+import { LoadingBlock } from '../../components/LoadingBlock.jsx';
+import { PageHeader } from '../../components/PageHeader.jsx';
+import { StatusBadge } from '../../components/StatusBadge.jsx';
+import { useApi, useMutation } from '../../hooks/useApi.js';
+import { useAuth } from '../../state/auth.jsx';
+import { classNames, formatDate, formatMoney, normalizeRows } from '../../utils/formatters.js';
+import { combineOpeningHours, dateKeyFromUtcTime, dateKeyFromValue, splitOpeningHours, utcTimeFromDateKey } from '../../utils/management.js';
+import { BoothBox, DatePicker, ErrorNotice, FileInput, FileSummary, FormPanel, Label, Modal, NeedMarket, OutlineButton, SelectInput, SmallButton, TextInput, TextInputBare, TimePicker, Toolbar, RichTextEditor, FilterPill } from '../../components/ManagementUi.jsx';
+
+export function MarketsPage({ markets, reloadMarkets }) {
+  const { token } = useAuth();
+  const { mutate, loading, error } = useMutation();
+  const [keyword, setKeyword] = useState('');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState({ code: '', name: '', description: '', openDate: '', closeDate: '' });
+  const [mainImageFile, setMainImageFile] = useState(null);
+  const rows = markets.filter((market) => `${market.code} ${market.name}`.toLowerCase().includes(keyword.toLowerCase()));
+
+  async function openCreateModal() {
+    setMainImageFile(null);
+    setForm({ code: '', name: '', description: '', openDate: '', closeDate: '' });
+    setModalOpen(true);
+    try {
+      const payload = await request('/markets/next-code', { token });
+      setForm((current) => ({ ...current, code: payload.data?.code || '' }));
+    } catch {}
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    const payload = new FormData();
+    payload.append('code', form.code);
+    payload.append('name', form.name);
+    payload.append('description', form.description);
+    if (form.openDate) payload.append('openDate', form.openDate);
+    if (form.closeDate) payload.append('closeDate', form.closeDate);
+    if (mainImageFile) payload.append('mainImage', mainImageFile);
+    await mutate('/markets', payload);
+    setForm({ code: '', name: '', description: '', openDate: '', closeDate: '' });
+    setMainImageFile(null);
+    setModalOpen(false);
+    reloadMarkets();
+  }
+
+  return (
+    <>
+      <PageHeader
+        title="รายชื่อตลาด"
+        description="แสดงรายชื่อตลาดที่อยู่ภายใต้องค์กร"
+        action={<button onClick={openCreateModal} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มตลาด</button>}
+      />
+      <div className="grid gap-6">
+        <Card>
+          <Toolbar keyword={keyword} onKeyword={setKeyword} />
+          <DataTable
+            columns={['ลำดับ', 'รหัสตลาด', 'ชื่อตลาด', 'วันเปิด', 'วันปิด', 'สถานะ']}
+            rows={rows.map((market, index) => [
+              index + 1,
+              market.code || '-',
+              market.name,
+              formatDate(market.open_date),
+              formatDate(market.close_date),
+              <StatusBadge value={market.status || 'active'} />,
+            ])}
+          />
+        </Card>
+        <Modal open={modalOpen} title="เพิ่มตลาด" onClose={() => setModalOpen(false)}>
+        <FormPanel onSubmit={submit} loading={loading} error={error}>
+          <TextInput label="รหัสตลาด" value={form.code} onChange={(value) => setForm((current) => ({ ...current, code: value }))} required />
+          <TextInput label="ชื่อตลาด" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
+          <TextInput label="คำอธิบาย" value={form.description} onChange={(value) => setForm((current) => ({ ...current, description: value }))} />
+          <FileInput label="รูปภาพหลักของตลาด" onChange={setMainImageFile} />
+          {mainImageFile ? <FileSummary file={mainImageFile} /> : null}
+          <DatePicker label="วันเปิด" value={form.openDate} onChange={(value) => setForm((current) => ({ ...current, openDate: value }))} />
+          <DatePicker label="วันปิด" value={form.closeDate} onChange={(value) => setForm((current) => ({ ...current, closeDate: value }))} />
+        </FormPanel>
+        </Modal>
+      </div>
+    </>
+  );
+}
+
+export function MarketInfoPage({ marketId, market, reloadMarkets }) {
+  const { mutate, loading, error } = useMutation();
+  const openingHours = splitOpeningHours(market?.opening_hours || '08:30-17:30');
+  const [form, setForm] = useState({
+    name: market?.name || '',
+    description: market?.description || '',
+    address: market?.address || '',
+    openingStart: openingHours.openingStart,
+    openingEnd: openingHours.openingEnd,
+    phone: market?.phone || '',
+    lineId: market?.line_id || '',
+    email: market?.email || '',
+    terms: market?.terms || '',
+  });
+  const [mainImageFile, setMainImageFile] = useState(null);
+
+  useEffect(() => {
+    const nextOpeningHours = splitOpeningHours(market?.opening_hours || '08:30-17:30');
+    setForm({
+      name: market?.name || '',
+      description: market?.description || '',
+      address: market?.address || '',
+      openingStart: nextOpeningHours.openingStart,
+      openingEnd: nextOpeningHours.openingEnd,
+      phone: market?.phone || '',
+      lineId: market?.line_id || '',
+      email: market?.email || '',
+      terms: market?.terms || '',
+    });
+    setMainImageFile(null);
+  }, [market]);
+
+  if (!marketId) return <NeedMarket />;
+
+  async function submit(event) {
+    event.preventDefault();
+    const payload = new FormData();
+    payload.append('name', form.name || '');
+    payload.append('description', form.description || '');
+    payload.append('address', form.address || '');
+    payload.append('openingHours', combineOpeningHours(form.openingStart, form.openingEnd));
+    payload.append('phone', form.phone || '');
+    payload.append('lineId', form.lineId || '');
+    payload.append('email', form.email || '');
+    payload.append('terms', form.terms || '');
+    if (mainImageFile) payload.append('mainImage', mainImageFile);
+    await mutate(`/markets/${marketId}`, payload, 'PATCH');
+    setMainImageFile(null);
+    reloadMarkets?.();
+  }
+
+  return (
+    <>
+      <PageHeader title="ข้อมูลทั่วไป" description="จัดการข้อมูลทั่วไปของตลาด" />
+      <Card>
+        <FormPanel title="ข้อมูลทั่วไป" onSubmit={submit} loading={loading} error={error}>
+          <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>ชื่อตลาด</Label><TextInputBare value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} /></div>
+          <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>คำอธิบาย</Label><TextInputBare value={form.description} onChange={(value) => setForm((current) => ({ ...current, description: value }))} /></div>
+          <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-start">
+            <Label>รูปภาพหลัก</Label>
+            <div className="space-y-3">
+              {market?.main_image_url ? <img src={market.main_image_url} alt={market.name || 'market'} className="h-56 w-full max-w-xl rounded-2xl object-cover" /> : <div className="flex h-40 max-w-xl items-center justify-center rounded-2xl bg-slate-100 text-sm font-bold text-slate-400">ยังไม่มีรูปภาพหลัก</div>}
+              <FileInput label="อัพโหลดรูปภาพหลัก" onChange={setMainImageFile} />
+              {mainImageFile ? <FileSummary file={mainImageFile} /> : null}
+            </div>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>ที่ตั้ง</Label><TextInputBare value={form.address} onChange={(value) => setForm((current) => ({ ...current, address: value }))} /></div>
+          <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center">
+            <Label>เวลาทำการ</Label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <TimePicker label="เวลาเปิด" value={form.openingStart} onChange={(value) => setForm((current) => ({ ...current, openingStart: value }))} />
+              <TimePicker label="เวลาปิด" value={form.openingEnd} onChange={(value) => setForm((current) => ({ ...current, openingEnd: value }))} />
+            </div>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>เบอร์โทร</Label><TextInputBare value={form.phone} onChange={(value) => setForm((current) => ({ ...current, phone: value }))} /></div>
+          <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>Line ID</Label><TextInputBare value={form.lineId} onChange={(value) => setForm((current) => ({ ...current, lineId: value }))} /></div>
+          <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>Email</Label><TextInputBare value={form.email} onChange={(value) => setForm((current) => ({ ...current, email: value }))} /></div>
+          <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-start"><Label>เงื่อนไขข้อตกลง</Label><RichTextEditor value={form.terms} onChange={(value) => setForm((current) => ({ ...current, terms: value }))} /></div>
+        </FormPanel>
+      </Card>
+    </>
+  );
+}
+
+export function BoothTypesPage({ marketId }) {
+  const { data = [], loading, error, reload } = useApi(marketId ? `/markets/${marketId}/booth-types` : null, { initialData: [] });
+  const { mutate, loading: saving, error: saveError } = useMutation();
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [copyModalOpen, setCopyModalOpen] = useState(false);
+  const [editingBoothType, setEditingBoothType] = useState(null);
+  const [form, setForm] = useState({ name: '', startDate: '', endDate: '', status: 'active' });
+  const [editForm, setEditForm] = useState({ name: '', startDate: '', endDate: '', status: 'active' });
+  const [copyForm, setCopyForm] = useState({ sourceBoothTypeId: '', name: '', startDate: '', endDate: '', status: 'active' });
+  const [planImageFile, setPlanImageFile] = useState(null);
+  const [editPlanImageFile, setEditPlanImageFile] = useState(null);
+  const [copyPlanImageFile, setCopyPlanImageFile] = useState(null);
+  const rows = normalizeRows(data);
+
+  if (!marketId) return <NeedMarket />;
+
+  async function submit(event) {
+    event.preventDefault();
+    const payload = new FormData();
+    payload.append('name', form.name);
+    payload.append('startDate', form.startDate);
+    payload.append('endDate', form.endDate);
+    payload.append('status', form.status);
+    if (planImageFile) payload.append('planImage', planImageFile);
+    await mutate(`/markets/${marketId}/booth-types`, payload);
+    setForm({ name: '', startDate: '', endDate: '', status: 'active' });
+    setPlanImageFile(null);
+    setModalOpen(false);
+    reload();
+  }
+
+  function openEditModal(item) {
+    setEditingBoothType(item);
+    setEditForm({
+      name: item.name || item.title || '',
+      startDate: item.start_date ? String(item.start_date).slice(0, 10) : '',
+      endDate: item.end_date ? String(item.end_date).slice(0, 10) : '',
+      status: item.status || 'active',
+    });
+    setEditPlanImageFile(null);
+    setEditModalOpen(true);
+  }
+
+  async function submitEdit(event) {
+    event.preventDefault();
+    if (!editingBoothType) return;
+    const payload = new FormData();
+    payload.append('name', editForm.name);
+    payload.append('startDate', editForm.startDate);
+    payload.append('endDate', editForm.endDate);
+    payload.append('status', editForm.status);
+    if (editPlanImageFile) payload.append('planImage', editPlanImageFile);
+    await mutate(`/markets/${marketId}/booth-types/${editingBoothType.id}`, payload, 'PATCH');
+    setEditModalOpen(false);
+    setEditingBoothType(null);
+    setEditPlanImageFile(null);
+    reload();
+  }
+
+  function openCopyModal() {
+    const source = rows[0];
+    setCopyForm({
+      sourceBoothTypeId: source?.id ? String(source.id) : '',
+      name: '',
+      startDate: source?.start_date ? String(source.start_date).slice(0, 10) : '',
+      endDate: source?.end_date ? String(source.end_date).slice(0, 10) : '',
+      status: 'active',
+    });
+    setCopyPlanImageFile(null);
+    setCopyModalOpen(true);
+  }
+
+  async function submitCopy(event) {
+    event.preventDefault();
+    const payload = new FormData();
+    payload.append('sourceBoothTypeId', copyForm.sourceBoothTypeId);
+    payload.append('name', copyForm.name);
+    payload.append('startDate', copyForm.startDate);
+    payload.append('endDate', copyForm.endDate);
+    payload.append('status', copyForm.status);
+    if (copyPlanImageFile) payload.append('planImage', copyPlanImageFile);
+    await mutate(`/markets/${marketId}/booth-types/copy`, payload);
+    setCopyModalOpen(false);
+    setCopyPlanImageFile(null);
+    reload();
+  }
+
+  return (
+    <>
+      <PageHeader title="แผนผังบูธ" description="จัดการรูปแบบแผนผังบูธและช่วงวันที่เปิดใช้งาน" action={<div className="flex gap-2"><OutlineButton onClick={openCopyModal}>Copy Booth</OutlineButton><button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มแผนผังบูธ</button></div>} />
+      <div className="grid gap-6">
+        <Card>
+          <ErrorNotice error={error} hint="ถ้ายังไม่มี endpoint นี้ ให้เพิ่ม backend endpoint /markets/:marketId/booth-types" />
+          {loading ? <LoadingBlock /> : (
+            <DataTable
+              columns={['ลำดับ', 'ผังภาพรวม', 'ชื่อแบบ', 'เริ่มต้น', 'สิ้นสุด', 'สถานะ', 'จัดการ']}
+              rows={rows.map((item, index) => [
+                index + 1,
+                item.plan_image_url ? <img src={item.plan_image_url} className="h-16 w-24 rounded-xl object-cover" /> : <div className="flex h-16 w-24 items-center justify-center rounded-xl bg-slate-100 text-xs font-bold text-slate-400">ไม่มีผัง</div>,
+                item.name || item.title,
+                formatDate(item.start_date),
+                formatDate(item.end_date),
+                <StatusBadge value={item.status || 'active'} />,
+                <div className="flex gap-2"><SmallButton tone="amber" onClick={() => openEditModal(item)}>แก้ไขข้อมูล</SmallButton></div>,
+              ])}
+            />
+          )}
+        </Card>
+        <Modal open={modalOpen} title="เพิ่มแผนผังบูธ" onClose={() => setModalOpen(false)}>
+        <FormPanel onSubmit={submit} loading={saving} error={saveError}>
+          <TextInput label="ชื่อแผนผังบูธ" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
+          <FileInput label="แผนผังภาพรวมของตลาด" onChange={setPlanImageFile} />
+          {planImageFile ? <FileSummary file={planImageFile} /> : null}
+          <DatePicker label="วันที่เริ่มต้น" value={form.startDate} onChange={(value) => setForm((current) => ({ ...current, startDate: value }))} />
+          <DatePicker label="วันที่สิ้นสุด" value={form.endDate} onChange={(value) => setForm((current) => ({ ...current, endDate: value }))} />
+          <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['inactive', 'ระงับการใช้']]} />
+        </FormPanel>
+        </Modal>
+        <Modal open={editModalOpen} title="แก้ไขแผนผังบูธ" onClose={() => setEditModalOpen(false)}>
+        <FormPanel onSubmit={submitEdit} loading={saving} error={saveError}>
+          <TextInput label="ชื่อแผนผังบูธ" value={editForm.name} onChange={(value) => setEditForm((current) => ({ ...current, name: value }))} required />
+          {editingBoothType?.plan_image_url ? <img src={editingBoothType.plan_image_url} className="h-48 w-full rounded-2xl object-cover" /> : null}
+          <FileInput label="แผนผังภาพรวมของตลาด" onChange={setEditPlanImageFile} />
+          {editPlanImageFile ? <FileSummary file={editPlanImageFile} /> : null}
+          <DatePicker label="วันที่เริ่มต้น" value={editForm.startDate} onChange={(value) => setEditForm((current) => ({ ...current, startDate: value }))} />
+          <DatePicker label="วันที่สิ้นสุด" value={editForm.endDate} onChange={(value) => setEditForm((current) => ({ ...current, endDate: value }))} />
+          <SelectInput label="สถานะ" value={editForm.status} onChange={(value) => setEditForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['inactive', 'ระงับการใช้']]} />
+        </FormPanel>
+        </Modal>
+        <Modal open={copyModalOpen} title="Copy Booth" onClose={() => setCopyModalOpen(false)}>
+        <FormPanel onSubmit={submitCopy} loading={saving} error={saveError}>
+          <SelectInput label="แผนผังบูธต้นแบบ" value={copyForm.sourceBoothTypeId} onChange={(value) => setCopyForm((current) => ({ ...current, sourceBoothTypeId: value }))} options={rows.map((item) => [String(item.id), item.name || item.title])} />
+          <TextInput label="ชื่อแผนผังบูธใหม่" value={copyForm.name} onChange={(value) => setCopyForm((current) => ({ ...current, name: value }))} required />
+          <FileInput label="รูปภาพแผนผัง" onChange={setCopyPlanImageFile} />
+          {copyPlanImageFile ? <FileSummary file={copyPlanImageFile} /> : null}
+          <DatePicker label="วันที่เริ่มต้น" value={copyForm.startDate} onChange={(value) => setCopyForm((current) => ({ ...current, startDate: value }))} required />
+          <DatePicker label="วันที่สิ้นสุด" value={copyForm.endDate} onChange={(value) => setCopyForm((current) => ({ ...current, endDate: value }))} required />
+          <SelectInput label="สถานะการเปิดใช้งาน" value={copyForm.status} onChange={(value) => setCopyForm((current) => ({ ...current, status: value }))} options={[['active', 'เปิดใช้งาน'], ['inactive', 'ปิดใช้งาน']]} />
+        </FormPanel>
+        </Modal>
+      </div>
+    </>
+  );
+}
+
+export function BoothsPage({ marketId }) {
+  const { token } = useAuth();
+  const { data = [], loading, error, reload } = useApi(marketId ? `/markets/${marketId}/booths` : null, { initialData: [] });
+  const { data: categories = [] } = useApi(marketId ? `/markets/${marketId}/categories` : null, { initialData: [] });
+  const { data: boothTypes = [] } = useApi(marketId ? `/markets/${marketId}/booth-types` : null, { initialData: [] });
+  const { mutate, loading: saving, error: saveError } = useMutation();
+  const rows = normalizeRows(data);
+  const categoryRows = normalizeRows(categories);
+  const typeRows = normalizeRows(boothTypes);
+  const [selectedType, setSelectedType] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState({ floorPlanId: '', categoryId: '', code: '', name: '', price: '500', sortOrder: '0', status: 'active' });
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editForm, setEditForm] = useState({ id: '', floorPlanId: '', categoryId: '', code: '', name: '', price: '500', sortOrder: '0', status: 'active' });
+
+  useEffect(() => {
+    if (!selectedType && typeRows[0]?.id) {
+      setSelectedType(String(typeRows[0].id));
+    }
+  }, [selectedType, typeRows]);
+
+  const filteredRows = rows.filter((booth) => {
+    if (!selectedType) return false;
+    if (String(booth.floor_plan_id || booth.floorPlanId || '') !== String(selectedType)) return false;
+    if (selectedCategory === 'all') return true;
+    return String(booth.category_id || booth.categoryId || '') === String(selectedCategory);
+  });
+
+  if (!marketId) return <NeedMarket />;
+
+  async function openCreateModal() {
+    setForm({
+      floorPlanId: selectedType || '',
+      categoryId: String(categoryRows[0]?.id || ''),
+      code: '',
+      name: '',
+      price: '500',
+      sortOrder: '0',
+      status: 'active',
+    });
+    setModalOpen(true);
+    try {
+      const payload = await request(`/markets/${marketId}/booths/next-code`, { token });
+      setForm((current) => ({ ...current, code: payload.data?.code || '' }));
+    } catch {}
+  }
+
+  function openEditModal(booth) {
+    setEditForm({
+      id: booth.id,
+      floorPlanId: String(booth.floor_plan_id || booth.floorPlanId || ''),
+      categoryId: String(booth.category_id || booth.categoryId || ''),
+      code: booth.code || '',
+      name: booth.name || '',
+      price: String(booth.price ?? '0'),
+      sortOrder: String(booth.sort_order ?? booth.sortOrder ?? '0'),
+      status: booth.status || 'active',
+    });
+    setEditModalOpen(true);
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    await mutate(`/markets/${marketId}/booths`, {
+      ...form,
+      floorPlanId: Number(form.floorPlanId || typeRows[0]?.id) || null,
+      categoryId: Number(form.categoryId || categoryRows[0]?.id) || null,
+      price: Number(form.price),
+      sortOrder: Number(form.sortOrder),
+    });
+    setForm({ floorPlanId: selectedType || '', categoryId: '', code: '', name: '', price: '500', sortOrder: '0', status: 'active' });
+    setModalOpen(false);
+    reload();
+  }
+
+  async function submitEdit(event) {
+    event.preventDefault();
+    await mutate(`/markets/${marketId}/booths/${editForm.id}`, {
+      floorPlanId: Number(editForm.floorPlanId || typeRows[0]?.id) || null,
+      categoryId: Number(editForm.categoryId || categoryRows[0]?.id) || null,
+      code: editForm.code,
+      name: editForm.name,
+      price: Number(editForm.price),
+      sortOrder: Number(editForm.sortOrder),
+      status: editForm.status,
+    }, 'PATCH');
+    setEditModalOpen(false);
+    reload();
+  }
+
+  return (
+    <>
+      <PageHeader title="จัดการบูธ" description="เลือกแผนผังบูธก่อน แล้วกรองตามประเภทสินค้าที่ผูกกับบูธ" action={<button onClick={openCreateModal} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มบูธ</button>} />
+      <Card>
+        <ErrorNotice error={error} hint="ตรวจสอบ endpoint /markets/:marketId/booths และความสัมพันธ์ booths.category_id -> product_categories.id" />
+        <div className="mb-8 grid gap-4 xl:grid-cols-[1fr_1.2fr]">
+          <select value={selectedType} onChange={(event) => setSelectedType(event.target.value)} className="h-12 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-cyan-600">
+            <option value="">กรุณาเลือกแผนผังบูธ</option>
+            {typeRows.map((item) => (
+              <option key={item.id} value={item.id}>{item.name}</option>
+            ))}
+          </select>
+          <div className="flex flex-wrap gap-2 xl:justify-end">
+            <FilterPill active={selectedCategory === 'all'} onClick={() => setSelectedCategory('all')}>ทั้งหมด</FilterPill>
+            {categoryRows.map((category) => (
+              <FilterPill key={category.id} active={String(selectedCategory) === String(category.id)} onClick={() => setSelectedCategory(String(category.id))}>
+                {category.name}
+              </FilterPill>
+            ))}
+          </div>
+        </div>
+        {!selectedType ? (
+          <EmptyState title="ยังไม่ได้เลือกแผนผังบูธ" description="เลือกแผนผังบูธจากรายการด้านซ้ายก่อน เพื่อแสดงผังและรายการบูธ" />
+        ) : loading ? <LoadingBlock /> : filteredRows.length ? (
+          <div className="flex flex-wrap gap-5">
+            {filteredRows.map((booth) => (
+              <BoothBox
+                key={booth.id || booth.code || booth.name}
+                danger={booth.status !== 'active'}
+                label={booth.code || booth.name || booth.id}
+                subLabel={booth.category_name || 'ยังไม่ระบุ'}
+                onClick={() => openEditModal(booth)}
+              />
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="ไม่พบบูธตามเงื่อนไข" description="แผนผังบูธนี้ยังไม่มีบูธ หรือไม่มีบูธในประเภทที่เลือก" />
+        )}
+      </Card>
+      <Modal open={modalOpen} title="เพิ่มบูธ" onClose={() => setModalOpen(false)}>
+        <FormPanel onSubmit={submit} loading={saving} error={saveError}>
+          <SelectInput label="แผนผังบูธ" value={form.floorPlanId || selectedType || typeRows[0]?.id || ''} onChange={(value) => setForm((current) => ({ ...current, floorPlanId: value }))} options={typeRows.map((item) => [String(item.id), item.name])} />
+          <SelectInput label="ประเภทสินค้า" value={form.categoryId || categoryRows[0]?.id || ''} onChange={(value) => setForm((current) => ({ ...current, categoryId: value }))} options={categoryRows.map((item) => [String(item.id), item.name])} />
+          <TextInput label="รหัสบูธ" value={form.code} onChange={(value) => setForm((current) => ({ ...current, code: value }))} required />
+          <TextInput label="ชื่อบูธ" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
+          <TextInput label="ราคา" type="number" value={form.price} onChange={(value) => setForm((current) => ({ ...current, price: value }))} />
+          <TextInput label="ลำดับ" type="number" value={form.sortOrder} onChange={(value) => setForm((current) => ({ ...current, sortOrder: value }))} />
+          <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['inactive', 'ปิดการใช้งาน'], ['maintenance', 'ซ่อมบำรุง']]} />
+        </FormPanel>
+      </Modal>
+      <Modal open={editModalOpen} title="แก้ไขบูธ" onClose={() => setEditModalOpen(false)}>
+        <FormPanel onSubmit={submitEdit} loading={saving} error={saveError}>
+          <SelectInput label="แผนผังบูธ" value={editForm.floorPlanId || ''} onChange={(value) => setEditForm((current) => ({ ...current, floorPlanId: value }))} options={typeRows.map((item) => [String(item.id), item.name])} />
+          <SelectInput label="ประเภทสินค้า" value={editForm.categoryId || ''} onChange={(value) => setEditForm((current) => ({ ...current, categoryId: value }))} options={categoryRows.map((item) => [String(item.id), item.name])} />
+          <TextInput label="รหัสบูธ" value={editForm.code} onChange={(value) => setEditForm((current) => ({ ...current, code: value }))} required />
+          <TextInput label="ชื่อบูธ" value={editForm.name} onChange={(value) => setEditForm((current) => ({ ...current, name: value }))} required />
+          <TextInput label="ราคา" type="number" value={editForm.price} onChange={(value) => setEditForm((current) => ({ ...current, price: value }))} />
+          <TextInput label="ลำดับ" type="number" value={editForm.sortOrder} onChange={(value) => setEditForm((current) => ({ ...current, sortOrder: value }))} />
+          <SelectInput label="สถานะ" value={editForm.status} onChange={(value) => setEditForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['inactive', 'ปิดการใช้งาน'], ['maintenance', 'ซ่อมบำรุง']]} />
+        </FormPanel>
+      </Modal>
+    </>
+  );
+}
+
+
+export function HolidayCalendarPage({ marketId }) {
+  const { data = [], loading, error, reload } = useApi(marketId ? `/markets/${marketId}/holidays` : null, { initialData: [] });
+  const { mutate, loading: saving, error: saveError } = useMutation();
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState({ title: '', startDate: '', endDate: '' });
+  const rows = normalizeRows(data);
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  const first = new Date(year, month, 1);
+  const days = new Date(year, month + 1, 0).getDate();
+  const monthStartTime = Date.UTC(year, month, 1);
+  const monthEndTime = Date.UTC(year, month, days);
+  const holidaysByDate = rows
+    .filter((holiday) => (holiday.status || 'active') === 'active')
+    .reduce((current, holiday) => {
+      const startKey = dateKeyFromValue(holiday.start_date || holiday.startDate);
+      const endKey = dateKeyFromValue(holiday.end_date || holiday.endDate || holiday.start_date || holiday.startDate);
+      const startTime = Math.max(utcTimeFromDateKey(startKey), monthStartTime);
+      const endTime = Math.min(utcTimeFromDateKey(endKey), monthEndTime);
+      if (Number.isNaN(startTime) || Number.isNaN(endTime) || startTime > endTime) return current;
+
+      for (let time = startTime; time <= endTime; time += 86400000) {
+        const key = dateKeyFromUtcTime(time);
+        current[key] = [...(current[key] || []), holiday];
+      }
+      return current;
+    }, {});
+  const cells = [];
+  for (let i = 0; i < first.getDay(); i += 1) cells.push(null);
+  for (let day = 1; day <= days; day += 1) cells.push(day);
+
+  if (!marketId) return <NeedMarket />;
+
+  async function submit(event) {
+    event.preventDefault();
+    await mutate(`/markets/${marketId}/holidays`, form);
+    setForm({ title: '', startDate: '', endDate: '' });
+    setModalOpen(false);
+    reload();
+  }
+
+  return (
+    <>
+      <PageHeader
+        title="ปฏิทินวันหยุดตลาด"
+        description="ภาพรวมวันหยุดตลาดทั้งหมดและเพิ่มวันหยุดจากหน้าปฏิทิน"
+        action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มวันหยุด</button>}
+      />
+      <Card>
+        <ErrorNotice error={error} hint="ถ้า endpoint วันหยุดยังไม่พร้อม ปฏิทินจะแสดงเฉพาะโครง UI ก่อน" />
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-xl font-extrabold">{new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(today)}</h2>
+          <span className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-bold text-slate-600">Month view</span>
+        </div>
+        {loading ? (
+          <LoadingBlock />
+        ) : (
+          <div className="grid grid-cols-7 overflow-hidden rounded-2xl border border-slate-200">
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((item) => <div key={item} className="border-b border-slate-200 bg-slate-50 py-3 text-center text-sm font-bold">{item}</div>)}
+            {cells.map((day, index) => {
+              const dateKey = day ? `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}` : '';
+              const dayHolidays = holidaysByDate[dateKey] || [];
+              return (
+                <div key={`${day}-${index}`} className={classNames('min-h-28 border-b border-r border-slate-200 p-2 text-right text-sm', day === today.getDate() ? 'bg-amber-50' : 'bg-white')}>
+                  <span className={day ? 'text-slate-700' : 'text-slate-300'}>{day || ''}</span>
+                  {dayHolidays.slice(0, 3).map((holiday) => (
+                    <div key={`${holiday.id}-${dateKey}`} title={holiday.title || holiday.name || 'วันหยุดตลาด'} className="mt-2 truncate rounded bg-green-700 px-2 py-1 text-left text-xs font-bold text-white">
+                      {holiday.title || holiday.name || 'วันหยุดตลาด'}
+                    </div>
+                  ))}
+                  {dayHolidays.length > 3 ? <div className="mt-1 text-left text-xs font-bold text-green-700">+{dayHolidays.length - 3} รายการ</div> : null}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+      <Modal open={modalOpen} title="เพิ่มวันหยุด" onClose={() => setModalOpen(false)}>
+        <FormPanel onSubmit={submit} loading={saving} error={saveError}>
+          <TextInput label="ชื่อวันหยุด" value={form.title} onChange={(value) => setForm((current) => ({ ...current, title: value }))} required />
+          <DatePicker label="วันที่เริ่ม" value={form.startDate} onChange={(value) => setForm((current) => ({ ...current, startDate: value }))} required />
+          <DatePicker label="วันที่สิ้นสุด" value={form.endDate} onChange={(value) => setForm((current) => ({ ...current, endDate: value }))} required />
+        </FormPanel>
+      </Modal>
+    </>
+  );
+}
+
+export function MarketImagesPage({ marketId }) {
+  const { data = [], loading, error, reload } = useApi(marketId ? `/markets/${marketId}/images` : null, { initialData: [] });
+  const { mutate, loading: saving, error: saveError } = useMutation();
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingImage, setEditingImage] = useState(null);
+  const [form, setForm] = useState({ title: '', sortOrder: '0', status: 'active' });
+  const [editForm, setEditForm] = useState({ title: '', sortOrder: '0', status: 'active' });
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [selectedEditFile, setSelectedEditFile] = useState(null);
+  const [previewImage, setPreviewImage] = useState(null);
+  const [uploadError, setUploadError] = useState('');
+  const rows = normalizeRows(data);
+
+  if (!marketId) return <NeedMarket />;
+
+  function openCreateModal() {
+    setForm({ title: '', sortOrder: '0', status: 'active' });
+    setSelectedFiles([]);
+    setUploadError('');
+    setModalOpen(true);
+  }
+
+  function openEditModal(item) {
+    setEditingImage(item);
+    setEditForm({
+      title: item.title || '',
+      sortOrder: String(item.sort_order ?? item.sortOrder ?? 0),
+      status: item.status || 'active',
+    });
+    setSelectedEditFile(null);
+    setUploadError('');
+    setEditModalOpen(true);
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!selectedFiles.length) {
+      setUploadError('กรุณาเลือกรูปภาพอย่างน้อย 1 รูป');
+      return;
+    }
+    setUploadError('');
+    const payload = new FormData();
+    payload.append('title', form.title);
+    payload.append('sortOrder', form.sortOrder);
+    payload.append('status', form.status);
+    selectedFiles.forEach((file) => payload.append('images', file));
+    await mutate(`/markets/${marketId}/images`, payload);
+    setForm({ title: '', sortOrder: '0', status: 'active' });
+    setSelectedFiles([]);
+    setModalOpen(false);
+    reload();
+  }
+
+  async function submitEdit(event) {
+    event.preventDefault();
+    if (!editingImage) return;
+    setUploadError('');
+    const payload = new FormData();
+    payload.append('title', editForm.title);
+    payload.append('sortOrder', editForm.sortOrder);
+    payload.append('status', editForm.status);
+    if (selectedEditFile) payload.append('image', selectedEditFile);
+    await mutate(`/markets/${marketId}/images/${editingImage.id}`, payload, 'PATCH');
+    setEditingImage(null);
+    setSelectedEditFile(null);
+    setEditModalOpen(false);
+    reload();
+  }
+
+  async function toggleStatus(item) {
+    const payload = new FormData();
+    payload.append('title', item.title || '');
+    payload.append('sortOrder', String(item.sort_order ?? item.sortOrder ?? 0));
+    payload.append('status', item.status === 'active' ? 'inactive' : 'active');
+    await mutate(`/markets/${marketId}/images/${item.id}`, payload, 'PATCH');
+    reload();
+  }
+
+  return (
+    <>
+      <PageHeader title="จัดการรูปภาพตลาด" description="ข้อมูลรูปภาพทั้งหมดของตลาดนี้" action={<button onClick={openCreateModal} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มรูปภาพ</button>} />
+      <Card>
+        <ErrorNotice error={error} hint="ตรวจสอบ endpoint /markets/:marketId/images และสิทธิ์การเข้าถึงตลาด" />
+        {loading ? <LoadingBlock /> : (
+          rows.length ? (
+            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+              {rows.map((item) => (
+                <div key={item.id} className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+                  <div className="relative h-64 bg-slate-100">
+                    <img src={item.image_url} alt={item.title || 'market'} className="h-full w-full object-cover" />
+                    <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-slate-950/60 to-transparent p-5 text-white">
+                      <p className="text-lg font-bold">สถานะ : <span className="text-emerald-300">{item.status || 'เปิดใช้งาน'}</span></p>
+                      {item.title ? <p className="mt-1 truncate text-sm text-white/80">{item.title}</p> : null}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 p-4">
+                    <SmallButton tone="slate" onClick={() => setPreviewImage(item)}><Eye size={14} /> ดู</SmallButton>
+                    <SmallButton tone="amber" onClick={() => openEditModal(item)}>แก้ไข</SmallButton>
+                    <SmallButton tone="cyan" onClick={() => toggleStatus(item)}>{item.status === 'active' ? 'ปิดใช้งาน' : 'เปิดใช้งาน'}</SmallButton>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : <EmptyState title="ยังไม่มีรูปภาพตลาด" description="อัพโหลดรูปภาพตลาดเพื่อแสดงในแอปและหน้าจัดการ" />
+        )}
+      </Card>
+      <Modal open={modalOpen} title="เพิ่มรูปภาพตลาด" onClose={() => setModalOpen(false)}>
+        <FormPanel onSubmit={submit} loading={saving} error={uploadError || saveError}>
+          <TextInput label="ชื่อรูปภาพ" value={form.title} onChange={(value) => setForm((current) => ({ ...current, title: value }))} />
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-bold text-slate-600">รูปภาพ</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              multiple
+              onChange={(event) => {
+                setSelectedFiles(Array.from(event.target.files || []));
+                setUploadError('');
+              }}
+              className="block w-full rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-cyan-50 file:px-3 file:py-2 file:text-sm file:font-bold file:text-cyan-700 hover:border-cyan-400"
+            />
+          </label>
+          {selectedFiles.length ? (
+            <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              <p className="font-bold text-slate-700">เลือกแล้ว {selectedFiles.length} รูป</p>
+              <p className="mt-1 truncate">{selectedFiles.map((file) => file.name).join(', ')}</p>
+            </div>
+          ) : null}
+          <TextInput label="ลำดับ" type="number" value={form.sortOrder} onChange={(value) => setForm((current) => ({ ...current, sortOrder: value }))} />
+          <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'เปิดใช้งาน'], ['inactive', 'ปิดการใช้งาน']]} />
+        </FormPanel>
+      </Modal>
+      <Modal open={editModalOpen} title="แก้ไขรูปภาพตลาด" onClose={() => setEditModalOpen(false)}>
+        <FormPanel onSubmit={submitEdit} loading={saving} error={uploadError || saveError}>
+          <TextInput label="ชื่อรูปภาพ" value={editForm.title} onChange={(value) => setEditForm((current) => ({ ...current, title: value }))} />
+          {editingImage?.image_url ? <img src={editingImage.image_url} alt={editingImage.title || 'market'} className="h-48 w-full rounded-2xl object-cover" /> : null}
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-bold text-slate-600">อัพโหลดรูปภาพใหม่</span>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={(event) => setSelectedEditFile(event.target.files?.[0] || null)}
+              className="block w-full rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-cyan-50 file:px-3 file:py-2 file:text-sm file:font-bold file:text-cyan-700 hover:border-cyan-400"
+            />
+          </label>
+          {selectedEditFile ? <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">เลือกแล้ว {selectedEditFile.name}</div> : null}
+          <TextInput label="ลำดับ" type="number" value={editForm.sortOrder} onChange={(value) => setEditForm((current) => ({ ...current, sortOrder: value }))} />
+          <SelectInput label="สถานะ" value={editForm.status} onChange={(value) => setEditForm((current) => ({ ...current, status: value }))} options={[['active', 'เปิดใช้งาน'], ['inactive', 'ปิดการใช้งาน']]} />
+        </FormPanel>
+      </Modal>
+      <ImageLightbox image={previewImage} onClose={() => setPreviewImage(null)} />
+    </>
+  );
+}
+
+function ImageLightbox({ image, onClose }) {
+  if (!image?.image_url) return null;
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/80 px-4 py-6" onClick={onClose}>
+      <div className="relative max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-3xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <div className="min-w-0">
+            <h2 className="truncate text-lg font-extrabold text-slate-950">{image.title || 'ตัวอย่างรูปภาพตลาด'}</h2>
+            <p className="mt-1 text-xs text-slate-500">Preview</p>
+          </div>
+          <button data-subscription-ignore="true" type="button" onClick={onClose} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100">
+            <X size={22} />
+          </button>
+        </div>
+        <div className="max-h-[calc(92vh-76px)] overflow-auto bg-slate-950 p-4">
+          <img src={image.image_url} alt={image.title || 'market'} className="mx-auto max-h-[calc(92vh-108px)] w-auto max-w-full rounded-2xl object-contain" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function AccessoriesPage({ marketId }) {
+  const { data = [], loading, error, reload } = useApi(marketId ? `/markets/${marketId}/accessories` : null, { initialData: [] });
+  const { mutate, loading: saving, error: saveError } = useMutation();
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState({ name: '', price: '100', quantity: '1', status: 'active' });
+  const [imageFile, setImageFile] = useState(null);
+  const rows = normalizeRows(data);
+
+  if (!marketId) return <NeedMarket />;
+
+  async function submit(event) {
+    event.preventDefault();
+    const payload = new FormData();
+    payload.append('name', form.name);
+    payload.append('price', form.price);
+    payload.append('quantity', form.quantity);
+    payload.append('status', form.status);
+    if (imageFile) payload.append('image', imageFile);
+    await mutate(`/markets/${marketId}/accessories`, payload);
+    setForm({ name: '', price: '100', quantity: '1', status: 'active' });
+    setImageFile(null);
+    setModalOpen(false);
+    reload();
+  }
+
+  return (
+    <>
+      <PageHeader title="บริการเสริม" description="แสดงรายการบริการเสริมของแต่ละตลาด" action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มบริการ</button>} />
+      <div className="grid gap-6">
+        <Card>
+          <ErrorNotice error={error} hint="ถ้ายังไม่มี endpoint นี้ ให้เพิ่ม backend endpoint /markets/:marketId/accessories" />
+          {loading ? <LoadingBlock /> : (
+            <DataTable
+              columns={['ลำดับที่', 'ชื่อบริการ', 'รูปภาพ', 'ราคา', 'จำนวน', 'สถานะ', 'จัดการ']}
+              rows={rows.map((item, index) => [index + 1, item.name, item.image_url ? <img src={item.image_url} className="h-20 w-20 rounded-xl object-cover" /> : <div className="flex h-20 w-20 items-center justify-center rounded-xl bg-slate-100"><Image size={24} /></div>, formatMoney(item.price), item.quantity || 1, <StatusBadge value={item.status || 'active'} />, <SmallButton tone="red">ปิดการใช้งาน</SmallButton>])}
+            />
+          )}
+        </Card>
+        <Modal open={modalOpen} title="เพิ่มบริการเสริม" onClose={() => setModalOpen(false)}>
+        <FormPanel onSubmit={submit} loading={saving} error={saveError}>
+          <TextInput label="ชื่อบริการ" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
+          <FileInput label="รูปภาพบริการเสริม" onChange={setImageFile} />
+          {imageFile ? <FileSummary file={imageFile} /> : null}
+          <TextInput label="ราคา" type="number" value={form.price} onChange={(value) => setForm((current) => ({ ...current, price: value }))} required />
+          <TextInput label="จำนวน" type="number" value={form.quantity} onChange={(value) => setForm((current) => ({ ...current, quantity: value }))} required />
+          <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['inactive', 'ปิดการใช้งาน']]} />
+        </FormPanel>
+        </Modal>
+      </div>
+    </>
+  );
+}
