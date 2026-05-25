@@ -47,7 +47,9 @@ import { menu } from './app/navigation.jsx';
 import { Card } from './components/Card.jsx';
 import { DataTable } from './components/DataTable.jsx';
 import { EmptyState } from './components/EmptyState.jsx';
+import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import { LoadingBlock } from './components/LoadingBlock.jsx';
+import { PageLoadingFallback } from './components/PageLoadingFallback.jsx';
 import { PageHeader } from './components/PageHeader.jsx';
 import { SectionTitle } from './components/SectionTitle.jsx';
 import { Stat } from './components/Stat.jsx';
@@ -541,59 +543,61 @@ function Shell() {
             className={classNames('px-4 py-6 sm:px-6 lg:px-8', subscriptionContextValue.actionBlocked ? 'subscription-locked' : '')}
           >
             <SubscriptionNotice message={subscriptionNotice || subscriptionContextValue.blockedMessage} onDismiss={() => setSubscriptionNotice('')} persistent={subscriptionContextValue.actionBlocked} />
-            <Suspense fallback={<LoadingBlock />}>
-            <Routes>
-              <Route path="/" element={<DashboardComponent marketId={currentMarketId} markets={marketRows} />} />
-              <Route path="/markets" element={<MarketsPage markets={marketRows} reloadMarkets={reloadMarkets} />} />
-              <Route path="/market-info" element={<MarketInfoPage marketId={currentMarketId} market={currentMarket} reloadMarkets={reloadMarkets} />} />
-              <Route path="/booth-types" element={<BoothTypesPage marketId={currentMarketId} />} />
-              <Route path="/booths" element={<BoothsPage marketId={currentMarketId} />} />
-              <Route path="/holidays" element={<Navigate to="/holiday-calendar" replace />} />
-              <Route path="/holiday-calendar" element={<HolidayCalendarPage marketId={currentMarketId} />} />
-              <Route path="/market-images" element={<MarketImagesPage marketId={currentMarketId} />} />
-              <Route path="/accessories" element={<AccessoriesPage marketId={currentMarketId} />} />
-              <Route path="/product-categories" element={<ProductCategoriesPage marketId={currentMarketId} />} />
-              <Route path="/product-groups" element={<ProductGroupsPage marketId={currentMarketId} />} />
-              <Route path="/products" element={<ProductsPage marketId={currentMarketId} />} />
-              <Route path="/coupons" element={<CouponsPage marketId={currentMarketId} />} />
-              <Route path="/coupon-assignments" element={<CouponsPage marketId={currentMarketId} mode="assignments" />} />
-              <Route path="/bookings" element={<BookingsPage marketId={currentMarketId} />} />
-              <Route path="/booking-edit" element={<BookingsPage marketId={currentMarketId} mode="edit" />} />
-              <Route path="/booking-edits" element={<BookingsPage marketId={currentMarketId} mode="history" />} />
-              <Route path="/booking-payment-proofs" element={<PaymentProofReviewPage />} />
-              <Route path="/reports" element={<ReportsPage />} />
-              <Route path="/report-booths" element={<ReportsPage reportType="booths" />} />
-              <Route path="/report-payments" element={<AccountingPage paidOnly />} />
-              <Route path="/report-daily" element={<ReportsPage reportType="daily" />} />
-              <Route path="/report-person" element={<ReportsPage reportType="person" />} />
-              <Route path="/audit" element={<AuditPage marketId={currentMarketId} />} />
-              <Route path="/audit-fines" element={<AuditPage marketId={currentMarketId} mode="fines" />} />
-              <Route path="/audit-fines-paid" element={<AuditPage marketId={currentMarketId} mode="paid" />} />
-              <Route path="/audit-defective" element={<AuditPage marketId={currentMarketId} mode="defective" />} />
-              <Route path="/announcements/news" element={<AnnouncementsPage type="news" />} />
-              <Route path="/tenant-types" element={<TenantTypesPage />} />
-              <Route path="/tenants" element={<TenantsPage />} />
-              <Route path="/tenants/pending" element={<TenantsPage status="pending" />} />
-              <Route path="/accounting" element={<AccountingAllReportPage />} />
-              <Route path="/accounting-payment-proofs" element={<Navigate to="/booking-payment-proofs" replace />} />
-              <Route path="/accounting-bookings" element={<ReportsPage reportType="accounting-bookings" />} />
-              <Route path="/accounting-payments" element={<AccountingPage />} />
-              <Route path="/accounting-summary" element={<AccountingSalesSummaryPage />} />
-              <Route path="/accounting-sap" element={<ReportsPage reportType="sap" />} />
-              <Route path="/accounting-documents" element={<AccountingStandardReportPage reportType="documents" />} />
-              <Route path="/accounting-tax-sales" element={<AccountingStandardReportPage reportType="tax-sales" />} />
-              <Route path="/accounting-receivables" element={<AccountingStandardReportPage reportType="receivables" />} />
-              <Route path="/accounting-reconciliation" element={<AccountingStandardReportPage reportType="reconciliation" />} />
-              <Route path="/accounting-refunds" element={<AccountingStandardReportPage reportType="refunds" />} />
-              <Route path="/accounting-product-types" element={<ReportsPage reportType="product-types" />} />
-              <Route path="/organization-settings" element={<OrganizationSettingsPage />} />
-              <Route path="/pdpa" element={<PdpaPage />} />
-              <Route path="/admins" element={<AdminsPage marketId={currentMarketId} />} />
-              <Route path="/support" element={<Navigate to="/support/tickets" replace />} />
-              <Route path="/support/tickets" element={<SupportPage mode="ticket" />} />
-              <Route path="/support/chat" element={<SupportPage mode="chat" />} />
-            </Routes>
-            </Suspense>
+            <ErrorBoundary name="management-routes" resetKey={location.pathname} title="ไม่สามารถแสดงผลเมนูนี้ได้">
+              <Suspense fallback={<PageLoadingFallback />}>
+                <Routes>
+                  <Route path="/" element={<DashboardComponent marketId={currentMarketId} markets={marketRows} />} />
+                  <Route path="/markets" element={<MarketsPage markets={marketRows} reloadMarkets={reloadMarkets} />} />
+                  <Route path="/market-info" element={<MarketInfoPage marketId={currentMarketId} market={currentMarket} reloadMarkets={reloadMarkets} />} />
+                  <Route path="/booth-types" element={<BoothTypesPage marketId={currentMarketId} />} />
+                  <Route path="/booths" element={<BoothsPage marketId={currentMarketId} />} />
+                  <Route path="/holidays" element={<Navigate to="/holiday-calendar" replace />} />
+                  <Route path="/holiday-calendar" element={<HolidayCalendarPage marketId={currentMarketId} />} />
+                  <Route path="/market-images" element={<MarketImagesPage marketId={currentMarketId} />} />
+                  <Route path="/accessories" element={<AccessoriesPage marketId={currentMarketId} />} />
+                  <Route path="/product-categories" element={<ProductCategoriesPage marketId={currentMarketId} />} />
+                  <Route path="/product-groups" element={<ProductGroupsPage marketId={currentMarketId} />} />
+                  <Route path="/products" element={<ProductsPage marketId={currentMarketId} />} />
+                  <Route path="/coupons" element={<CouponsPage marketId={currentMarketId} />} />
+                  <Route path="/coupon-assignments" element={<CouponsPage marketId={currentMarketId} mode="assignments" />} />
+                  <Route path="/bookings" element={<BookingsPage marketId={currentMarketId} />} />
+                  <Route path="/booking-edit" element={<BookingsPage marketId={currentMarketId} mode="edit" />} />
+                  <Route path="/booking-edits" element={<BookingsPage marketId={currentMarketId} mode="history" />} />
+                  <Route path="/booking-payment-proofs" element={<PaymentProofReviewPage />} />
+                  <Route path="/reports" element={<ReportsPage />} />
+                  <Route path="/report-booths" element={<ReportsPage reportType="booths" />} />
+                  <Route path="/report-payments" element={<AccountingPage paidOnly />} />
+                  <Route path="/report-daily" element={<ReportsPage reportType="daily" />} />
+                  <Route path="/report-person" element={<ReportsPage reportType="person" />} />
+                  <Route path="/audit" element={<AuditPage marketId={currentMarketId} />} />
+                  <Route path="/audit-fines" element={<AuditPage marketId={currentMarketId} mode="fines" />} />
+                  <Route path="/audit-fines-paid" element={<AuditPage marketId={currentMarketId} mode="paid" />} />
+                  <Route path="/audit-defective" element={<AuditPage marketId={currentMarketId} mode="defective" />} />
+                  <Route path="/announcements/news" element={<AnnouncementsPage type="news" />} />
+                  <Route path="/tenant-types" element={<TenantTypesPage />} />
+                  <Route path="/tenants" element={<TenantsPage />} />
+                  <Route path="/tenants/pending" element={<TenantsPage status="pending" />} />
+                  <Route path="/accounting" element={<AccountingAllReportPage />} />
+                  <Route path="/accounting-payment-proofs" element={<Navigate to="/booking-payment-proofs" replace />} />
+                  <Route path="/accounting-bookings" element={<ReportsPage reportType="accounting-bookings" />} />
+                  <Route path="/accounting-payments" element={<AccountingPage />} />
+                  <Route path="/accounting-summary" element={<AccountingSalesSummaryPage />} />
+                  <Route path="/accounting-sap" element={<ReportsPage reportType="sap" />} />
+                  <Route path="/accounting-documents" element={<AccountingStandardReportPage reportType="documents" />} />
+                  <Route path="/accounting-tax-sales" element={<AccountingStandardReportPage reportType="tax-sales" />} />
+                  <Route path="/accounting-receivables" element={<AccountingStandardReportPage reportType="receivables" />} />
+                  <Route path="/accounting-reconciliation" element={<AccountingStandardReportPage reportType="reconciliation" />} />
+                  <Route path="/accounting-refunds" element={<AccountingStandardReportPage reportType="refunds" />} />
+                  <Route path="/accounting-product-types" element={<ReportsPage reportType="product-types" />} />
+                  <Route path="/organization-settings" element={<OrganizationSettingsPage />} />
+                  <Route path="/pdpa" element={<PdpaPage />} />
+                  <Route path="/admins" element={<AdminsPage marketId={currentMarketId} />} />
+                  <Route path="/support" element={<Navigate to="/support/tickets" replace />} />
+                  <Route path="/support/tickets" element={<SupportPage mode="ticket" />} />
+                  <Route path="/support/chat" element={<SupportPage mode="chat" />} />
+                </Routes>
+              </Suspense>
+            </ErrorBoundary>
             <p className="mt-10 pb-2 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{POWERED_BY_TEXT}</p>
           </main>
         </div>
