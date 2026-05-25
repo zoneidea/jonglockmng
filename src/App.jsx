@@ -439,6 +439,32 @@ function exportReportExcel(title, columns, rows) {
   downloadBlob(new Blob(['\ufeff', html], { type: 'application/vnd.ms-excel;charset=utf-8;' }), reportFileName(title, 'xls'));
 }
 
+async function downloadBookingImportTemplate() {
+  const XLSX = await import('xlsx');
+  const rows = [
+    {
+      customer_identifier: 'MB000001 หรือ user@email.com หรือ 0812345678',
+      booking_date: '2026-05-31',
+      booth_code: 'B01',
+      product_name: 'ข้าวกล่อง',
+      note: 'หมายเหตุไม่บังคับ',
+    },
+  ];
+  const guideRows = [
+    ['คอลัมน์', 'จำเป็น', 'รายละเอียด'],
+    ['customer_identifier', 'ใช่', 'รหัสลูกค้า mobile_users.public_id หรือ username/email/phone ที่มีอยู่ในระบบ'],
+    ['booking_date', 'ใช่', 'วันที่จอง รูปแบบ YYYY-MM-DD เช่น 2026-05-31'],
+    ['booth_code', 'ใช่', 'รหัสบูธในตลาดที่เลือก เช่น B01'],
+    ['product_name', 'ใช่', 'ชื่อสินค้าที่มีอยู่ในตลาด และประเภทสินค้าต้องตรงกับประเภทของบูธ'],
+    ['note', 'ไม่', 'หมายเหตุสำหรับตรวจสอบไฟล์ ไม่ถูกบันทึกในใบจอง'],
+  ];
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(rows), 'bookings');
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(guideRows), 'format');
+  const output = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  downloadBlob(new Blob([output], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'booking-import-format.xlsx');
+}
+
 function openReportPrintWindow(title, columns, rows, mode = 'print') {
   const child = window.open('', '_blank', 'noopener,noreferrer,width=1200,height=900');
   if (!child) return;
@@ -2677,6 +2703,7 @@ function PdpaPage() {
 
 function BookingsPage({ marketId, mode }) {
   const today = new Date().toISOString().slice(0, 10);
+  const { token } = useAuth();
   const [userQuery, setUserQuery] = useState('');
   const userPath = `/mobile-users${userQuery.trim() ? `?keyword=${encodeURIComponent(userQuery.trim())}` : ''}`;
   const { data = [], loading, reload } = useApi(marketId && mode !== 'edit' ? `/markets/${marketId}/bookings` : null, { initialData: [] });
@@ -2690,6 +2717,8 @@ function BookingsPage({ marketId, mode }) {
   const [editItem, setEditItem] = useState(null);
   const [editForm, setEditForm] = useState({ bookingDate: today, boothId: '', productId: '' });
   const [localError, setLocalError] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
   const { data: editItems = [], loading: editLoading, reload: reloadEditItems } = useApi(marketId && mode === 'edit' ? `/markets/${marketId}/booking-items?bookingDate=${editDate}` : null, { initialData: [] });
   const { data: editLogs = [], loading: editLogsLoading, reload: reloadEditLogs } = useApi(marketId && mode === 'history' ? `/markets/${marketId}/booking-edit-logs?limit=500` : null, { initialData: [] });
   const rows = normalizeRows(data);
@@ -2783,6 +2812,25 @@ function BookingsPage({ marketId, mode }) {
     await mutate(`/markets/${marketId}/bookings/${booking.id}`, {}, 'DELETE');
     reload();
     reloadAvailability();
+  }
+
+  async function importBookingFile(file) {
+    if (!file) return;
+    setImporting(true);
+    setLocalError('');
+    setImportResult(null);
+    try {
+      const body = new FormData();
+      body.append('file', file);
+      const payload = await request(`/markets/${marketId}/bookings/import`, { method: 'POST', body, token });
+      setImportResult(payload.data);
+      reload();
+      reloadAvailability();
+    } catch (importError) {
+      setLocalError(importError.message || 'Import file ไม่สำเร็จ');
+    } finally {
+      setImporting(false);
+    }
   }
 
   if (mode === 'history') {
@@ -2889,10 +2937,61 @@ function BookingsPage({ marketId, mode }) {
       <PageHeader
         title={mode === 'edit' ? 'แก้ไขการจอง' : mode === 'history' ? 'รายการแก้ไขการจอง' : 'การจอง'}
         description="จัดการรายการจองพื้นที่"
-        action={<button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> จองแทนสมาชิก</button>}
+        action={(
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={downloadBookingImportTemplate} className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white">
+              <FileSpreadsheet size={16} /> ดาวน์โหลดฟอร์แมต
+            </button>
+            <label className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-xl bg-amber-500 px-4 text-sm font-bold text-slate-950">
+              <FileSpreadsheet size={16} /> {importing ? 'กำลัง Import...' : 'Import Excel'}
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                disabled={importing}
+                onChange={(event) => {
+                  importBookingFile(event.target.files?.[0]);
+                  event.target.value = '';
+                }}
+              />
+            </label>
+            <button onClick={() => setModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> จองแทนสมาชิก</button>
+          </div>
+        )}
       />
       <div className="grid gap-6">
-        <ErrorNotice error={error} />
+        <ErrorNotice error={localError || error} />
+        {importResult ? (
+          <Card className="space-y-4">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h2 className="text-lg font-extrabold text-slate-950">ผลการ Import Excel</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  {`ทั้งหมด ${importResult.totalRows || 0} row, สำเร็จ ${importResult.successCount || 0} ใบจอง, error ${importResult.errorCount || 0} row`}
+                </p>
+              </div>
+              <button type="button" onClick={() => setImportResult(null)} className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-bold text-slate-600">ปิดผลลัพธ์</button>
+            </div>
+            {importResult.successes?.length ? (
+              <DataTable
+                columns={['ลูกค้า', 'เลขที่ใบจอง', 'จำนวนรายการ', 'ยอดรวม', 'แจ้งเตือน']}
+                rows={importResult.successes.map((item) => [
+                  item.customerIdentifier,
+                  item.publicId,
+                  item.itemCount,
+                  formatMoney(item.totalAmount),
+                  item.notificationQueued ? 'บันทึกแจ้งเตือนแล้ว' : '-',
+                ])}
+              />
+            ) : null}
+            {importResult.errors?.length ? (
+              <DataTable
+                columns={['Row', 'ลูกค้า', 'สาเหตุ']}
+                rows={importResult.errors.map((item) => [item.rowNumber, item.customerIdentifier || '-', item.message])}
+              />
+            ) : null}
+          </Card>
+        ) : null}
         <Card>{loading ? <LoadingBlock /> : <DataTable columns={['เลขที่', 'วันที่จอง', 'Booth', 'สถานะ', 'ยอดรวม', 'แหล่งที่มา', 'จำนวนรายการ', 'วันที่ทำรายการ', 'จัดการ']} rows={rows.map((booking) => [booking.public_id, booking.booking_dates || '-', booking.booths || '-', <StatusBadge value={booking.status} />, formatMoney(booking.total_amount), booking.source, booking.item_count, formatDate(booking.created_at), booking.status === 'pending_payment' ? <SmallButton tone="red" onClick={() => deletePendingBooking(booking)}>ลบ</SmallButton> : '-'])} />}</Card>
         <Modal open={modalOpen} title="สร้างการจองแทนลูกค้า" onClose={() => setModalOpen(false)}>
         <FormPanel onSubmit={submit} loading={saving} error={localError || error || availabilityError}>
