@@ -51,7 +51,7 @@ Frontend นี้พัฒนาขึ้นใหม่จาก legacy CodeIg
 - `/accounting`: payments
 - `/admins`: create admin users and role reference
 - `/support/tickets`: ticket สำหรับแจ้งปัญหา ข้อเสนอแนะ และขอฟีเจอร์เพิ่มเติม พร้อมแนบรูปและผูก event log
-- `/support/chat`: สอบถามทั่วไปแบบ chat thread กับเจ้าหน้าที่
+- `/support/chat`: สอบถามทั่วไปแบบ chat thread กับเจ้าหน้าที่ โดยใช้ `support_chats` แยกจาก ticket
 
 ## Frontend Structure
 

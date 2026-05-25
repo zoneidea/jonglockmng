@@ -74,8 +74,9 @@ function eventLogLabel(log) {
 
 export function SupportPage({ mode = 'ticket' }) {
   const { token, user } = useAuth();
+  const isChatMode = mode === 'chat';
   const { data: categoryData = {}, loading: categoriesLoading } = useApi('/support/categories', { initialData: {} });
-  const listPath = mode === 'chat' ? '/support/tickets?category=inquiry' : '/support/tickets?category=ticket';
+  const listPath = isChatMode ? '/support/chats' : '/support/tickets?category=ticket';
   const { data: tickets = [], loading: ticketsLoading, reload: reloadTickets } = useApi(listPath, { initialData: [] });
   const { data: eventLogs = [] } = useApi('/support/event-logs/recent?limit=30', { initialData: [] });
   const [form, setForm] = useState(initialFormForMode(mode));
@@ -89,7 +90,6 @@ export function SupportPage({ mode = 'ticket' }) {
   const [chatAttachments, setChatAttachments] = useState([]);
   const [chatSaving, setChatSaving] = useState(false);
 
-  const isChatMode = mode === 'chat';
   const categories = (categoryData.categories || []).filter((category) => (isChatMode ? category.value === 'inquiry' : category.value !== 'inquiry'));
   const topics = (categoryData.topics || []).filter((topic) => (isChatMode ? topic.value !== 'feature_request' : true));
   const priorities = categoryData.priorities || [];
@@ -120,9 +120,9 @@ export function SupportPage({ mode = 'ticket' }) {
 
   async function loadTicket(ticketId = selectedTicketId) {
     if (!ticketId) return;
-    const detail = await request(`/support/tickets/${ticketId}`, { token });
+    const detail = await request(isChatMode ? `/support/chats/${ticketId}` : `/support/tickets/${ticketId}`, { token });
     setSelectedTicket(detail.data);
-    const messagePayload = await request(`/support/tickets/${ticketId}/messages`, { token });
+    const messagePayload = await request(isChatMode ? `/support/chats/${ticketId}/messages` : `/support/tickets/${ticketId}/messages`, { token });
     setMessages(normalizeRows(messagePayload.data));
   }
 
@@ -132,17 +132,17 @@ export function SupportPage({ mode = 'ticket' }) {
   }, [selectedTicketId]);
 
   useEffect(() => {
-    if (!selectedTicketId || !isInquiry) return undefined;
+    if (!selectedTicketId || (!isChatMode && !isInquiry)) return undefined;
     const timer = setInterval(async () => {
       const lastId = messages[messages.length - 1]?.id || 0;
-      const payload = await request(`/support/tickets/${selectedTicketId}/messages?afterId=${lastId}`, { token });
+      const payload = await request(isChatMode ? `/support/chats/${selectedTicketId}/messages?afterId=${lastId}` : `/support/tickets/${selectedTicketId}/messages?afterId=${lastId}`, { token });
       const newMessages = normalizeRows(payload.data);
       if (newMessages.length) {
         setMessages((current) => current.concat(newMessages.filter((item) => !current.some((existing) => existing.id === item.id))));
       }
     }, 3000);
     return () => clearInterval(timer);
-  }, [selectedTicketId, isInquiry, messages, token]);
+  }, [selectedTicketId, isChatMode, isInquiry, messages, token]);
 
   async function submitTicket(event) {
     event.preventDefault();
@@ -151,6 +151,17 @@ export function SupportPage({ mode = 'ticket' }) {
     try {
       const body = new FormData();
       const category = isChatMode ? 'inquiry' : form.category;
+      if (isChatMode) {
+        body.append('subject', form.subject || 'สอบถามทั่วไป');
+        body.append('message', form.message);
+        attachments.forEach((file) => body.append('attachments', file));
+        const payload = await request('/support/chats', { method: 'POST', body, token });
+        setForm(initialFormForMode(mode));
+        setAttachments([]);
+        await reloadTickets();
+        setSelectedTicketId(String(payload.data.id));
+        return;
+      }
       body.append('category', category);
       body.append('topic', form.topic);
       body.append('priority', category === 'issue' ? form.priority : '');
@@ -181,7 +192,7 @@ export function SupportPage({ mode = 'ticket' }) {
       const body = new FormData();
       body.append('message', chatMessage);
       chatAttachments.forEach((file) => body.append('attachments', file));
-      await request(`/support/tickets/${selectedTicketId}/messages`, { method: 'POST', body, token });
+      await request(isChatMode ? `/support/chats/${selectedTicketId}/messages` : `/support/tickets/${selectedTicketId}/messages`, { method: 'POST', body, token });
       setChatMessage('');
       setChatAttachments([]);
       await loadTicket(selectedTicketId);
@@ -206,38 +217,44 @@ export function SupportPage({ mode = 'ticket' }) {
           {error ? <div className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
           {categoriesLoading ? <LoadingBlock /> : (
             <form onSubmit={submitTicket} className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <SelectField label="หมวดหมู่" value={form.category} onChange={(value) => setForm((current) => ({ ...current, category: value }))} options={categories} disabled={isChatMode} />
-                <SelectField label="หัวข้อ" value={form.topic} onChange={(value) => setForm((current) => ({ ...current, topic: value }))} options={topics} />
-              </div>
               {!isChatMode ? (
-                <SelectField label="ระดับความสำคัญ (เฉพาะแจ้งปัญหา)" value={form.priority} onChange={(value) => setForm((current) => ({ ...current, priority: value }))} options={priorities} disabled={form.category !== 'issue'} />
+                <>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <SelectField label="หมวดหมู่" value={form.category} onChange={(value) => setForm((current) => ({ ...current, category: value }))} options={categories} />
+                    <SelectField label="หัวข้อ" value={form.topic} onChange={(value) => setForm((current) => ({ ...current, topic: value }))} options={topics} />
+                  </div>
+                  <SelectField label="ระดับความสำคัญ (เฉพาะแจ้งปัญหา)" value={form.priority} onChange={(value) => setForm((current) => ({ ...current, priority: value }))} options={priorities} disabled={form.category !== 'issue'} />
+                </>
               ) : null}
               <label className="block">
                 <FieldLabel>หัวเรื่อง</FieldLabel>
-                <input value={form.subject} onChange={(event) => setForm((current) => ({ ...current, subject: event.target.value }))} required className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" />
+                <input value={form.subject} onChange={(event) => setForm((current) => ({ ...current, subject: event.target.value }))} required={!isChatMode} placeholder={isChatMode ? 'สอบถามทั่วไป' : ''} className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" />
               </label>
               <label className="block">
                 <FieldLabel>รายละเอียด</FieldLabel>
                 <textarea value={form.message} onChange={(event) => setForm((current) => ({ ...current, message: event.target.value }))} required rows={6} className="w-full rounded-xl border border-slate-300 px-3 py-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" />
               </label>
-              <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
-                <input type="checkbox" checked={form.tagOrganization} onChange={(event) => setForm((current) => ({ ...current, tagOrganization: event.target.checked }))} />
-                <Tag size={16} className="text-cyan-700" />
-                แท็กองค์กรนี้ #{user?.organizationId || '-'}
-              </label>
-              <label className="block">
-                <FieldLabel>ผูกกับ Event log ล่าสุด</FieldLabel>
-                <select
-                  multiple
-                  value={form.eventLogIds.map(String)}
-                  onChange={(event) => setForm((current) => ({ ...current, eventLogIds: Array.from(event.target.selectedOptions).map((option) => option.value) }))}
-                  className="min-h-32 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
-                >
-                  {eventLogRows.map((eventLog) => <option key={eventLog.id} value={eventLog.id}>{eventLogLabel(eventLog)}</option>)}
-                </select>
-                {selectedEventLogLabels.length ? <p className="mt-2 text-xs text-slate-500">{selectedEventLogLabels.length} event selected</p> : null}
-              </label>
+              {!isChatMode ? (
+                <>
+                  <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
+                    <input type="checkbox" checked={form.tagOrganization} onChange={(event) => setForm((current) => ({ ...current, tagOrganization: event.target.checked }))} />
+                    <Tag size={16} className="text-cyan-700" />
+                    แท็กองค์กรนี้ #{user?.organizationId || '-'}
+                  </label>
+                  <label className="block">
+                    <FieldLabel>ผูกกับ Event log ล่าสุด</FieldLabel>
+                    <select
+                      multiple
+                      value={form.eventLogIds.map(String)}
+                      onChange={(event) => setForm((current) => ({ ...current, eventLogIds: Array.from(event.target.selectedOptions).map((option) => option.value) }))}
+                      className="min-h-32 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+                    >
+                      {eventLogRows.map((eventLog) => <option key={eventLog.id} value={eventLog.id}>{eventLogLabel(eventLog)}</option>)}
+                    </select>
+                    {selectedEventLogLabels.length ? <p className="mt-2 text-xs text-slate-500">{selectedEventLogLabels.length} event selected</p> : null}
+                  </label>
+                </>
+              ) : null}
               <label className="block">
                 <FieldLabel>แนบรูปภาพ</FieldLabel>
                 <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={(event) => setAttachments(Array.from(event.target.files || []))} className="block w-full rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-cyan-50 file:px-3 file:py-2 file:text-sm file:font-bold file:text-cyan-700" />
@@ -253,8 +270,15 @@ export function SupportPage({ mode = 'ticket' }) {
             <SectionTitle icon={Tag} title={listTitle} description={isChatMode ? 'แสดงเฉพาะรายการสอบถามทั่วไป' : 'แสดงเฉพาะ ticket ปัญหา ข้อเสนอแนะ และขอฟีเจอร์'} />
             {ticketsLoading ? <LoadingBlock /> : ticketRows.length ? (
               <DataTable
-                columns={['เลขที่', 'ประเภท', 'หัวข้อ', 'ความสำคัญ', 'สถานะ', 'อัปเดต', 'จัดการ']}
-                rows={ticketRows.map((ticket) => [
+                columns={isChatMode ? ['ห้องแชท', 'หัวข้อ', 'จำนวนข้อความ', 'สถานะ', 'อัปเดต', 'จัดการ'] : ['เลขที่', 'ประเภท', 'หัวข้อ', 'ความสำคัญ', 'สถานะ', 'อัปเดต', 'จัดการ']}
+                rows={ticketRows.map((ticket) => (isChatMode ? [
+                  `#${ticket.id}`,
+                  ticket.subject || 'สอบถามทั่วไป',
+                  Number(ticket.message_count || 0),
+                  <StatusBadge value={ticket.status} />,
+                  formatDate(ticket.updated_at || ticket.last_message_at || ticket.created_at),
+                  <ActionButton onClick={() => setSelectedTicketId(String(ticket.id))} tone="emerald">เปิด</ActionButton>,
+                ] : [
                   `#${ticket.id}`,
                   ticket.category,
                   ticket.subject,
@@ -262,7 +286,7 @@ export function SupportPage({ mode = 'ticket' }) {
                   <StatusBadge value={ticket.status} />,
                   formatDate(ticket.updated_at || ticket.created_at),
                   <ActionButton onClick={() => setSelectedTicketId(String(ticket.id))} tone="emerald">เปิด</ActionButton>,
-                ])}
+                ]))}
               />
             ) : <EmptyState title="ยังไม่มีรายการ" description={isChatMode ? 'เริ่มแชทใหม่เพื่อสอบถามเจ้าหน้าที่' : 'ส่ง ticket แรกเพื่อเริ่มบันทึกข้อมูลสำหรับระบบ support'} />}
           </Card>
@@ -271,13 +295,13 @@ export function SupportPage({ mode = 'ticket' }) {
             <Card>
               <div className="mb-5 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-cyan-700">Ticket #{selectedTicket.id}</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-cyan-700">{isChatMode ? 'Chat' : 'Ticket'} #{selectedTicket.id}</p>
                   <h2 className="mt-1 text-xl font-extrabold text-slate-950">{selectedTicket.subject}</h2>
-                  <p className="mt-1 text-sm text-slate-500">{selectedTicket.category} / {selectedTicket.topic} / {selectedTicket.priority || '-'}</p>
+                  {!isChatMode ? <p className="mt-1 text-sm text-slate-500">{selectedTicket.category} / {selectedTicket.topic} / {selectedTicket.priority || '-'}</p> : null}
                 </div>
                 <StatusBadge value={selectedTicket.status} />
               </div>
-              <div className="rounded-2xl bg-slate-50 p-4 text-sm leading-7 text-slate-700">{selectedTicket.message}</div>
+              {!isChatMode ? <div className="rounded-2xl bg-slate-50 p-4 text-sm leading-7 text-slate-700">{selectedTicket.message}</div> : null}
               {selectedTicket.attachments?.length ? (
                 <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
                   {selectedTicket.attachments.map((attachment) => (
