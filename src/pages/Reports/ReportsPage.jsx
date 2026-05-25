@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Card } from '../../components/Card.jsx';
+import { BookingDateSummary } from '../../components/BookingDateSummary.jsx';
 import { DataTable } from '../../components/DataTable.jsx';
 import { EmptyState } from '../../components/EmptyState.jsx';
 import { LoadingBlock } from '../../components/LoadingBlock.jsx';
 import { PageHeader } from '../../components/PageHeader.jsx';
 import { StatusBadge } from '../../components/StatusBadge.jsx';
 import { useApi } from '../../hooks/useApi.js';
-import { formatBookingDateSummary, formatBookingDateValue, formatDate, formatMoney, normalizeRows, parseBookingDateList } from '../../utils/formatters.js';
+import { formatBookingDateSummary, formatDate, formatMoney, normalizeRows } from '../../utils/formatters.js';
 import { DatePickerBare, filterRowsByKeyword, ReportActionButton, ReportExportActions, ReportFiltersBar, SearchInput } from '../../components/ManagementUi.jsx';
 
 export function ReportsPage({ reportType }) {
@@ -163,15 +164,4 @@ function AvailableBoothReportTable({ rows }) {
 
 function DailySalesReportTable({ rows }) {
   return <DataTable columns={['#', 'เลขที่ใบจอง', 'ตลาด', 'ชื่อผู้จอง', 'Tell', 'ชื่อ Booth', 'สินค้าขาย', 'VAT', 'ยอดรวม', 'วันที่ขาย']} rows={rows.map((row, index) => [index + 1, row.booking_public_id || '-', row.market_name || '-', row.customer_name || '-', row.customer_phone || '-', row.booth_code || row.booth_name || '-', row.product_names || '-', formatMoney(row.vat_amount || 0), formatMoney(row.total_amount || 0), formatDate(row.booking_date)])} />;
-}
-
-function BookingDateSummary({ value }) {
-  const dates = parseBookingDateList(value);
-  if (!dates.length) return '-';
-  return (
-    <div className="min-w-[170px]">
-      <div className="font-bold text-slate-800">{formatBookingDateSummary(value)}</div>
-      {dates.length > 1 ? <div className="mt-1 text-xs text-slate-500">{dates.map(formatBookingDateValue).join(', ')}</div> : null}
-    </div>
-  );
 }

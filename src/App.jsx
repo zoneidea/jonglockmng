@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { API_BASE_URL, request } from './api/client.js';
 import { menu } from './app/navigation.jsx';
+import { BookingDateSummary } from './components/BookingDateSummary.jsx';
 import { Card } from './components/Card.jsx';
 import { DataTable } from './components/DataTable.jsx';
 import { EmptyState } from './components/EmptyState.jsx';
@@ -82,11 +83,9 @@ import {
   classNames,
   escapeHtml,
   formatBookingDateSummary,
-  formatBookingDateValue,
   formatDate,
   formatMoney,
   normalizeRows,
-  parseBookingDateList,
   reportFileName,
 } from './utils/formatters.js';
 
