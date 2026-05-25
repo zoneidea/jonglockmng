@@ -56,6 +56,7 @@ import { downloadBookingImportTemplate } from './features/bookings/bookingImport
 import { useApi, useMutation } from './hooks/useApi.js';
 import { useAuth } from './state/auth.jsx';
 import { Dashboard as DashboardComponent } from './pages/Dashboard/index.js';
+import { SupportPage } from './pages/Support/index.js';
 import {
   classNames,
   escapeHtml,
@@ -631,6 +632,7 @@ function Shell() {
               <Route path="/organization-settings" element={<OrganizationSettingsPage />} />
               <Route path="/pdpa" element={<PdpaPage />} />
               <Route path="/admins" element={<AdminsPage marketId={currentMarketId} />} />
+              <Route path="/support" element={<SupportPage />} />
             </Routes>
             <p className="mt-10 pb-2 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{POWERED_BY_TEXT}</p>
           </main>

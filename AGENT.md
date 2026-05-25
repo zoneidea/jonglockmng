@@ -50,6 +50,7 @@ Frontend นี้พัฒนาขึ้นใหม่จาก legacy CodeIg
 - `/audit`: audit checks
 - `/accounting`: payments
 - `/admins`: create admin users and role reference
+- `/support`: แจ้งปัญหา/ข้อเสนอแนะ/สอบถาม พร้อมแนบรูป ผูก event log และ chat thread
 
 ## Frontend Structure
 
