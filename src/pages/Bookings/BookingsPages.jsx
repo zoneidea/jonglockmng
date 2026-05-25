@@ -74,7 +74,7 @@ export function PaymentProofReviewPage() {
   );
 }
 
-function TenantTypesPage() {
+export function TenantTypesPage() {
   const { data = [], loading, reload } = useApi('/tenant-types', { initialData: [] });
   const rows = normalizeRows(data);
 
@@ -136,7 +136,7 @@ function validateAdminForm(form, options = {}) {
   return '';
 }
 
-function TenantsPage({ status }) {
+export function TenantsPage({ status }) {
   const { data = [], loading, reload } = useApi('/tenants', { initialData: [] });
   const { data: tenantTypes = [] } = useApi('/tenant-types', { initialData: [] });
   const { mutate, loading: saving, error } = useMutation();
@@ -243,7 +243,7 @@ function TenantsPage({ status }) {
   );
 }
 
-function PdpaPage() {
+export function PdpaPage() {
   const { data = {}, loading, reload } = useApi('/pdpa', { initialData: {} });
   const { token } = useAuth();
   const { mutate, loading: saving, error } = useMutation();

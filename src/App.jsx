@@ -105,6 +105,9 @@ const ProductGroupsPage = lazyNamed(() => import('./pages/Products/index.js'), '
 const ProductsPage = lazyNamed(() => import('./pages/Products/index.js'), 'ProductsPage');
 const BookingsPage = lazyNamed(() => import('./pages/Bookings/index.js'), 'BookingsPage');
 const PaymentProofReviewPage = lazyNamed(() => import('./pages/Bookings/index.js'), 'PaymentProofReviewPage');
+const TenantTypesPage = lazyNamed(() => import('./pages/Bookings/index.js'), 'TenantTypesPage');
+const TenantsPage = lazyNamed(() => import('./pages/Bookings/index.js'), 'TenantsPage');
+const PdpaPage = lazyNamed(() => import('./pages/Bookings/index.js'), 'PdpaPage');
 const ReportsPage = lazyNamed(() => import('./pages/Reports/index.js'), 'ReportsPage');
 const SupportPage = lazyNamed(() => import('./pages/Support/index.js'), 'SupportPage');
 
@@ -397,7 +400,7 @@ function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ username: '', password: '' });
-  const [rememberMe, setRememberMe] = useState(true);
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -438,13 +441,13 @@ function LoginPage() {
           </div>
         </section>
         <section className="flex items-center justify-center bg-slate-100 px-6 py-12 text-slate-950">
-          <form onSubmit={handleSubmit} className="w-full max-w-md rounded-3xl bg-white p-8 shadow-soft">
+          <form onSubmit={handleSubmit} autoComplete="off" className="w-full max-w-md rounded-3xl bg-white p-8 shadow-soft">
             <p className="text-sm font-semibold uppercase tracking-wide text-cyan-600">Market Operations</p>
             <h2 className="mt-2 text-2xl font-bold">เข้าสู่ระบบจัดการ</h2>
             <p className="mt-2 text-sm text-slate-500">ใช้บัญชี supervisor, admin หรือ accounting</p>
             <div className="mt-8 space-y-4">
-              <TextInput label="Username" value={form.username} onChange={(value) => setForm((current) => ({ ...current, username: value }))} required />
-              <TextInput label="Password" value={form.password} onChange={(value) => setForm((current) => ({ ...current, password: value }))} type="password" required />
+              <TextInput label="Username" value={form.username} onChange={(value) => setForm((current) => ({ ...current, username: value }))} autoComplete="off" required />
+              <TextInput label="Password" value={form.password} onChange={(value) => setForm((current) => ({ ...current, password: value }))} type="password" autoComplete="new-password" required />
             </div>
             <label className="mt-4 flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-cyan-200 hover:bg-cyan-50/40">
               <input

@@ -268,21 +268,21 @@ export function Label({ children }) {
   return <span className="text-sm font-bold text-slate-600">{children}</span>;
 }
 
-export function TextInput({ label, value, onChange, type = 'text', required = false }) {
+export function TextInput({ label, value, onChange, type = 'text', required = false, autoComplete }) {
   return (
     <label className="block">
       <span className="mb-1.5 block text-sm font-bold text-slate-600">{label}</span>
-      <TextInputBare value={value} onChange={onChange} type={type} required={required} />
+      <TextInputBare value={value} onChange={onChange} type={type} required={required} autoComplete={autoComplete} />
     </label>
   );
 }
 
-export function TextInputBare({ value, onChange, type = 'text', required = false }) {
+export function TextInputBare({ value, onChange, type = 'text', required = false, autoComplete }) {
   const [visible, setVisible] = useState(false);
   const isPassword = type === 'password';
   return (
     <div className="relative">
-      <input type={isPassword && visible ? 'text' : type} value={value} required={required} onChange={(event) => onChange(event.target.value)} className={classNames('h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100', isPassword ? 'pr-11' : '')} />
+      <input type={isPassword && visible ? 'text' : type} value={value} required={required} autoComplete={autoComplete} onChange={(event) => onChange(event.target.value)} className={classNames('h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100', isPassword ? 'pr-11' : '')} />
       {isPassword ? (
         <button type="button" onClick={() => setVisible((current) => !current)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-700">
           {visible ? <EyeOff size={18} /> : <Eye size={18} />}
