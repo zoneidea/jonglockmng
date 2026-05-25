@@ -632,7 +632,9 @@ function Shell() {
               <Route path="/organization-settings" element={<OrganizationSettingsPage />} />
               <Route path="/pdpa" element={<PdpaPage />} />
               <Route path="/admins" element={<AdminsPage marketId={currentMarketId} />} />
-              <Route path="/support" element={<SupportPage />} />
+              <Route path="/support" element={<Navigate to="/support/tickets" replace />} />
+              <Route path="/support/tickets" element={<SupportPage mode="ticket" />} />
+              <Route path="/support/chat" element={<SupportPage mode="chat" />} />
             </Routes>
             <p className="mt-10 pb-2 text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{POWERED_BY_TEXT}</p>
           </main>

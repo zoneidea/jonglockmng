@@ -122,5 +122,14 @@ export const menu = [
   { path: '/organization-settings', label: 'ตั้งค่าองค์กร', icon: Settings, menuKey: 'organization_settings', roles: ['supervisor'] },
   { path: '/pdpa', label: 'จัดการ PDPA', icon: Settings, menuKey: 'pdpa', roles: ['supervisor'] },
   { path: '/admins', label: 'ผู้ดูแลระบบ', icon: Users, menuKey: 'admins' },
-  { path: '/support', label: 'แจ้งปัญหา/สอบถาม', icon: MessageSquareText, menuKey: 'support', roles: ['supervisor', 'admin', 'accounting'] },
+  {
+    label: 'แจ้งปัญหา/สอบถาม',
+    icon: MessageSquareText,
+    menuKey: 'support',
+    roles: ['supervisor', 'admin', 'accounting'],
+    children: [
+      { path: '/support/tickets', label: 'แจ้งปัญหา/สอบถาม' },
+      { path: '/support/chat', label: 'แชทกับเจ้าหน้าที่' },
+    ],
+  },
 ];

@@ -22,6 +22,18 @@ const defaultForm = {
   eventLogIds: [],
 };
 
+function initialFormForMode(mode) {
+  if (mode === 'chat') {
+    return {
+      ...defaultForm,
+      category: 'inquiry',
+      topic: 'other',
+      priority: 'normal',
+    };
+  }
+  return defaultForm;
+}
+
 function FieldLabel({ children }) {
   return <span className="mb-1.5 block text-sm font-bold text-slate-600">{children}</span>;
 }
@@ -60,12 +72,13 @@ function eventLogLabel(log) {
   return `#${log.id} ${log.method} ${log.path} (${log.status_code})`;
 }
 
-export function SupportPage() {
+export function SupportPage({ mode = 'ticket' }) {
   const { token, user } = useAuth();
   const { data: categoryData = {}, loading: categoriesLoading } = useApi('/support/categories', { initialData: {} });
-  const { data: tickets = [], loading: ticketsLoading, reload: reloadTickets } = useApi('/support/tickets', { initialData: [] });
+  const listPath = mode === 'chat' ? '/support/tickets?category=inquiry' : '/support/tickets?category=ticket';
+  const { data: tickets = [], loading: ticketsLoading, reload: reloadTickets } = useApi(listPath, { initialData: [] });
   const { data: eventLogs = [] } = useApi('/support/event-logs/recent?limit=30', { initialData: [] });
-  const [form, setForm] = useState(defaultForm);
+  const [form, setForm] = useState(initialFormForMode(mode));
   const [attachments, setAttachments] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -76,12 +89,29 @@ export function SupportPage() {
   const [chatAttachments, setChatAttachments] = useState([]);
   const [chatSaving, setChatSaving] = useState(false);
 
-  const categories = categoryData.categories || [];
-  const topics = categoryData.topics || [];
+  const isChatMode = mode === 'chat';
+  const categories = (categoryData.categories || []).filter((category) => (isChatMode ? category.value === 'inquiry' : category.value !== 'inquiry'));
+  const topics = (categoryData.topics || []).filter((topic) => (isChatMode ? topic.value !== 'feature_request' : true));
   const priorities = categoryData.priorities || [];
   const ticketRows = normalizeRows(tickets);
   const eventLogRows = normalizeRows(eventLogs);
   const isInquiry = selectedTicket?.category === 'inquiry';
+  const pageTitle = isChatMode ? 'แชทกับเจ้าหน้าที่' : 'แจ้งปัญหา/สอบถาม';
+  const pageDescription = isChatMode
+    ? 'ใช้สำหรับสอบถามทั่วไปและสนทนากับเจ้าหน้าที่แบบต่อเนื่อง โดยข้อความทั้งหมดถูกเก็บใน MySQL'
+    : 'ใช้สำหรับ ticket ปัญหา ข้อเสนอแนะ และการขอฟีเจอร์เพิ่มเติม พร้อมผูก event log ได้';
+  const formTitle = isChatMode ? 'เริ่มแชทใหม่' : 'ส่ง Ticket ใหม่';
+  const formDescription = isChatMode
+    ? 'กรอกคำถามทั่วไปเพื่อเปิดห้องสนทนาใหม่'
+    : 'แจ้งปัญหา เสนอแนะ หรือขอฟีเจอร์เพิ่มเติม พร้อมแนบรูปประกอบ';
+  const listTitle = isChatMode ? 'ห้องแชทของฉัน' : 'รายการ Ticket';
+
+  useEffect(() => {
+    setForm(initialFormForMode(mode));
+    setSelectedTicketId('');
+    setSelectedTicket(null);
+    setMessages([]);
+  }, [mode]);
 
   const selectedEventLogLabels = useMemo(() => {
     const selected = new Set(form.eventLogIds.map(String));
@@ -102,7 +132,7 @@ export function SupportPage() {
   }, [selectedTicketId]);
 
   useEffect(() => {
-    if (!selectedTicketId || selectedTicket?.category !== 'inquiry') return undefined;
+    if (!selectedTicketId || !isInquiry) return undefined;
     const timer = setInterval(async () => {
       const lastId = messages[messages.length - 1]?.id || 0;
       const payload = await request(`/support/tickets/${selectedTicketId}/messages?afterId=${lastId}`, { token });
@@ -112,7 +142,7 @@ export function SupportPage() {
       }
     }, 3000);
     return () => clearInterval(timer);
-  }, [selectedTicketId, selectedTicket?.category, messages, token]);
+  }, [selectedTicketId, isInquiry, messages, token]);
 
   async function submitTicket(event) {
     event.preventDefault();
@@ -120,9 +150,10 @@ export function SupportPage() {
     setError('');
     try {
       const body = new FormData();
-      body.append('category', form.category);
+      const category = isChatMode ? 'inquiry' : form.category;
+      body.append('category', category);
       body.append('topic', form.topic);
-      body.append('priority', form.category === 'issue' ? form.priority : '');
+      body.append('priority', category === 'issue' ? form.priority : '');
       body.append('subject', form.subject);
       body.append('message', form.message);
       body.append('tagOrganization', form.tagOrganization ? 'true' : 'false');
@@ -130,7 +161,7 @@ export function SupportPage() {
       body.append('eventLogIds', JSON.stringify(form.eventLogIds));
       attachments.forEach((file) => body.append('attachments', file));
       const payload = await request('/support/tickets', { method: 'POST', body, token });
-      setForm(defaultForm);
+      setForm(initialFormForMode(mode));
       setAttachments([]);
       await reloadTickets();
       setSelectedTicketId(String(payload.data.id));
@@ -165,21 +196,23 @@ export function SupportPage() {
   return (
     <>
       <PageHeader
-        title="แจ้งปัญหา/ข้อเสนอแนะ/สอบถาม"
-        description="บันทึกข้อมูลไว้เพื่อเตรียมต่อยอดเป็นระบบหลังบ้านของแพลตฟอร์ม และผูกกับ event log ได้"
+        title={pageTitle}
+        description={pageDescription}
         action={<ActionButton onClick={reloadTickets}><RefreshCw size={16} /> โหลดใหม่</ActionButton>}
       />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
         <Card>
-          <SectionTitle icon={MessageSquareText} title="ส่งเรื่องใหม่" description="กรอกข้อมูลได้อย่างอิสระ พร้อมแนบรูปภาพประกอบหลายรูป" />
+          <SectionTitle icon={MessageSquareText} title={formTitle} description={formDescription} />
           {error ? <div className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div> : null}
           {categoriesLoading ? <LoadingBlock /> : (
             <form onSubmit={submitTicket} className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
-                <SelectField label="หมวดหมู่" value={form.category} onChange={(value) => setForm((current) => ({ ...current, category: value }))} options={categories} />
+                <SelectField label="หมวดหมู่" value={form.category} onChange={(value) => setForm((current) => ({ ...current, category: value }))} options={categories} disabled={isChatMode} />
                 <SelectField label="หัวข้อ" value={form.topic} onChange={(value) => setForm((current) => ({ ...current, topic: value }))} options={topics} />
               </div>
-              <SelectField label="ระดับความสำคัญ (เฉพาะแจ้งปัญหา)" value={form.priority} onChange={(value) => setForm((current) => ({ ...current, priority: value }))} options={priorities} disabled={form.category !== 'issue'} />
+              {!isChatMode ? (
+                <SelectField label="ระดับความสำคัญ (เฉพาะแจ้งปัญหา)" value={form.priority} onChange={(value) => setForm((current) => ({ ...current, priority: value }))} options={priorities} disabled={form.category !== 'issue'} />
+              ) : null}
               <label className="block">
                 <FieldLabel>หัวเรื่อง</FieldLabel>
                 <input value={form.subject} onChange={(event) => setForm((current) => ({ ...current, subject: event.target.value }))} required className="h-11 w-full rounded-xl border border-slate-300 px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100" />
@@ -210,14 +243,14 @@ export function SupportPage() {
                 <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={(event) => setAttachments(Array.from(event.target.files || []))} className="block w-full rounded-xl border border-dashed border-slate-300 bg-white px-3 py-3 text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-cyan-50 file:px-3 file:py-2 file:text-sm file:font-bold file:text-cyan-700" />
                 {attachments.length ? <p className="mt-2 text-sm font-semibold text-slate-600">เลือกแล้ว {attachments.length} รูป</p> : null}
               </label>
-              <ActionButton type="submit" tone="cyan" disabled={saving}>{saving ? 'กำลังส่ง...' : 'ส่งเรื่อง'}</ActionButton>
+              <ActionButton type="submit" tone="cyan" disabled={saving}>{saving ? 'กำลังส่ง...' : isChatMode ? 'เริ่มแชท' : 'ส่ง Ticket'}</ActionButton>
             </form>
           )}
         </Card>
 
         <div className="grid gap-6">
           <Card>
-            <SectionTitle icon={Tag} title="รายการที่ส่งแล้ว" description="ข้อมูลถูกเก็บใน MySQL พร้อม attachment, org tag และ event log ที่เกี่ยวข้อง" />
+            <SectionTitle icon={Tag} title={listTitle} description={isChatMode ? 'แสดงเฉพาะรายการสอบถามทั่วไป' : 'แสดงเฉพาะ ticket ปัญหา ข้อเสนอแนะ และขอฟีเจอร์'} />
             {ticketsLoading ? <LoadingBlock /> : ticketRows.length ? (
               <DataTable
                 columns={['เลขที่', 'ประเภท', 'หัวข้อ', 'ความสำคัญ', 'สถานะ', 'อัปเดต', 'จัดการ']}
@@ -231,7 +264,7 @@ export function SupportPage() {
                   <ActionButton onClick={() => setSelectedTicketId(String(ticket.id))} tone="emerald">เปิด</ActionButton>,
                 ])}
               />
-            ) : <EmptyState title="ยังไม่มีรายการ" description="ส่งเรื่องแรกเพื่อเริ่มบันทึกข้อมูลสำหรับระบบ support" />}
+            ) : <EmptyState title="ยังไม่มีรายการ" description={isChatMode ? 'เริ่มแชทใหม่เพื่อสอบถามเจ้าหน้าที่' : 'ส่ง ticket แรกเพื่อเริ่มบันทึกข้อมูลสำหรับระบบ support'} />}
           </Card>
 
           {selectedTicket ? (
