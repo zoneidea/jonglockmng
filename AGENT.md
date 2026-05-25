@@ -51,6 +51,19 @@ Frontend นี้พัฒนาขึ้นใหม่จาก legacy CodeIg
 - `/accounting`: payments
 - `/admins`: create admin users and role reference
 
+## Frontend Structure
+
+โครงสร้างใหม่ต้องไม่เพิ่ม logic ทั้งหมดลง `src/App.jsx` อีกต่อไป:
+
+- `src/App.jsx`: route composition และ legacy pages ที่ยังรอแยก
+- `src/app/`: app-level config เช่น menu/navigation และ shell-level helpers
+- `src/components/`: shared UI components เช่น Card, DataTable, EmptyState, LoadingBlock, PageHeader, StatusBadge
+- `src/pages/<Feature>/`: page-level component ของแต่ละเมนูหรือ feature
+- `src/features/<feature>/`: business helpers เฉพาะ feature เช่น import/export หรือ mapper
+- `src/utils/`: formatter, className helper, report/file helpers ที่ไม่มี React state
+
+เมื่อแก้หน้าเดิม ให้ทยอยย้ายเฉพาะ feature นั้นออกจาก `App.jsx` ไปที่ `src/pages/<Feature>/` พร้อม import shared component จาก `src/components/` เพื่อให้ maintenance ง่ายและลดความเสี่ยงจากไฟล์ใหญ่ไฟล์เดียว
+
 ## Design Direction
 
 - เป็น operational tool ไม่ใช่ landing page

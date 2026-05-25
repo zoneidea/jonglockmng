@@ -43,150 +43,32 @@ import {
   X,
 } from 'lucide-react';
 import { API_BASE_URL, request } from './api/client.js';
+import { menu } from './app/navigation.jsx';
+import { Card } from './components/Card.jsx';
+import { DataTable } from './components/DataTable.jsx';
+import { EmptyState } from './components/EmptyState.jsx';
+import { LoadingBlock } from './components/LoadingBlock.jsx';
+import { PageHeader } from './components/PageHeader.jsx';
+import { SectionTitle } from './components/SectionTitle.jsx';
+import { Stat } from './components/Stat.jsx';
+import { StatusBadge } from './components/StatusBadge.jsx';
 import { downloadBookingImportTemplate } from './features/bookings/bookingImport.js';
 import { useApi, useMutation } from './hooks/useApi.js';
 import { useAuth } from './state/auth.jsx';
+import { Dashboard as DashboardComponent } from './pages/Dashboard/index.js';
+import {
+  classNames,
+  escapeHtml,
+  formatBookingDateSummary,
+  formatBookingDateValue,
+  formatDate,
+  formatMoney,
+  normalizeRows,
+  parseBookingDateList,
+  reportFileName,
+} from './utils/formatters.js';
 
 const POWERED_BY_TEXT = 'Powered by zone-idea innovation co.,ltd.';
-
-const menu = [
-  { path: '/', label: 'ภาพรวม', icon: LayoutDashboard, menuKey: 'dashboard', roles: ['supervisor', 'admin', 'accounting'] },
-  {
-    label: 'จัดการตลาด',
-    icon: Store,
-    menuKey: 'markets',
-    children: [
-      { path: '/markets', label: 'รายชื่อตลาด' },
-      { path: '/market-info', label: 'ข้อมูลทั่วไป' },
-      { path: '/booth-types', label: 'แผนผังบูธ' },
-      { path: '/booths', label: 'จัดการบูธ' },
-      { path: '/holiday-calendar', label: 'ปฏิทินวันหยุด' },
-      { path: '/market-images', label: 'จัดการรูปภาพตลาด' },
-      { path: '/accessories', label: 'จัดการบริการเสริม' },
-    ],
-  },
-  {
-    label: 'สินค้า',
-    icon: Package,
-    menuKey: 'products',
-    children: [
-      { path: '/product-categories', label: 'ประเภทสินค้า' },
-      { path: '/product-groups', label: 'หมวดหมู่สินค้า' },
-      { path: '/products', label: 'รายการสินค้า' },
-    ],
-  },
-  {
-    label: 'โค้ดส่วนลด',
-    icon: Percent,
-    menuKey: 'coupons',
-    children: [
-      { path: '/coupons', label: 'สร้างโค้ดส่วนลด' },
-      { path: '/coupon-assignments', label: 'รายการที่แจกโค้ด' },
-    ],
-  },
-  {
-    label: 'การจอง',
-    icon: CalendarCheck,
-    menuKey: 'bookings',
-    children: [
-      { path: '/bookings', label: 'จองแทนสมาชิก' },
-      { path: '/booking-edit', label: 'แก้ไขการจอง' },
-      { path: '/booking-edits', label: 'รายการแก้ไขการจอง' },
-      { path: '/booking-payment-proofs', label: 'ตรวจสลิปโอนเงิน' },
-    ],
-  },
-  {
-    label: 'Report',
-    icon: BarChart3,
-    menuKey: 'reports',
-    children: [
-      { path: '/reports', label: 'รายงานการจอง' },
-      { path: '/report-booths', label: 'รายงานบูธว่าง' },
-      { path: '/report-payments', label: 'รายงานการชำระเงิน' },
-      { path: '/report-daily', label: 'รายงานการขายรายวัน' },
-      { path: '/report-person', label: 'การจองรายบุคคล' },
-    ],
-  },
-  {
-    label: 'ตรวจสอบตลาด',
-    icon: ClipboardCheck,
-    menuKey: 'market_audit',
-    children: [
-      { path: '/audit', label: 'ข้อมูลการตรวจสอบ' },
-      { path: '/audit-fines', label: 'รายงานค่าปรับค้างจ่าย' },
-      { path: '/audit-fines-paid', label: 'รายชื่อผู้จ่ายค่าปรับแบบโอน' },
-      { path: '/audit-defective', label: 'รายการสินค้าชำรุด' },
-    ],
-  },
-  {
-    label: 'ประกาศ/ประชาสัมพันธ์',
-    icon: Megaphone,
-    menuKey: 'announcements',
-    roles: ['supervisor', 'admin'],
-    children: [
-      { path: '/announcements/news', label: 'ข่าวสาร' },
-    ],
-  },
-  {
-    label: 'รายงานผู้เช่า',
-    icon: UserCheck,
-    menuKey: 'tenants',
-    roles: ['supervisor', 'admin'],
-    children: [
-      { path: '/tenant-types', label: 'ประเภทผู้เช่า' },
-      { path: '/tenants', label: 'รายชื่อผู้เช่า' },
-      { path: '/tenants/pending', label: 'ผู้เช่ารอการอนุมัติ' },
-    ],
-  },
-  {
-    label: 'บัญชี',
-    icon: CreditCard,
-    menuKey: 'accounting',
-    children: [
-      { path: '/accounting', label: 'รายงานแสดงข้อมูลทั้งหมด' },
-      { path: '/accounting-payments', label: 'รายงานการชำระเงิน' },
-      { path: '/accounting-summary', label: 'รายงานสรุปยอดขาย' },
-      { path: '/accounting-documents', label: 'ทะเบียนเอกสารบัญชี' },
-      { path: '/accounting-tax-sales', label: 'รายงานภาษีขาย' },
-      { path: '/accounting-receivables', label: 'ลูกหนี้ค้างชำระ' },
-      { path: '/accounting-reconciliation', label: 'กระทบยอดชำระเงิน' },
-      { path: '/accounting-refunds', label: 'คืนเงิน/ใบลดหนี้' },
-      { path: '/accounting-product-types', label: 'รายงานประเภทสินค้าที่ขาย' },
-    ],
-  },
-  { path: '/organization-settings', label: 'ตั้งค่าองค์กร', icon: Settings, menuKey: 'organization_settings', roles: ['supervisor'] },
-  { path: '/pdpa', label: 'จัดการ PDPA', icon: Settings, menuKey: 'pdpa', roles: ['supervisor'] },
-  { path: '/admins', label: 'ผู้ดูแลระบบ', icon: Users, menuKey: 'admins' },
-];
-
-const boothSamples = [
-  { id: 'A1', type: 'อาหาร', status: 'active' },
-  { id: 'A2', type: 'สำเร็จรูป', status: 'active' },
-  { id: 'A3', type: 'ของหวาน', status: 'active' },
-  { id: 'A4', type: 'อาหารปรุงสำเร็จ', status: 'active' },
-  { id: 'A5', type: 'ต้ม ทอด นึ่ง ผัด ยำ', status: 'active' },
-  { id: 'C1', type: 'เบ็ดเตล็ด', status: 'active' },
-  { id: 'C2', type: 'เบ็ดเตล็ด', status: 'active' },
-  { id: 'B1', type: 'แฟชั่น เครื่องแต่งกาย', status: 'active' },
-  { id: 'B2', type: 'เครื่องใช้ครัวเรือน', status: 'active' },
-  { id: 'B3', type: 'แฟชั่น เครื่องแต่งกาย', status: 'active' },
-  { id: 'B4', type: 'สุขภาพ ความงาม', status: 'active' },
-  { id: 'B5', type: 'เครื่องใช้ครัวเรือน', status: 'active' },
-  { id: 'B6', type: 'เครื่องใช้ไฟฟ้า โทรศัพท์', status: 'active' },
-  { id: 'B7', type: 'อาหารปรุงสำเร็จ', status: 'active' },
-  { id: 'B8', type: 'ของหวาน', status: 'active' },
-  { id: 'B9', type: 'น้ำ เครื่องดื่ม', status: 'active' },
-  { id: 'B10', type: 'อาหารปรุงสำเร็จ', status: 'active' },
-  { id: 'B11', type: 'อาหารปรุงสำเร็จ', status: 'active' },
-  { id: 'B12', type: 'อาหารปรุงสำเร็จ', status: 'active' },
-  { id: 'B13', type: 'อาหารปรุงสำเร็จ', status: 'active' },
-  { id: 'B14', type: 'ของหวาน', status: 'active' },
-  { id: 'B15', type: 'อาหารปรุงสำเร็จ', status: 'active' },
-];
-
-function classNames(...values) {
-  return values.filter(Boolean).join(' ');
-}
 
 const SubscriptionContext = createContext({
   subscription: null,
@@ -249,41 +131,6 @@ function buildSubscriptionGate(subscription, featureKey) {
 
 function useSubscription() {
   return useContext(SubscriptionContext);
-}
-
-function formatMoney(value) {
-  return new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB' }).format(Number(value || 0));
-}
-
-function formatDate(value) {
-  if (!value) return '-';
-  return new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeZone: 'Asia/Bangkok' }).format(new Date(value));
-}
-
-function parseBookingDateList(value) {
-  if (!value) return [];
-  return String(value)
-    .split(',')
-    .map((date) => date.trim())
-    .filter(Boolean)
-    .sort();
-}
-
-function formatBookingDateValue(value) {
-  if (!value) return '-';
-  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) {
-    return formatDate(`${value}T00:00:00+07:00`);
-  }
-  return formatDate(value);
-}
-
-function formatBookingDateSummary(value) {
-  const dates = parseBookingDateList(value);
-  if (!dates.length) return '-';
-  if (dates.length === 1) return formatBookingDateValue(dates[0]);
-  const firstDate = formatBookingDateValue(dates[0]);
-  const lastDate = formatBookingDateValue(dates[dates.length - 1]);
-  return `${firstDate} - ${lastDate} (${dates.length} วัน)`;
 }
 
 function auditResultLabel(value) {
@@ -377,28 +224,6 @@ function toDateInputValue(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
-function normalizeRows(value) {
-  if (Array.isArray(value)) return value;
-  if (Array.isArray(value?.rows)) return value.rows;
-  if (Array.isArray(value?.items)) return value.items;
-  return [];
-}
-
-function reportFileName(title, extension) {
-  const date = new Date().toISOString().slice(0, 10);
-  const safeTitle = String(title || 'report').replace(/[^\w\u0E00-\u0E7F-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'report';
-  return `${safeTitle}-${date}.${extension}`;
-}
-
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 function downloadBlob(blob, filename) {
@@ -593,24 +418,6 @@ function openPaymentDocumentWindow(payment) {
   child.document.close();
 }
 
-function StatusBadge({ value }) {
-  const status = String(value || '-').toLowerCase();
-  const styles = {
-    active: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-    paid: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-    success: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-    open: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-    pending_payment: 'bg-amber-50 text-amber-700 ring-amber-200',
-    payment_processing: 'bg-blue-50 text-blue-700 ring-blue-200',
-    failed: 'bg-red-50 text-red-700 ring-red-200',
-    cancelled: 'bg-slate-100 text-slate-600 ring-slate-200',
-    expired: 'bg-slate-100 text-slate-600 ring-slate-200',
-    inactive: 'bg-slate-100 text-slate-600 ring-slate-200',
-    closed: 'bg-slate-100 text-slate-600 ring-slate-200',
-  };
-  return <span className={classNames('inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1', styles[status] || styles.active)}>{value || '-'}</span>;
-}
-
 function boothAvailabilityLabel(status) {
   const labels = {
     available: 'ว่าง',
@@ -619,25 +426,6 @@ function boothAvailabilityLabel(status) {
     booked: 'ถูกจองแล้ว',
   };
   return labels[status] || status || '-';
-}
-
-function EmptyState({ title = 'ไม่พบข้อมูล', description = 'ยังไม่มีรายการสำหรับเงื่อนไขนี้' }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
-      <p className="text-sm font-semibold text-slate-800">{title}</p>
-      <p className="mt-1 text-sm text-slate-500">{description}</p>
-    </div>
-  );
-}
-
-function LoadingBlock() {
-  return (
-    <div className="space-y-3">
-      {[0, 1, 2].map((item) => (
-        <div key={item} className="h-16 animate-pulse rounded-2xl bg-slate-100" />
-      ))}
-    </div>
-  );
 }
 
 function ErrorNotice({ error, hint }) {
@@ -797,7 +585,7 @@ function Shell() {
           >
             <SubscriptionNotice message={subscriptionNotice || subscriptionContextValue.blockedMessage} onDismiss={() => setSubscriptionNotice('')} persistent={subscriptionContextValue.actionBlocked} />
             <Routes>
-              <Route path="/" element={<Dashboard marketId={currentMarketId} markets={marketRows} />} />
+              <Route path="/" element={<DashboardComponent marketId={currentMarketId} markets={marketRows} />} />
               <Route path="/markets" element={<MarketsPage markets={marketRows} reloadMarkets={reloadMarkets} />} />
               <Route path="/market-info" element={<MarketInfoPage marketId={currentMarketId} market={currentMarket} reloadMarkets={reloadMarkets} />} />
               <Route path="/booth-types" element={<BoothTypesPage marketId={currentMarketId} />} />
@@ -979,115 +767,8 @@ function SubscriptionNotice({ message, onDismiss, persistent = false }) {
   );
 }
 
-function PageHeader({ title, description, action }) {
-  return (
-    <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-slate-950 md:text-3xl">{title}</h1>
-        {description ? <p className="mt-1 text-sm text-slate-500">{description}</p> : null}
-      </div>
-      {action ? <div>{action}</div> : null}
-    </div>
-  );
-}
-
-function Card({ children, className = '' }) {
-  return <div className={classNames('rounded-3xl border border-slate-200 bg-white p-6 shadow-soft', className)}>{children}</div>;
-}
-
-function SectionTitle({ icon: Icon, title, description }) {
-  return (
-    <div className="mb-5 flex items-start gap-3">
-      {Icon ? <div className="rounded-2xl bg-cyan-50 p-3 text-cyan-700"><Icon size={20} /></div> : null}
-      <div>
-        <h2 className="text-lg font-extrabold text-slate-950">{title}</h2>
-        {description ? <p className="mt-1 text-sm text-slate-500">{description}</p> : null}
-      </div>
-    </div>
-  );
-}
-
 function NeedMarket() {
   return <EmptyState title="กรุณาเลือกตลาด" description="เลือกตลาดจากด้านบนก่อนจัดการข้อมูลส่วนนี้" />;
-}
-
-function Stat({ label, value, icon: Icon, tone = 'slate' }) {
-  const tones = {
-    slate: 'bg-slate-950 text-white',
-    emerald: 'bg-emerald-600 text-white',
-    blue: 'bg-blue-600 text-white',
-    amber: 'bg-amber-500 text-slate-950',
-    cyan: 'bg-cyan-600 text-white',
-    red: 'bg-red-600 text-white',
-  };
-  return (
-    <Card className="flex items-center gap-4">
-      <div className={classNames('rounded-2xl p-3', tones[tone])}>{Icon ? <Icon size={22} /> : null}</div>
-      <div>
-        <p className="text-sm text-slate-500">{label}</p>
-        <p className="mt-1 text-2xl font-extrabold text-slate-950">{value}</p>
-      </div>
-    </Card>
-  );
-}
-
-function Dashboard({ marketId, markets }) {
-  const { user } = useAuth();
-  const canReadReports = ['supervisor', 'admin', 'accounting'].includes(user?.role);
-  const canReadPayments = ['supervisor', 'admin', 'accounting'].includes(user?.role);
-  const { data: summary = {}, loading: summaryLoading } = useApi(canReadReports ? '/dashboard/summary' : null, { initialData: {}, skip: !canReadReports });
-  const { data: report = [], loading: reportLoading } = useApi(canReadReports ? '/reports/bookings' : null, { initialData: [], skip: !canReadReports });
-  const { data: payments = [] } = useApi(canReadPayments ? '/accounting/payments?paidOnly=1' : null, { initialData: [], skip: !canReadPayments });
-  const reportRows = normalizeRows(report);
-  const paymentRows = normalizeRows(payments);
-  const dashboardDescription = user?.role === 'admin'
-    ? `ภาพรวมเฉพาะตลาดที่ได้รับมอบหมาย ${marketId ? `(เลือกตลาด ${marketId})` : ''}`
-    : 'ภาพรวมรวมทุกตลาดภายในองค์กร';
-
-  const summaryCards = [
-    { label: 'บูธที่เปิดจองทั้งหมด', value: summaryLoading ? '...' : Number(summary.totalBooths || 0), icon: Store, tone: 'slate' },
-    { label: 'บูธที่จองแล้ว', value: summaryLoading ? '...' : Number(summary.bookedBooths || 0), icon: TicketCheck, tone: 'blue' },
-    { label: 'บูธที่ยังว่างอยู่', value: summaryLoading ? '...' : Number(summary.availableBooths || 0), icon: BadgeCheck, tone: 'emerald' },
-    { label: 'ยอดคนที่เข้ามาทำรายการทั้งหมด (วันปัจจุบัน)', value: summaryLoading ? '...' : Number(summary.dailyCustomers || 0), icon: Users, tone: 'amber' },
-    { label: 'ยอดชำระการจอง (วันปัจจุบัน)', value: summaryLoading ? '...' : formatMoney(summary.bookingPaidToday || 0), icon: CreditCard, tone: 'emerald' },
-    { label: 'ยอดชำระค่าปรับ (วันปัจจุบัน)', value: summaryLoading ? '...' : formatMoney(summary.finePaidToday || 0), icon: CreditCard, tone: 'cyan' },
-    { label: 'ยอดค้างชำระค่าจอง (ทั้งหมด)', value: summaryLoading ? '...' : formatMoney(summary.bookingOutstanding || 0), icon: BarChart3, tone: 'red' },
-    { label: 'ยอดค้างชำระค่าปรับ (ทั้งหมด)', value: summaryLoading ? '...' : formatMoney(summary.fineOutstanding || 0), icon: ClipboardCheck, tone: 'red' },
-  ];
-
-  return (
-    <>
-      <PageHeader title="ภาพรวมระบบ" description={dashboardDescription} />
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {summaryCards.map((item) => <Stat key={item.label} label={item.label} value={item.value} icon={item.icon} tone={item.tone} />)}
-      </div>
-      <div className="mt-6 grid gap-6">
-        <Card>
-          <SectionTitle title="รายการจองยังไม่สำเร็จ" description="รายการ pending, processing และ expired ตามวันที่จอง" icon={BarChart3} />
-          {reportLoading ? <LoadingBlock /> : <ReportTable rows={reportRows} />}
-        </Card>
-        <Card>
-          <SectionTitle title="รายการชำระเงินล่าสุด" description="แสดงรายการล่าสุดจากระบบบัญชี" icon={CreditCard} />
-          {paymentRows.length ? (
-            <DataTable
-              columns={['เลขชำระเงิน', 'เลขจอง', 'วันที่จอง', 'Booth', 'Provider', 'สถานะ', 'VAT', 'จำนวนเงิน', 'วันที่ชำระ/ทำรายการ']}
-              rows={paymentRows.slice(0, 10).map((payment) => [
-                payment.public_id,
-                payment.booking_public_id || '-',
-                payment.booking_dates || '-',
-                payment.booths || '-',
-                payment.provider,
-                <StatusBadge value={payment.status} />,
-                formatMoney(payment.vat_amount || 0),
-                formatMoney(payment.amount),
-                formatDate(payment.paid_at || payment.created_at),
-              ])}
-            />
-          ) : <EmptyState title="ไม่พบข้อมูลการชำระเงิน" description="ยังไม่มีรายการชำระเงินล่าสุดในช่วงนี้" />}
-        </Card>
-      </div>
-    </>
-  );
 }
 
 function MarketsPage({ markets, reloadMarkets }) {
@@ -1111,10 +792,6 @@ function MarketsPage({ markets, reloadMarkets }) {
 
   async function submit(event) {
     event.preventDefault();
-    if (isNews && !form.marketId) {
-      window.alert('กรุณาเลือกตลาดสำหรับข่าวสาร');
-      return;
-    }
     const payload = new FormData();
     payload.append('code', form.code);
     payload.append('name', form.name);
@@ -3972,57 +3649,6 @@ function ReportExportActions({ title, columns, rows, disabled = false }) {
         <Printer size={16} />
         พิมพ์
       </ReportActionButton>
-    </div>
-  );
-}
-
-function DataTable({ columns, rows }) {
-  const pageSize = 10;
-  const [page, setPage] = useState(1);
-
-  useEffect(() => {
-    setPage(1);
-  }, [rows?.length]);
-
-  if (!rows?.length) return <EmptyState />;
-  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
-  const startIndex = (currentPage - 1) * pageSize;
-  const endIndex = Math.min(startIndex + pageSize, rows.length);
-  const pagedRows = rows.slice(startIndex, endIndex);
-
-  return (
-    <div className="space-y-4">
-      <div className="overflow-x-auto">
-        <table className="min-w-full border-separate border-spacing-0 text-left text-sm">
-          <thead>
-            <tr>
-              {columns.map((column) => (
-                <th key={column} className="border-b border-slate-200 bg-slate-50 px-4 py-3 font-bold text-slate-700 first:rounded-l-xl last:rounded-r-xl">{column}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {pagedRows.map((row, rowIndex) => (
-              <tr key={`${currentPage}-${rowIndex}`} className="transition hover:bg-slate-50">
-                {row.map((cell, cellIndex) => (
-                  <td key={`${currentPage}-${rowIndex}-${cellIndex}`} className="border-b border-slate-100 px-4 py-4 align-middle text-slate-700">{cell}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 md:flex-row md:items-center md:justify-between">
-        <div>แสดง {startIndex + 1}-{endIndex} จาก {rows.length} รายการ</div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span>หน้า {currentPage} / {totalPages}</span>
-          <SmallButton tone="slate" onClick={() => setPage(1)} disabled={currentPage === 1}>หน้าแรก</SmallButton>
-          <SmallButton tone="slate" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={currentPage === 1}>ก่อนหน้า</SmallButton>
-          <SmallButton tone="slate" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={currentPage === totalPages}>ถัดไป</SmallButton>
-          <SmallButton tone="slate" onClick={() => setPage(totalPages)} disabled={currentPage === totalPages}>หน้าสุดท้าย</SmallButton>
-        </div>
-      </div>
     </div>
   );
 }
