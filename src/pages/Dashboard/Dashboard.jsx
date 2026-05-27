@@ -20,6 +20,10 @@ import { StatusBadge } from '../../components/StatusBadge.jsx';
 import { ReportTable } from '../../components/ReportTable.jsx';
 import { normalizeRows, formatMoney, formatDate } from '../../utils/formatters.js';
 
+function paymentTypeLabel(value) {
+  return value === 'audit_fine' ? 'ค่าปรับ' : 'ค่าบริการ';
+}
+
 export function Dashboard({ marketId, markets }) {
   const { user } = useAuth();
   const canReadReports = ['supervisor', 'admin', 'accounting'].includes(user?.role);
@@ -59,13 +63,13 @@ export function Dashboard({ marketId, markets }) {
           <SectionTitle title="รายการชำระเงินล่าสุด" description="แสดงรายการล่าสุดจากระบบบัญชี" icon={CreditCard} />
           {paymentRows.length ? (
             <DataTable
-              columns={['เลขชำระเงิน', 'เลขจอง', 'วันที่จอง', 'Booth', 'Provider', 'สถานะ', 'VAT', 'จำนวนเงิน', 'วันที่ชำระ/ทำรายการ']}
+              columns={['เลขชำระเงิน', 'เลขจอง', 'ประเภท', 'วันที่จอง', 'Booth', 'สถานะ', 'VAT', 'จำนวนเงิน', 'วันที่ชำระ/ทำรายการ']}
               rows={paymentRows.slice(0, 10).map((payment) => [
                 payment.public_id,
                 payment.booking_public_id || '-',
+                paymentTypeLabel(payment.payment_kind),
                 payment.booking_dates || '-',
                 payment.booths || '-',
-                payment.provider,
                 <StatusBadge value={payment.status} />,
                 formatMoney(payment.vat_amount || 0),
                 formatMoney(payment.amount),

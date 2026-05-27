@@ -140,6 +140,10 @@ function receivableTypeLabel(value) {
   return value === 'fine' ? 'ค่าปรับ' : value === 'booking' ? 'ค่าจอง' : value || '-';
 }
 
+function paymentTypeLabel(value) {
+  return value === 'audit_fine' ? 'ค่าปรับ' : 'ค่าบริการ';
+}
+
 function reconciliationLabel(value) {
   return value === 'matched' ? 'ตรงกัน' : 'ต้องตรวจสอบ';
 }
@@ -1614,8 +1618,8 @@ function AccountingStandardReportPage({ reportType }) {
       title: 'กระทบยอดชำระเงิน',
       description: 'ตรวจสอบยอด payment เทียบ booking, callback และเอกสารบัญชี',
       path: '/accounting/reconciliation',
-      columns: ['เลขชำระเงิน', 'Provider', 'Reference', 'เลขที่ใบจอง', 'ตลาด', 'สถานะชำระเงิน', 'สถานะจอง', 'ยอดชำระ', 'ยอดจอง', 'Callback', 'เอกสาร', 'ผลกระทบยอด', 'วันที่ทำรายการ'],
-      row: (item) => [item.payment_public_id || '-', item.provider || '-', item.provider_reference || '-', item.booking_public_id || '-', item.market_name || '-', item.payment_status || '-', item.booking_status || '-', formatMoney(item.payment_amount || 0), formatMoney(item.booking_amount || 0), Number(item.callback_count || 0), item.document_no || '-', reconciliationLabel(item.reconciliation_status), formatDate(item.paid_at || item.created_at)],
+      columns: ['เลขชำระเงิน', 'ประเภทการชำระเงิน', 'Reference', 'เลขที่ใบจอง', 'ตลาด', 'สถานะชำระเงิน', 'สถานะจอง', 'ยอดชำระ', 'ยอดอ้างอิง', 'Callback', 'เอกสาร', 'ผลกระทบยอด', 'วันที่ทำรายการ'],
+      row: (item) => [item.payment_public_id || '-', paymentTypeLabel(item.payment_kind), item.provider_reference || '-', item.booking_public_id || '-', item.market_name || '-', item.payment_status || '-', item.booking_status || '-', formatMoney(item.payment_amount || 0), formatMoney(item.booking_amount || 0), Number(item.callback_count || 0), item.document_no || '-', reconciliationLabel(item.reconciliation_status), formatDate(item.paid_at || item.created_at)],
     },
     refunds: {
       title: 'คืนเงิน/ใบลดหนี้',
@@ -1733,12 +1737,12 @@ function AccountingPage({ paidOnly = false }) {
   const rows = normalizeRows(data);
   const filteredRows = filterRowsByKeyword(rows, filters.keyword);
   const exportColumns = paidOnly
-    ? ['เลขชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน']
-    : ['เลขชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'Provider', 'สถานะ', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน'];
+    ? ['เลขชำระเงิน', 'ประเภทการชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน']
+    : ['เลขชำระเงิน', 'ประเภทการชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'สถานะ', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน'];
   const exportRows = filteredRows.map((payment) => {
-    const baseRow = [payment.public_id, payment.booking_public_id || '-', payment.market_name || '-', formatBookingDateSummary(payment.booking_dates), payment.booths || '-', payment.customer_name || '-'];
+    const baseRow = [payment.public_id, paymentTypeLabel(payment.payment_kind), payment.booking_public_id || '-', payment.market_name || '-', formatBookingDateSummary(payment.booking_dates), payment.booths || '-', payment.customer_name || '-'];
     const amountRow = [formatMoney(payment.subtotal_amount || 0), formatMoney(payment.discount_amount || 0), formatMoney(payment.vat_amount || 0), formatMoney(payment.amount), formatDate(payment.paid_at || payment.created_at)];
-    return paidOnly ? [...baseRow, ...amountRow] : [...baseRow, payment.provider, payment.status || '-', ...amountRow];
+    return paidOnly ? [...baseRow, ...amountRow] : [...baseRow, payment.status || '-', ...amountRow];
   });
 
   function setFilter(name, value) {
@@ -1790,9 +1794,10 @@ function AccountingPage({ paidOnly = false }) {
               </select>
             </div>
           </div>
-          {loading ? <LoadingBlock /> : <DataTable columns={paidOnly ? ['เลขชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน', 'จัดการ'] : ['เลขชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'Provider', 'สถานะ', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน', 'จัดการ']} rows={filteredRows.map((payment) => {
+          {loading ? <LoadingBlock /> : <DataTable columns={paidOnly ? ['เลขชำระเงิน', 'ประเภทการชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน', 'จัดการ'] : ['เลขชำระเงิน', 'ประเภทการชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'สถานะ', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน', 'จัดการ']} rows={filteredRows.map((payment) => {
             const baseRow = [
               payment.public_id,
+              paymentTypeLabel(payment.payment_kind),
               payment.booking_public_id || '-',
               payment.market_name || '-',
               <BookingDateSummary value={payment.booking_dates} />,
@@ -1809,7 +1814,7 @@ function AccountingPage({ paidOnly = false }) {
                 {payment.document_no || (Number(payment.vat_enabled || 0) === 1 ? 'ใบกำกับภาษี' : 'ใบเสร็จ')}
               </SmallButton>,
             ];
-            return paidOnly ? [...baseRow, ...amountRow] : [...baseRow, payment.provider, <StatusBadge value={payment.status} />, ...amountRow];
+            return paidOnly ? [...baseRow, ...amountRow] : [...baseRow, <StatusBadge value={payment.status} />, ...amountRow];
           })} />}
         </div>
       </Card>
@@ -1982,7 +1987,7 @@ function PaymentList({ rows }) {
         <div key={payment.id || payment.public_id} className="flex items-center justify-between rounded-2xl border border-slate-200 p-4">
           <div>
             <p className="font-bold text-slate-950">{payment.public_id}</p>
-            <p className="text-sm text-slate-500">{payment.provider} · {payment.booking_dates || '-'} · {payment.booths || '-'}</p>
+            <p className="text-sm text-slate-500">{paymentTypeLabel(payment.payment_kind)} · {payment.booking_dates || '-'} · {payment.booths || '-'}</p>
           </div>
           <div className="text-right">
             <p className="font-bold text-slate-950">{formatMoney(payment.amount)}</p>
