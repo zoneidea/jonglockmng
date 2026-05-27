@@ -745,6 +745,8 @@ function Topbar({ user, markets, currentMarketId, currentMarket, marketsLoading,
 }
 
 function ShareQrModal({ open, user, market, onClose }) {
+  if (!open) return null;
+
   const deeplink = buildManagementShareDeeplink(user, market);
   const shareText = market?.name
     ? `เปิดดูตลาด ${market.name} บน Jonglock`
@@ -784,38 +786,51 @@ function ShareQrModal({ open, user, market, onClose }) {
   }
 
   return (
-    <Modal open={open} title="แชร์ไปยังแอปฯ Jonglock" onClose={onClose}>
-      <div className="grid gap-5 md:grid-cols-[220px_1fr]">
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-          <QrMatrix value={deeplink} />
-        </div>
-        <div className="space-y-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 px-4 py-4">
+      <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
           <div>
-            <p className="text-sm font-bold text-slate-500">Deep link</p>
-            <p className="mt-2 break-all rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">{deeplink}</p>
+            <h2 className="text-lg font-extrabold text-slate-950">แชร์ไปยังแอปฯ Jonglock</h2>
+            <p className="mt-1 text-xs font-semibold text-slate-500">สแกนเพื่อเปิดตลาดนี้ในแอปฯ โดยตรง</p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <button data-subscription-ignore="true" type="button" onClick={() => openPopup(`https://social-plugins.line.me/lineit/share?url=${encodedLink}`)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-bold text-white hover:bg-emerald-600">
-              <MessageCircle size={16} />
-              Line
-            </button>
-            <button data-subscription-ignore="true" type="button" onClick={() => openPopup(`https://www.facebook.com/sharer/sharer.php?u=${encodedLink}`)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700">
-              <Share2 size={16} />
-              Facebook
-            </button>
-            <a href={`mailto:?subject=${encodeURIComponent(shareText)}&body=${encodedText}`} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-700 px-4 text-sm font-bold text-white hover:bg-slate-800">
-              <Mail size={16} />
-              Email
-            </a>
-            <button data-subscription-ignore="true" type="button" onClick={downloadQr} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white hover:bg-cyan-700">
-              <Download size={16} />
-              Download
-            </button>
+          <button data-subscription-ignore="true" type="button" onClick={onClose} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100" aria-label="ปิด">
+            <X size={20} />
+          </button>
+        </div>
+        <div className="overflow-y-auto p-5">
+          <div className="grid gap-5 md:grid-cols-[190px_1fr]">
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
+              <QrMatrix value={deeplink} />
+            </div>
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-bold text-slate-500">Deep link</p>
+                <p className="mt-2 break-all rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">{deeplink}</p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button data-subscription-ignore="true" type="button" onClick={() => openPopup(`https://social-plugins.line.me/lineit/share?url=${encodedLink}`)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-bold text-white hover:bg-emerald-600">
+                  <MessageCircle size={16} />
+                  Line
+                </button>
+                <button data-subscription-ignore="true" type="button" onClick={() => openPopup(`https://www.facebook.com/sharer/sharer.php?u=${encodedLink}`)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700">
+                  <Share2 size={16} />
+                  Facebook
+                </button>
+                <a href={`mailto:?subject=${encodeURIComponent(shareText)}&body=${encodedText}`} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-700 px-4 text-sm font-bold text-white hover:bg-slate-800">
+                  <Mail size={16} />
+                  Email
+                </a>
+                <button data-subscription-ignore="true" type="button" onClick={downloadQr} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white hover:bg-cyan-700">
+                  <Download size={16} />
+                  Download
+                </button>
+              </div>
+              <p className="text-xs leading-5 text-slate-500">QR นี้ encode เป็น deep link สำหรับเปิดแอปฯ โดยตรง เมื่อแอปฯ รองรับ deep link route แล้วจะพาผู้ใช้ไปยังตลาด/องค์กรที่เลือกได้ทันที</p>
+            </div>
           </div>
-          <p className="text-xs leading-5 text-slate-500">QR นี้ encode เป็น deep link สำหรับเปิดแอปฯ โดยตรง เมื่อแอปฯ รองรับ deep link route แล้วจะพาผู้ใช้ไปยังตลาด/องค์กรที่เลือกได้ทันที</p>
         </div>
       </div>
-    </Modal>
+    </div>
   );
 }
 
@@ -831,11 +846,11 @@ function QrMatrix({ value }) {
   }, [value]);
 
   return (
-    <div className="mx-auto w-fit rounded-2xl bg-white p-3 shadow-sm">
+    <div className="mx-auto w-fit rounded-2xl bg-white p-2 shadow-sm">
       {matrix.map((row, rowIndex) => (
         <div key={`qr-row-${rowIndex}`} className="flex">
           {row.map((dark, columnIndex) => (
-            <span key={`qr-cell-${rowIndex}-${columnIndex}`} className={classNames('h-[5px] w-[5px]', dark ? 'bg-slate-950' : 'bg-white')} />
+            <span key={`qr-cell-${rowIndex}-${columnIndex}`} className={classNames('h-[4px] w-[4px]', dark ? 'bg-slate-950' : 'bg-white')} />
           ))}
         </div>
       ))}
