@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import qrcode from 'qrcode-generator';
 import {
@@ -785,9 +786,9 @@ function ShareQrModal({ open, user, market, onClose }) {
     anchor.click();
   }
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/55 px-4 py-4">
-      <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+  const dialog = (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto bg-slate-950/60 px-4 py-6">
+      <div className="my-auto flex max-h-[calc(100dvh-3rem)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
         <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
           <div>
             <h2 className="text-lg font-extrabold text-slate-950">แชร์ไปยังแอปฯ Jonglock</h2>
@@ -832,6 +833,8 @@ function ShareQrModal({ open, user, market, onClose }) {
       </div>
     </div>
   );
+
+  return createPortal(dialog, document.body);
 }
 
 function QrMatrix({ value }) {

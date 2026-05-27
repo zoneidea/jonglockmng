@@ -52,7 +52,7 @@ export function AuthProvider({ children }) {
   async function login(organizationCode, username, password, rememberMe = false) {
     const payload = await request('/auth/login', {
       method: 'POST',
-      body: { organizationCode, username, password },
+      body: { organizationCode, username, password, rememberMe },
     });
     const nextSession = payload.data;
     persistSession(nextSession, rememberMe);
