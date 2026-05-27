@@ -49,10 +49,10 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  async function login(username, password, rememberMe = false) {
+  async function login(organizationCode, username, password, rememberMe = false) {
     const payload = await request('/auth/login', {
       method: 'POST',
-      body: { username, password },
+      body: { organizationCode, username, password },
     });
     const nextSession = payload.data;
     persistSession(nextSession, rememberMe);

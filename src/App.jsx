@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import qrcode from 'qrcode-generator';
 import {
   BadgeCheck,
   BarChart3,
@@ -9,6 +10,7 @@ import {
   ChevronRight,
   ClipboardCheck,
   CreditCard,
+  Download,
   Eye,
   EyeOff,
   FileSpreadsheet,
@@ -22,8 +24,10 @@ import {
   List,
   ListOrdered,
   LogOut,
+  Mail,
   Megaphone,
   Menu,
+  MessageCircle,
   Package,
   Percent,
   Plus,
@@ -31,6 +35,7 @@ import {
   Redo2,
   Search,
   Settings,
+  Share2,
   Store,
   TicketCheck,
   Type,
@@ -400,7 +405,7 @@ function openPaymentDocumentWindow(payment) {
 function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ username: '', password: '' });
+  const [form, setForm] = useState({ organizationCode: '', username: '', password: '' });
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -410,7 +415,7 @@ function LoginPage() {
     setLoading(true);
     setError('');
     try {
-      await login(form.username, form.password, rememberMe);
+      await login(form.organizationCode.trim().toUpperCase(), form.username, form.password, rememberMe);
       navigate('/');
     } catch (err) {
       setError(err.message || 'เข้าสู่ระบบไม่สำเร็จ');
@@ -447,6 +452,7 @@ function LoginPage() {
             <h2 className="mt-2 text-2xl font-bold">เข้าสู่ระบบจัดการ</h2>
             <p className="mt-2 text-sm text-slate-500">ใช้บัญชี supervisor, admin หรือ accounting</p>
             <div className="mt-8 space-y-4">
+              <TextInput label="รหัสองค์กร" value={form.organizationCode} onChange={(value) => setForm((current) => ({ ...current, organizationCode: value }))} autoComplete="off" required />
               <TextInput label="Username" value={form.username} onChange={(value) => setForm((current) => ({ ...current, username: value }))} autoComplete="off" required />
               <TextInput label="Password" value={form.password} onChange={(value) => setForm((current) => ({ ...current, password: value }))} type="password" autoComplete="new-password" required />
             </div>
@@ -529,6 +535,7 @@ function Shell() {
             user={user}
             markets={marketRows}
             currentMarketId={currentMarketId}
+            currentMarket={currentMarket}
             marketsLoading={marketsLoading}
             showMarketSelector={user?.role !== 'accounting'}
             subscription={subscription}
@@ -682,7 +689,8 @@ function Sidebar({ items, open, onClose }) {
   );
 }
 
-function Topbar({ user, markets, currentMarketId, marketsLoading, showMarketSelector, subscription, subscriptionLoading, onSelectMarket, onOpenSidebar, onLogout }) {
+function Topbar({ user, markets, currentMarketId, currentMarket, marketsLoading, showMarketSelector, subscription, subscriptionLoading, onSelectMarket, onOpenSidebar, onLogout }) {
+  const [shareOpen, setShareOpen] = useState(false);
   const endAt = subscription?.effectiveEndAt ? formatDate(subscription.effectiveEndAt) : '-';
   const statusText = subscriptionLoading
     ? 'กำลังโหลดแพ็คเกจ'
@@ -706,13 +714,142 @@ function Topbar({ user, markets, currentMarketId, marketsLoading, showMarketSele
             ))}
           </select>
         ) : null}
-        <button data-subscription-ignore="true" onClick={onLogout} className="inline-flex h-11 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800">
-          <LogOut size={16} />
-          <span className="hidden sm:inline">ออกจากระบบ</span>
+        <button
+          data-subscription-ignore="true"
+          type="button"
+          onClick={() => setShareOpen(true)}
+          className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-700"
+          title="แชร์"
+          aria-label="แชร์"
+        >
+          <Share2 size={18} />
+        </button>
+        <button
+          data-subscription-ignore="true"
+          onClick={onLogout}
+          className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-slate-950 text-white transition hover:bg-slate-800"
+          title="ออกจากระบบ"
+          aria-label="ออกจากระบบ"
+        >
+          <LogOut size={18} />
         </button>
       </div>
+      <ShareQrModal
+        open={shareOpen}
+        user={user}
+        market={currentMarket}
+        onClose={() => setShareOpen(false)}
+      />
     </header>
   );
+}
+
+function ShareQrModal({ open, user, market, onClose }) {
+  const deeplink = buildManagementShareDeeplink(user, market);
+  const shareText = market?.name
+    ? `เปิดดูตลาด ${market.name} บน Jonglock`
+    : 'เปิด Jonglock';
+  const encodedLink = encodeURIComponent(deeplink);
+  const encodedText = encodeURIComponent(`${shareText}\n${deeplink}`);
+
+  function openPopup(url) {
+    window.open(url, '_blank', 'noopener,noreferrer,width=720,height=640');
+  }
+
+  function downloadQr() {
+    const qr = qrcode(0, 'M');
+    qr.addData(deeplink);
+    qr.make();
+    const moduleCount = qr.getModuleCount();
+    const cellSize = 10;
+    const quietZone = 4;
+    const canvas = document.createElement('canvas');
+    canvas.width = (moduleCount + quietZone * 2) * cellSize;
+    canvas.height = canvas.width;
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = '#07111f';
+    for (let row = 0; row < moduleCount; row += 1) {
+      for (let column = 0; column < moduleCount; column += 1) {
+        if (qr.isDark(row, column)) {
+          context.fillRect((column + quietZone) * cellSize, (row + quietZone) * cellSize, cellSize, cellSize);
+        }
+      }
+    }
+    const anchor = document.createElement('a');
+    anchor.href = canvas.toDataURL('image/png');
+    anchor.download = `${market?.code || user?.organizationCode || 'jonglock'}-deeplink-qr.png`;
+    anchor.click();
+  }
+
+  return (
+    <Modal open={open} title="แชร์ไปยังแอปฯ Jonglock" onClose={onClose}>
+      <div className="grid gap-5 md:grid-cols-[220px_1fr]">
+        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+          <QrMatrix value={deeplink} />
+        </div>
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm font-bold text-slate-500">Deep link</p>
+            <p className="mt-2 break-all rounded-2xl bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">{deeplink}</p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button data-subscription-ignore="true" type="button" onClick={() => openPopup(`https://social-plugins.line.me/lineit/share?url=${encodedLink}`)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 text-sm font-bold text-white hover:bg-emerald-600">
+              <MessageCircle size={16} />
+              Line
+            </button>
+            <button data-subscription-ignore="true" type="button" onClick={() => openPopup(`https://www.facebook.com/sharer/sharer.php?u=${encodedLink}`)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700">
+              <Share2 size={16} />
+              Facebook
+            </button>
+            <a href={`mailto:?subject=${encodeURIComponent(shareText)}&body=${encodedText}`} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-700 px-4 text-sm font-bold text-white hover:bg-slate-800">
+              <Mail size={16} />
+              Email
+            </a>
+            <button data-subscription-ignore="true" type="button" onClick={downloadQr} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white hover:bg-cyan-700">
+              <Download size={16} />
+              Download
+            </button>
+          </div>
+          <p className="text-xs leading-5 text-slate-500">QR นี้ encode เป็น deep link สำหรับเปิดแอปฯ โดยตรง เมื่อแอปฯ รองรับ deep link route แล้วจะพาผู้ใช้ไปยังตลาด/องค์กรที่เลือกได้ทันที</p>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function QrMatrix({ value }) {
+  const matrix = useMemo(() => {
+    const qr = qrcode(0, 'M');
+    qr.addData(value);
+    qr.make();
+    const moduleCount = qr.getModuleCount();
+    return Array.from({ length: moduleCount }, (ignoredRowValue, row) =>
+      Array.from({ length: moduleCount }, (ignoredColumnValue, column) => qr.isDark(row, column)),
+    );
+  }, [value]);
+
+  return (
+    <div className="mx-auto w-fit rounded-2xl bg-white p-3 shadow-sm">
+      {matrix.map((row, rowIndex) => (
+        <div key={`qr-row-${rowIndex}`} className="flex">
+          {row.map((dark, columnIndex) => (
+            <span key={`qr-cell-${rowIndex}-${columnIndex}`} className={classNames('h-[5px] w-[5px]', dark ? 'bg-slate-950' : 'bg-white')} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function buildManagementShareDeeplink(user, market) {
+  const params = new URLSearchParams();
+  if (user?.organizationCode) params.set('organizationCode', user.organizationCode);
+  if (user?.organizationId) params.set('organizationId', String(user.organizationId));
+  if (market?.id) params.set('marketId', String(market.id));
+  if (market?.code) params.set('marketCode', market.code);
+  return `jonglock://market${params.toString() ? `?${params.toString()}` : ''}`;
 }
 
 function SubscriptionNotice({ message, onDismiss, persistent = false }) {
