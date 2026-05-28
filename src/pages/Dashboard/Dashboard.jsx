@@ -263,14 +263,14 @@ export function Dashboard({ marketId, markets }) {
     : 'ภาพรวมรวมทุกตลาดภายในองค์กร';
 
   const summaryCards = [
-    { label: 'บูธที่เปิดจองทั้งหมด', value: summaryLoading ? '...' : Number(summary.totalBooths || 0), icon: Store, tone: 'slate' },
-    { label: 'บูธที่จองแล้ว', value: summaryLoading ? '...' : Number(summary.bookedBooths || 0), icon: TicketCheck, tone: 'blue' },
-    { label: 'บูธที่ยังว่างอยู่', value: summaryLoading ? '...' : Number(summary.availableBooths || 0), icon: BadgeCheck, tone: 'emerald' },
-    { label: 'ยอดคนที่เข้ามาทำรายการทั้งหมด (วันปัจจุบัน)', value: summaryLoading ? '...' : Number(summary.dailyCustomers || 0), icon: Users, tone: 'amber' },
-    { label: 'ยอดชำระการจอง (วันปัจจุบัน)', value: summaryLoading ? '...' : formatMoney(summary.bookingPaidToday || 0), icon: CreditCard, tone: 'emerald' },
-    { label: 'ยอดชำระค่าปรับ (วันปัจจุบัน)', value: summaryLoading ? '...' : formatMoney(summary.finePaidToday || 0), icon: CreditCard, tone: 'cyan' },
-    { label: 'ยอดค้างชำระค่าจอง (ทั้งหมด)', value: summaryLoading ? '...' : formatMoney(summary.bookingOutstanding || 0), icon: BarChart3, tone: 'red' },
-    { label: 'ยอดค้างชำระค่าปรับ (ทั้งหมด)', value: summaryLoading ? '...' : formatMoney(summary.fineOutstanding || 0), icon: ClipboardCheck, tone: 'red' },
+    { label: 'ยอดชำระวันนี้', value: summaryLoading ? '...' : formatMoney(summary.paidToday ?? (Number(summary.bookingPaidToday || 0) + Number(summary.finePaidToday || 0))), icon: CreditCard, tone: 'emerald' },
+    { label: 'ยอดชำระเดือนนี้', value: summaryLoading ? '...' : formatMoney(summary.paidThisMonth || 0), icon: BarChart3, tone: 'cyan' },
+    { label: 'ยอดค้างชำระทั้งหมด', value: summaryLoading ? '...' : formatMoney(summary.outstandingTotal ?? (Number(summary.bookingOutstanding || 0) + Number(summary.fineOutstanding || 0))), icon: ClipboardCheck, tone: 'red' },
+    { label: 'รายการรอตรวจสลิป', value: summaryLoading ? '...' : Number(summary.pendingPaymentProofs || 0), icon: TicketCheck, tone: 'amber' },
+    { label: 'บูธเปิดจองทั้งหมด', value: summaryLoading ? '...' : Number(summary.totalBooths || 0), icon: Store, tone: 'slate' },
+    { label: 'บูธถูกจองวันนี้', value: summaryLoading ? '...' : Number(summary.bookedBooths || 0), icon: TicketCheck, tone: 'blue' },
+    { label: 'บูธว่างวันนี้', value: summaryLoading ? '...' : Number(summary.availableBooths || 0), icon: BadgeCheck, tone: 'emerald' },
+    { label: 'ผู้ทำรายการวันนี้', value: summaryLoading ? '...' : Number(summary.dailyCustomers || 0), icon: Users, tone: 'amber' },
   ];
 
   return (
