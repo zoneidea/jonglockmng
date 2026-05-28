@@ -96,6 +96,30 @@ import {
 } from './utils/formatters.js';
 
 const POWERED_BY_TEXT = 'Powered by zone-idea innovation co.,ltd.';
+const REMEMBERED_LOGIN_KEY = 'jonglock.management.rememberedLogin';
+
+function readRememberedLogin() {
+  try {
+    const raw = localStorage.getItem(REMEMBERED_LOGIN_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistRememberedLogin({ organizationCode, username }, rememberMe) {
+  if (!rememberMe) {
+    localStorage.removeItem(REMEMBERED_LOGIN_KEY);
+    return;
+  }
+  localStorage.setItem(
+    REMEMBERED_LOGIN_KEY,
+    JSON.stringify({
+      organizationCode: organizationCode.trim().toUpperCase(),
+      username: username.trim(),
+    }),
+  );
+}
 
 const lazyNamed = (loader, exportName) => lazy(() => loader().then((module) => ({ default: module[exportName] })));
 
@@ -410,8 +434,13 @@ function openPaymentDocumentWindow(payment) {
 function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ organizationCode: '', username: '', password: '' });
-  const [rememberMe, setRememberMe] = useState(false);
+  const rememberedLogin = useMemo(readRememberedLogin, []);
+  const [form, setForm] = useState({
+    organizationCode: rememberedLogin?.organizationCode || '',
+    username: rememberedLogin?.username || '',
+    password: '',
+  });
+  const [rememberMe, setRememberMe] = useState(Boolean(rememberedLogin?.organizationCode || rememberedLogin?.username));
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -420,7 +449,12 @@ function LoginPage() {
     setLoading(true);
     setError('');
     try {
-      await login(form.organizationCode.trim().toUpperCase(), form.username, form.password, rememberMe);
+      const nextLogin = {
+        organizationCode: form.organizationCode.trim().toUpperCase(),
+        username: form.username.trim(),
+      };
+      await login(nextLogin.organizationCode, nextLogin.username, form.password, rememberMe);
+      persistRememberedLogin(nextLogin, rememberMe);
       navigate('/');
     } catch (err) {
       setError(err.message || 'เข้าสู่ระบบไม่สำเร็จ');
