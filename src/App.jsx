@@ -239,6 +239,17 @@ function toDateInputValue(value) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+function currentMonthFilterDates() {
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), 1);
+  const end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  return {
+    startDate: toDateInputValue(start),
+    endDate: toDateInputValue(end),
+    asOfDate: toDateInputValue(today),
+  };
+}
+
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -1324,7 +1335,7 @@ function OrganizationSettingsPage() {
 
 function AuditPage({ marketId, mode }) {
   const { user } = useAuth();
-  const [range, setRange] = useState({ startDate: '2026-05-01', endDate: '2026-05-31' });
+  const [range, setRange] = useState(() => currentMonthFilterDates());
   const isFinePendingReport = mode === 'fines';
   const isFinePaidReport = mode === 'paid';
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
@@ -1419,8 +1430,7 @@ function AccountingAllReportPage() {
   const { data: markets = [] } = useApi('/markets', { initialData: [] });
   const marketRows = normalizeRows(markets);
   const [filters, setFilters] = useState({
-    startDate: '2026-05-01',
-    endDate: '2026-05-31',
+    ...currentMonthFilterDates(),
     marketId: '',
     dateField: 'payment_date',
     sortBy: 'payment_date',
@@ -1523,8 +1533,7 @@ function AccountingSalesSummaryPage() {
   const { data: markets = [] } = useApi('/markets', { initialData: [] });
   const marketRows = normalizeRows(markets);
   const [filters, setFilters] = useState({
-    startDate: '2026-05-01',
-    endDate: '2026-05-31',
+    ...currentMonthFilterDates(),
     marketId: '',
     dateField: 'payment_date',
     sortBy: 'payment_date',
@@ -1618,9 +1627,7 @@ function AccountingStandardReportPage({ reportType }) {
   const { data: markets = [] } = useApi('/markets', { initialData: [] });
   const marketRows = normalizeRows(markets);
   const [filters, setFilters] = useState({
-    startDate: '2026-05-01',
-    endDate: '2026-05-31',
-    asOfDate: '2026-05-31',
+    ...currentMonthFilterDates(),
     marketId: '',
     documentType: 'all',
     documentStatus: 'all',
@@ -1751,8 +1758,7 @@ function AccountingPage({ paidOnly = false }) {
   const { data: markets = [] } = useApi('/markets', { initialData: [] });
   const marketRows = normalizeRows(markets);
   const [filters, setFilters] = useState({
-    startDate: '2026-05-01',
-    endDate: '2026-05-31',
+    ...currentMonthFilterDates(),
     marketId: '',
     dateField: 'payment_date',
     sortBy: 'payment_date',
