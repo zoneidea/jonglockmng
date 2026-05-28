@@ -16,13 +16,7 @@ import { SectionTitle } from '../../components/SectionTitle.jsx';
 import { Stat } from '../../components/Stat.jsx';
 import { LoadingBlock } from '../../components/LoadingBlock.jsx';
 import { EmptyState } from '../../components/EmptyState.jsx';
-import { DataTable } from '../../components/DataTable.jsx';
-import { StatusBadge } from '../../components/StatusBadge.jsx';
-import { normalizeRows, formatMoney, formatDate } from '../../utils/formatters.js';
-
-function paymentTypeLabel(value) {
-  return value === 'audit_fine' ? 'ค่าปรับ' : 'ค่าบริการ';
-}
+import { normalizeRows, formatMoney } from '../../utils/formatters.js';
 
 function toDateKey(date) {
   const year = date.getFullYear();
@@ -158,6 +152,96 @@ function MonthlyRevenueChart({ rows, currentLabel, previousLabel }) {
   );
 }
 
+function buildMarketRevenueRows(payments, markets = []) {
+  const marketMap = new Map();
+
+  markets.forEach((market) => {
+    const key = String(market.id ?? market.market_id ?? market.code ?? market.name ?? '');
+    if (!key) return;
+    marketMap.set(key, {
+      key,
+      name: market.name || market.market_name || market.code || `ตลาด ${key}`,
+      amount: 0,
+    });
+  });
+
+  payments.forEach((payment) => {
+    const key = String(payment.market_id ?? payment.market_name ?? 'unknown');
+    const name = payment.market_name || 'ไม่ระบุตลาด';
+    const existing = marketMap.get(key) || { key, name, amount: 0 };
+    existing.name = existing.name || name;
+    existing.amount += Number(payment.total_amount ?? payment.amount ?? 0);
+    marketMap.set(key, existing);
+  });
+
+  return Array.from(marketMap.values()).sort((first, second) => second.amount - first.amount || first.name.localeCompare(second.name, 'th'));
+}
+
+function MarketRevenueBarChart({ rows }) {
+  const width = Math.max(760, rows.length * 96);
+  const height = 320;
+  const padding = { top: 24, right: 28, bottom: 82, left: 86 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+  const maxValue = Math.max(...rows.map((row) => row.amount), 1);
+  const barGap = 24;
+  const barWidth = Math.max(34, (chartWidth - barGap * Math.max(rows.length - 1, 0)) / Math.max(rows.length, 1));
+  const y = (value) => padding.top + chartHeight - (Number(value || 0) / maxValue) * chartHeight;
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((ratio) => maxValue * ratio);
+
+  if (!rows.length || !rows.some((row) => Number(row.amount) > 0)) {
+    return <EmptyState title="ยังไม่มียอดชำระเงินรายตลาด" description="เมื่อมีรายการชำระเงิน ระบบจะแสดงยอดเปรียบเทียบของแต่ละตลาดที่นี่" />;
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <p className="text-xs font-semibold text-slate-500">ตลาดที่มีข้อมูล</p>
+          <p className="mt-1 text-2xl font-black text-slate-950">{rows.length.toLocaleString('th-TH')}</p>
+        </div>
+        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 md:col-span-2">
+          <p className="text-xs font-semibold text-emerald-700">ยอดรวมทุกตลาด</p>
+          <p className="mt-1 text-2xl font-black text-slate-950">{formatMoney(rows.reduce((sum, row) => sum + Number(row.amount || 0), 0))}</p>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <svg viewBox={`0 0 ${width} ${height}`} className="min-h-[280px] w-full min-w-[760px]" role="img" aria-label="กราฟแท่งเปรียบเทียบยอดตามตลาดทั้งหมดในองค์กร">
+          <defs>
+            <linearGradient id="dashboard-market-bars" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="#14b8a6" />
+              <stop offset="100%" stopColor="#0891b2" />
+            </linearGradient>
+          </defs>
+          {ticks.map((tick) => (
+            <g key={tick}>
+              <line x1={padding.left} x2={width - padding.right} y1={y(tick)} y2={y(tick)} stroke="#e2e8f0" strokeWidth="1" />
+              <text x={padding.left - 12} y={y(tick) + 4} textAnchor="end" className="fill-slate-400 text-[11px] font-semibold">
+                {Math.round(tick).toLocaleString('th-TH')}
+              </text>
+            </g>
+          ))}
+          {rows.map((row, index) => {
+            const x = padding.left + index * (barWidth + barGap);
+            const barHeight = chartHeight - (y(row.amount) - padding.top);
+            return (
+              <g key={row.key}>
+                <rect x={x} y={y(row.amount)} width={barWidth} height={barHeight} rx="10" fill="url(#dashboard-market-bars)" />
+                <text x={x + barWidth / 2} y={y(row.amount) - 8} textAnchor="middle" className="fill-slate-700 text-[11px] font-black">
+                  {formatMoney(row.amount).replace('฿', '')}
+                </text>
+                <text x={x + barWidth / 2} y={height - 48} textAnchor="middle" className="fill-slate-500 text-[11px] font-semibold">
+                  {row.name.length > 16 ? `${row.name.slice(0, 16)}...` : row.name}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 export function Dashboard({ marketId, markets }) {
   const { user } = useAuth();
   const canReadReports = ['supervisor', 'admin', 'accounting'].includes(user?.role);
@@ -168,9 +252,10 @@ export function Dashboard({ marketId, markets }) {
     ? `/accounting/payments?paidOnly=1&startDate=${chartRange.queryStart}&endDate=${chartRange.queryEnd}&dateField=payment_date${marketId ? `&marketId=${marketId}` : ''}`
     : null;
   const { data: chartPayments = [], loading: chartLoading } = useApi(chartPath, { initialData: [], skip: !canReadPayments });
-  const { data: payments = [] } = useApi(canReadPayments ? '/accounting/payments?paidOnly=1' : null, { initialData: [], skip: !canReadPayments });
+  const { data: payments = [], loading: paymentsLoading } = useApi(canReadPayments ? '/accounting/payments?paidOnly=1' : null, { initialData: [], skip: !canReadPayments });
   const chartRows = useMemo(() => buildMonthlyComparisonRows(normalizeRows(chartPayments), chartRange), [chartPayments, chartRange]);
   const paymentRows = normalizeRows(payments);
+  const marketRevenueRows = useMemo(() => buildMarketRevenueRows(paymentRows, normalizeRows(markets)), [paymentRows, markets]);
   const currentMonthLabel = monthName(chartRange.currentMonthStart);
   const previousMonthLabel = monthName(chartRange.previousMonthStart);
   const dashboardDescription = user?.role === 'admin'
@@ -200,23 +285,8 @@ export function Dashboard({ marketId, markets }) {
           {chartLoading ? <LoadingBlock /> : <MonthlyRevenueChart rows={chartRows} currentLabel={currentMonthLabel} previousLabel={previousMonthLabel} />}
         </Card>
         <Card>
-          <SectionTitle title="รายการชำระเงินล่าสุด" description="แสดงรายการล่าสุดจากระบบบัญชี" icon={CreditCard} />
-          {paymentRows.length ? (
-            <DataTable
-              columns={['เลขชำระเงิน', 'เลขจอง', 'ประเภท', 'วันที่จอง', 'Booth', 'สถานะ', 'VAT', 'จำนวนเงิน', 'วันที่ชำระ/ทำรายการ']}
-              rows={paymentRows.slice(0, 10).map((payment) => [
-                payment.public_id,
-                payment.booking_public_id || '-',
-                paymentTypeLabel(payment.payment_kind),
-                payment.booking_dates || '-',
-                payment.booths || '-',
-                <StatusBadge value={payment.status} />,
-                formatMoney(payment.vat_amount || 0),
-                formatMoney(payment.amount),
-                formatDate(payment.paid_at || payment.created_at),
-              ])}
-            />
-          ) : <EmptyState title="ไม่พบข้อมูลการชำระเงิน" description="ยังไม่มีรายการชำระเงินล่าสุดในช่วงนี้" />}
+          <SectionTitle title="เปรียบเทียบยอดตามตลาด" description="ยอดชำระเงินรวมของตลาดทั้งหมดภายในองค์กร" icon={CreditCard} />
+          {paymentsLoading ? <LoadingBlock /> : <MarketRevenueBarChart rows={marketRevenueRows} />}
         </Card>
       </div>
     </>
