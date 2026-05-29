@@ -762,7 +762,13 @@ function Topbar({ user, markets, currentMarketId, currentMarket, marketsLoading,
   const statusText = subscriptionLoading
     ? 'กำลังโหลดแพ็คเกจ'
     : subscription?.plan?.name
-      ? `${subscription.plan.name} · ${subscription.accessStatus === 'expired' ? 'หมดอายุ' : `ใช้ได้ถึง ${endAt}`}`
+      ? `${subscription.plan.name} · ${
+        subscription.accessStatus === 'expired'
+          ? 'หมดอายุ'
+          : subscription.accessStatus === 'over_quota'
+            ? 'เกินโควต้า'
+            : `ใช้ได้ถึง ${endAt}`
+      }`
       : 'ยังไม่มีแพ็คเกจ';
 
   return (

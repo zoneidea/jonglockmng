@@ -35,6 +35,12 @@ export function buildSubscriptionGate(subscription, featureKey) {
     };
   }
   if (!subscription.writeAllowed) {
+    if (subscription.accessStatus === 'over_quota' || subscription.quotaExceeded) {
+      return {
+        actionBlocked: true,
+        blockedMessage: 'ข้อมูลใช้งานเกินโควต้าของแพ็คเกจ ระบบเปิดให้ดูข้อมูลได้เท่านั้น กรุณาอัปเกรดแพ็คเกจหรือลดข้อมูลที่เปิดใช้งาน',
+      };
+    }
     return {
       actionBlocked: true,
       blockedMessage: 'แพ็คเกจหมดอายุหรือยังไม่พร้อมใช้งาน ระบบเปิดให้ดูข้อมูลได้เท่านั้น',
