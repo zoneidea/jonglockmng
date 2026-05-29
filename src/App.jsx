@@ -564,8 +564,25 @@ function Shell() {
 
   const availableMenu = useMemo(() => {
     const allowed = new Set([...(user?.menus || []), 'dashboard']);
-    return menu.filter((item) => allowed.has(item.menuKey) || item.roles?.includes(user?.role));
-  }, [user]);
+    const subscriptionAllows = (path) => {
+      if (!subscription || subscription.fullFunction || subscription.plan?.isFullFunction) return true;
+      const nextFeatureKey = resolveSubscriptionFeature(path);
+      if (nextFeatureKey === 'dashboard') return true;
+      return subscription.entitlements?.[nextFeatureKey]?.enabled !== false && Boolean(subscription.entitlements?.[nextFeatureKey]);
+    };
+
+    return menu
+      .map((item) => {
+        const roleAllowed = allowed.has(item.menuKey) || item.roles?.includes(user?.role);
+        if (!roleAllowed) return null;
+        if (item.children?.length) {
+          const children = item.children.filter((child) => subscriptionAllows(child.path || item.path || '/'));
+          return children.length ? { ...item, children } : null;
+        }
+        return subscriptionAllows(item.path || '/') ? item : null;
+      })
+      .filter(Boolean);
+  }, [subscription, user]);
 
   function handleMainClickCapture(event) {
     if (!subscriptionContextValue.actionBlocked) return;
