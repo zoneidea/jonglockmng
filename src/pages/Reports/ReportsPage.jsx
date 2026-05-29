@@ -94,37 +94,41 @@ export function ReportsPage({ reportType }) {
         action={(
           isCustomerBookingsReport ? (
             <ReportFiltersBar>
-              <SearchInput value={keyword} onChange={setKeyword} placeholder="ค้นหาชื่อลูกค้า เลขที่จอง ตลาด หรือ Booth" />
-              <DatePickerBare value={range.startDate} onChange={(value) => setRange((current) => ({ ...current, startDate: value }))} className="sm:w-[190px]" />
-              <DatePickerBare value={range.endDate} onChange={(value) => setRange((current) => ({ ...current, endDate: value }))} className="sm:w-[190px]" />
-              <select value={marketId} onChange={(event) => setMarketId(event.target.value)} className="h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100 sm:w-[220px]">
-                <option value="">ทุกตลาด</option>
-                {marketRows.map((market) => <option key={market.id} value={market.id}>{market.name}</option>)}
-              </select>
-              <label className="relative block w-full xl:min-w-[360px]">
-                <input
-                  value={userQuery}
-                  onChange={(event) => {
-                    setUserQuery(event.target.value);
-                    setSelectedUser(null);
-                  }}
-                  placeholder="พิมพ์ชื่อ เบอร์โทร อีเมล หรือรหัสผู้จอง"
-                  className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
-                />
-                {userQuery.trim() && !selectedUser ? (
-                  <div className="absolute z-20 mt-2 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
-                    {userRows.length ? userRows.map((user) => (
-                      <button key={user.id} type="button" onClick={() => selectCustomer(user)} className="block w-full px-4 py-3 text-left text-sm hover:bg-cyan-50">
-                        <span className="block font-bold text-slate-800">{user.name || user.public_id}</span>
-                        <span className="text-xs text-slate-500">{[user.phone, user.email, user.username].filter(Boolean).join(' / ')}</span>
-                      </button>
-                    )) : <div className="px-4 py-3 text-sm text-slate-500">ไม่พบผู้จอง</div>}
-                  </div>
-                ) : null}
-              </label>
-              <div className="flex flex-wrap gap-2">
-                <ReportActionButton tone="slate" onClick={reload} disabled={!selectedUser?.id}>ค้นหา</ReportActionButton>
-                <ReportExportActions title={reportTitle} columns={exportColumns} rows={exportRows} disabled={!exportRows.length} />
+              <div className="flex w-full flex-col items-end gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+                <SearchInput value={keyword} onChange={setKeyword} placeholder="ค้นหาชื่อลูกค้า เลขที่จอง ตลาด หรือ Booth" />
+                <DatePickerBare value={range.startDate} onChange={(value) => setRange((current) => ({ ...current, startDate: value }))} className="sm:w-[190px]" />
+                <DatePickerBare value={range.endDate} onChange={(value) => setRange((current) => ({ ...current, endDate: value }))} className="sm:w-[190px]" />
+                <select value={marketId} onChange={(event) => setMarketId(event.target.value)} className="h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100 sm:w-[220px]">
+                  <option value="">ทุกตลาด</option>
+                  {marketRows.map((market) => <option key={market.id} value={market.id}>{market.name}</option>)}
+                </select>
+              </div>
+              <div className="flex w-full flex-col items-end gap-2 lg:flex-row lg:justify-end">
+                <label className="relative block w-full lg:max-w-[520px]">
+                  <input
+                    value={userQuery}
+                    onChange={(event) => {
+                      setUserQuery(event.target.value);
+                      setSelectedUser(null);
+                    }}
+                    placeholder="พิมพ์ชื่อ เบอร์โทร อีเมล หรือรหัสผู้จอง"
+                    className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
+                  />
+                  {userQuery.trim() && !selectedUser ? (
+                    <div className="absolute z-20 mt-2 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
+                      {userRows.length ? userRows.map((user) => (
+                        <button key={user.id} type="button" onClick={() => selectCustomer(user)} className="block w-full px-4 py-3 text-left text-sm hover:bg-cyan-50">
+                          <span className="block font-bold text-slate-800">{user.name || user.public_id}</span>
+                          <span className="text-xs text-slate-500">{[user.phone, user.email, user.username].filter(Boolean).join(' / ')}</span>
+                        </button>
+                      )) : <div className="px-4 py-3 text-sm text-slate-500">ไม่พบผู้จอง</div>}
+                    </div>
+                  ) : null}
+                </label>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <ReportActionButton tone="slate" onClick={reload} disabled={!selectedUser?.id}>ค้นหา</ReportActionButton>
+                  <ReportExportActions title={reportTitle} columns={exportColumns} rows={exportRows} disabled={!exportRows.length} />
+                </div>
               </div>
             </ReportFiltersBar>
           ) : (
