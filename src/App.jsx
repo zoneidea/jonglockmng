@@ -64,6 +64,7 @@ import { StatusBadge } from './components/StatusBadge.jsx';
 import { useApi, useMutation } from './hooks/useApi.js';
 import { useAuth } from './state/auth.jsx';
 import { buildSubscriptionGate, resolveSubscriptionFeature, SubscriptionContext } from './state/subscription.jsx';
+import jonglockLogoWhite from './assets/jonglock-logo-white.png';
 import {
   DatePicker,
   DatePickerBare,
@@ -694,9 +695,8 @@ function Sidebar({ items, open, onClose }) {
       <div className={classNames('fixed inset-0 z-40 bg-slate-950/40 lg:hidden', open ? 'block' : 'hidden')} onClick={onClose} />
       <aside className={classNames('fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-slate-950 text-white transition-transform lg:translate-x-0', open ? 'translate-x-0' : '-translate-x-full')}>
         <div className="flex h-20 items-center justify-between border-b border-white/10 px-6">
-          <div>
-            <div className="text-xl font-extrabold">Jonglock</div>
-            <div className="text-xs text-slate-400">Management Console</div>
+          <div className="flex min-w-0 items-center">
+            <img src={jonglockLogoWhite} alt="Jonglock ระบบจองพื้นที่ขาย" className="h-12 w-auto max-w-[190px] object-contain" />
           </div>
           <button onClick={onClose} className="rounded-lg p-2 hover:bg-white/10 lg:hidden"><X size={20} /></button>
         </div>
@@ -748,9 +748,6 @@ function Sidebar({ items, open, onClose }) {
             );
           })}
         </nav>
-        <div className="border-t border-white/10 px-6 py-4 text-[10px] font-semibold uppercase leading-5 tracking-[0.16em] text-slate-500">
-          {POWERED_BY_TEXT}
-        </div>
       </aside>
     </>
   );
