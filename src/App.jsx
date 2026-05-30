@@ -483,7 +483,7 @@ function LoginPage() {
             <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-cyan-100 backdrop-blur">
               <Store size={16} /> Jonglock Management
             </div>
-            <h1 className="text-4xl font-extrabold leading-tight md:text-6xl">ระบบจัดการตลาดและพื้นที่ขาย</h1>
+            <h1 className="whitespace-nowrap text-4xl font-extrabold leading-tight md:text-5xl xl:text-6xl">ระบบจัดการตลาดและพื้นที่ขาย</h1>
             <p className="mt-6 max-w-xl text-lg leading-8 text-slate-300">
               จัดการตลาด บูธ วันหยุด รูปภาพ บริการเสริม สินค้า การจอง การชำระเงิน และรายงานในหน้าจอเดียว
             </p>
@@ -523,7 +523,6 @@ function LoginPage() {
             <button disabled={loading} className="mt-6 h-12 w-full rounded-xl bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
               {loading ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}
             </button>
-            <p className="mt-4 break-all text-xs text-slate-400">API: {API_BASE_URL}</p>
             <p className="mt-6 text-center text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{POWERED_BY_TEXT}</p>
           </form>
         </section>
