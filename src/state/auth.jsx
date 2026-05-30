@@ -4,7 +4,36 @@ import { request, SESSION_EXPIRED_EVENT } from '../api/client.js';
 const STORAGE_KEY = 'jonglock.management.session';
 const AuthContext = createContext(null);
 
+function readHandoffSession() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const rawSession = params.get('session');
+    if (!rawSession) return null;
+    const session = JSON.parse(decodeURIComponent(rawSession));
+    const rememberMe = params.get('remember') === '1';
+    const serialized = JSON.stringify(session);
+    if (rememberMe) {
+      localStorage.setItem(STORAGE_KEY, serialized);
+      sessionStorage.removeItem(STORAGE_KEY);
+    } else {
+      sessionStorage.setItem(STORAGE_KEY, serialized);
+      localStorage.removeItem(STORAGE_KEY);
+    }
+    params.delete('session');
+    params.delete('remember');
+    const nextSearch = params.toString();
+    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`;
+    window.history.replaceState({}, document.title, nextUrl);
+    return session;
+  } catch {
+    return null;
+  }
+}
+
 function readStoredSession() {
+  const handoffSession = readHandoffSession();
+  if (handoffSession) return handoffSession;
   try {
     const raw = localStorage.getItem(STORAGE_KEY) || sessionStorage.getItem(STORAGE_KEY);
     return raw ? JSON.parse(raw) : null;
