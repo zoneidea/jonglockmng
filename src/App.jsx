@@ -100,6 +100,17 @@ import {
 const POWERED_BY_TEXT = 'Powered by zone-idea innovation co.,ltd.';
 const REMEMBERED_LOGIN_KEY = 'jonglock.management.rememberedLogin';
 
+function readLoginQueryPrefill() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      organizationCode: (params.get('organizationCode') || '').trim().toUpperCase(),
+    };
+  } catch {
+    return { organizationCode: '' };
+  }
+}
+
 function readRememberedLogin() {
   try {
     const raw = localStorage.getItem(REMEMBERED_LOGIN_KEY);
@@ -448,8 +459,9 @@ function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const rememberedLogin = useMemo(readRememberedLogin, []);
+  const loginPrefill = useMemo(readLoginQueryPrefill, []);
   const [form, setForm] = useState({
-    organizationCode: rememberedLogin?.organizationCode || '',
+    organizationCode: loginPrefill.organizationCode || rememberedLogin?.organizationCode || '',
     username: rememberedLogin?.username || '',
     password: '',
   });
