@@ -35,32 +35,30 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-function exportReportExcel(title, columns, rows) {
-  const html = `<!doctype html>
-  <html>
-    <head>
-      <meta charset="utf-8" />
-      <style>
-        body { font-family: Arial, sans-serif; padding: 16px; }
-        h1 { font-size: 18px; margin-bottom: 12px; }
-        table { border-collapse: collapse; width: 100%; }
-        th, td { border: 1px solid #cbd5e1; padding: 8px; font-size: 12px; vertical-align: top; }
-        th { background: #f8fafc; text-align: left; }
-      </style>
-    </head>
-    <body>
-      <h1>${escapeHtml(title)}</h1>
-      <table>
-        <thead>
-          <tr>${columns.map((column) => `<th>${escapeHtml(column)}</th>`).join('')}</tr>
-        </thead>
-        <tbody>
-          ${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`).join('')}
-        </tbody>
-      </table>
-    </body>
-  </html>`;
-  downloadBlob(new Blob(['\ufeff', html], { type: 'application/vnd.ms-excel;charset=utf-8;' }), reportFileName(title, 'xls'));
+async function exportReportExcel(title, columns, rows) {
+  const { default: ExcelJS } = await import('exceljs');
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Jonglock';
+  workbook.created = new Date();
+  const worksheet = workbook.addWorksheet('report');
+  worksheet.addRow([title]);
+  worksheet.mergeCells(1, 1, 1, Math.max(columns.length, 1));
+  worksheet.getRow(1).font = { bold: true, size: 16 };
+  worksheet.addRow(columns);
+  worksheet.getRow(2).font = { bold: true };
+  worksheet.getRow(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0F2FE' } };
+  rows.forEach((row) => worksheet.addRow(row));
+  worksheet.columns.forEach((column, index) => {
+    const header = String(columns[index] || '');
+    let maxLength = header.length;
+    column.eachCell({ includeEmpty: true }, (cell) => {
+      maxLength = Math.max(maxLength, String(cell.value || '').length);
+    });
+    column.width = Math.min(Math.max(maxLength + 2, 12), 44);
+  });
+  worksheet.views = [{ state: 'frozen', ySplit: 2 }];
+  const output = await workbook.xlsx.writeBuffer();
+  downloadBlob(new Blob([output], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), reportFileName(title, 'xlsx'));
 }
 
 function openReportPrintWindow(title, columns, rows, mode = 'print') {
@@ -181,6 +179,24 @@ export function SearchInput({ value, onChange, placeholder = 'ค้นหา' }
         className="h-11 w-full rounded-xl border border-slate-300 bg-white pl-10 pr-3 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100"
       />
     </label>
+  );
+}
+
+export function PasswordPolicyHint({ optional = false }) {
+  const items = [
+    'อย่างน้อย 10 ตัวอักษร',
+    'มีตัวพิมพ์ใหญ่อย่างน้อย 1 ตัว',
+    'มีตัวเลขอย่างน้อย 1 ตัว',
+    'มีอักขระพิเศษอย่างน้อย 1 ตัว',
+  ];
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+      <div className="font-semibold text-slate-700">{optional ? 'นโยบายรหัสผ่านใหม่' : 'นโยบายรหัสผ่าน'}</div>
+      <ul className="mt-2 list-disc space-y-1 pl-5">
+        {items.map((item) => <li key={item}>{item}</li>)}
+      </ul>
+    </div>
   );
 }
 
