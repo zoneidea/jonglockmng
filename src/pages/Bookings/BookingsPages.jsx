@@ -12,6 +12,7 @@ import { useApi, useMutation } from '../../hooks/useApi.js';
 import { useAuth } from '../../state/auth.jsx';
 import { classNames, formatDate, formatMoney, normalizeRows } from '../../utils/formatters.js';
 import { boothAvailabilityLabel, toDateInputValue } from '../../utils/management.js';
+import { showConfirm } from '../../utils/alerts.js';
 import { BoothBox, DatePicker, DatePickerBare, ErrorNotice, FormPanel, Label, Modal, NeedMarket, RichTextEditor, SelectInput, SmallButton, TextInput, TextInputBare } from '../../components/ManagementUi.jsx';
 
 export function PaymentProofReviewPage() {
@@ -400,7 +401,12 @@ export function BookingsPage({ marketId, mode }) {
 
   async function deletePendingBooking(booking) {
     if (booking.status !== 'pending_payment') return;
-    if (!window.confirm(`ลบรายการจองเลขที่ ${booking.public_id} ?`)) return;
+    const confirmed = await showConfirm({
+      title: 'ยืนยันลบรายการจอง',
+      text: `ลบรายการจองเลขที่ ${booking.public_id} ?`,
+      confirmButtonText: 'ลบรายการ',
+    });
+    if (!confirmed) return;
     await mutate(`/markets/${marketId}/bookings/${booking.id}`, {}, 'DELETE');
     reload();
     reloadAvailability();
@@ -538,7 +544,7 @@ export function BookingsPage({ marketId, mode }) {
               <FileSpreadsheet size={16} /> {importing ? 'กำลัง Import...' : 'Import Excel'}
               <input
                 type="file"
-                accept=".xlsx,.xls,.csv"
+                accept=".xlsx,.csv"
                 className="hidden"
                 disabled={importing}
                 onChange={(event) => {

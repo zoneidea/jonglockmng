@@ -11,6 +11,7 @@ import { useApi, useMutation } from '../../hooks/useApi.js';
 import { useAuth } from '../../state/auth.jsx';
 import { classNames, formatDate, formatMoney, normalizeRows } from '../../utils/formatters.js';
 import { combineOpeningHours, dateKeyFromUtcTime, dateKeyFromValue, splitOpeningHours, utcTimeFromDateKey } from '../../utils/management.js';
+import { showConfirm } from '../../utils/alerts.js';
 import { BoothBox, DatePicker, ErrorNotice, FileInput, FileSummary, FormPanel, Label, Modal, NeedMarket, OutlineButton, SelectInput, SmallButton, TextInput, TextInputBare, TimePicker, Toolbar, RichTextEditor, FilterPill } from '../../components/ManagementUi.jsx';
 
 const OPEN_DAY_OPTIONS = [
@@ -496,7 +497,11 @@ export function BoothsPage({ marketId }) {
 
   async function deleteBooth() {
     if (!editForm.id) return;
-    const confirmed = window.confirm('ยืนยันลบบูธนี้หรือไม่ บูธที่ลบแล้วจะยังแสดงในหน้าจัดการเป็นสีเทา');
+    const confirmed = await showConfirm({
+      title: 'ยืนยันลบบูธ',
+      text: 'บูธที่ลบแล้วจะยังแสดงในหน้าจัดการเป็นสีเทา',
+      confirmButtonText: 'ลบบูธ',
+    });
     if (!confirmed) return;
     await mutate(`/markets/${marketId}/booths/${editForm.id}`, null, 'DELETE');
     setEditModalOpen(false);

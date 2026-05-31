@@ -96,6 +96,7 @@ import {
   normalizeRows,
   reportFileName,
 } from './utils/formatters.js';
+import { showAlert } from './utils/alerts.js';
 
 const POWERED_BY_TEXT = 'Powered by zone-idea innovation co.,ltd.';
 const REMEMBERED_LOGIN_KEY = 'jonglock.management.rememberedLogin';
@@ -1095,7 +1096,11 @@ function AnnouncementsPage({ type }) {
     event.preventDefault();
     if (!editingAnnouncement) return;
     if (isNews && !editForm.marketId) {
-      window.alert('กรุณาเลือกตลาดสำหรับข่าวสาร');
+      await showAlert({
+        title: 'กรุณาเลือกตลาด',
+        text: 'กรุณาเลือกตลาดสำหรับข่าวสาร',
+        icon: 'warning',
+      });
       return;
     }
     const payload = new FormData();
