@@ -13,18 +13,65 @@ import { classNames, formatDate, formatMoney, normalizeRows } from '../../utils/
 import { combineOpeningHours, dateKeyFromUtcTime, dateKeyFromValue, splitOpeningHours, utcTimeFromDateKey } from '../../utils/management.js';
 import { BoothBox, DatePicker, ErrorNotice, FileInput, FileSummary, FormPanel, Label, Modal, NeedMarket, OutlineButton, SelectInput, SmallButton, TextInput, TextInputBare, TimePicker, Toolbar, RichTextEditor, FilterPill } from '../../components/ManagementUi.jsx';
 
+const OPEN_DAY_OPTIONS = [
+  ['sun', 'อาทิตย์'],
+  ['mon', 'จันทร์'],
+  ['tue', 'อังคาร'],
+  ['wed', 'พุธ'],
+  ['thu', 'พฤหัสบดี'],
+  ['fri', 'ศุกร์'],
+  ['sat', 'เสาร์'],
+];
+
+const DEFAULT_OPEN_DAYS = OPEN_DAY_OPTIONS.map(([value]) => value);
+
+function normalizeOpenDays(value) {
+  if (Array.isArray(value)) return value.filter((item) => DEFAULT_OPEN_DAYS.includes(String(item)));
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return normalizeOpenDays(parsed);
+    } catch {}
+  }
+  return DEFAULT_OPEN_DAYS;
+}
+
+function OpenDaysCheckboxGroup({ value = [], onChange }) {
+  const selected = value.length ? value : DEFAULT_OPEN_DAYS;
+  return (
+    <div className="grid gap-2 sm:grid-cols-4">
+      {OPEN_DAY_OPTIONS.map(([day, label]) => (
+        <label key={day} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={selected.includes(day)}
+            onChange={(event) => {
+              const next = event.target.checked
+                ? [...new Set([...selected, day])]
+                : selected.filter((item) => item !== day);
+              onChange(next.length ? next : DEFAULT_OPEN_DAYS);
+            }}
+            className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
+          />
+          {label}
+        </label>
+      ))}
+    </div>
+  );
+}
+
 export function MarketsPage({ markets, reloadMarkets }) {
   const { token } = useAuth();
   const { mutate, loading, error } = useMutation();
   const [keyword, setKeyword] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ code: '', name: '', description: '', openDate: '', closeDate: '' });
+  const [form, setForm] = useState({ code: '', name: '', description: '', openDate: '', closeDate: '', openDays: DEFAULT_OPEN_DAYS });
   const [mainImageFile, setMainImageFile] = useState(null);
   const rows = markets.filter((market) => `${market.code} ${market.name}`.toLowerCase().includes(keyword.toLowerCase()));
 
   async function openCreateModal() {
     setMainImageFile(null);
-    setForm({ code: '', name: '', description: '', openDate: '', closeDate: '' });
+    setForm({ code: '', name: '', description: '', openDate: '', closeDate: '', openDays: DEFAULT_OPEN_DAYS });
     setModalOpen(true);
     try {
       const payload = await request('/markets/next-code', { token });
@@ -40,9 +87,10 @@ export function MarketsPage({ markets, reloadMarkets }) {
     payload.append('description', form.description);
     if (form.openDate) payload.append('openDate', form.openDate);
     if (form.closeDate) payload.append('closeDate', form.closeDate);
+    payload.append('openDays', JSON.stringify(form.openDays?.length ? form.openDays : DEFAULT_OPEN_DAYS));
     if (mainImageFile) payload.append('mainImage', mainImageFile);
     await mutate('/markets', payload);
-    setForm({ code: '', name: '', description: '', openDate: '', closeDate: '' });
+    setForm({ code: '', name: '', description: '', openDate: '', closeDate: '', openDays: DEFAULT_OPEN_DAYS });
     setMainImageFile(null);
     setModalOpen(false);
     reloadMarkets();
@@ -79,6 +127,12 @@ export function MarketsPage({ markets, reloadMarkets }) {
           {mainImageFile ? <FileSummary file={mainImageFile} /> : null}
           <DatePicker label="วันเปิด" value={form.openDate} onChange={(value) => setForm((current) => ({ ...current, openDate: value }))} />
           <DatePicker label="วันปิด" value={form.closeDate} onChange={(value) => setForm((current) => ({ ...current, closeDate: value }))} />
+          <div>
+            <Label>วันเปิดตลาด</Label>
+            <div className="mt-2">
+              <OpenDaysCheckboxGroup value={form.openDays} onChange={(value) => setForm((current) => ({ ...current, openDays: value }))} />
+            </div>
+          </div>
         </FormPanel>
         </Modal>
       </div>
@@ -95,6 +149,7 @@ export function MarketInfoPage({ marketId, market, reloadMarkets }) {
     address: market?.address || '',
     openingStart: openingHours.openingStart,
     openingEnd: openingHours.openingEnd,
+    openDays: normalizeOpenDays(market?.open_days_json),
     phone: market?.phone || '',
     lineId: market?.line_id || '',
     email: market?.email || '',
@@ -110,6 +165,7 @@ export function MarketInfoPage({ marketId, market, reloadMarkets }) {
       address: market?.address || '',
       openingStart: nextOpeningHours.openingStart,
       openingEnd: nextOpeningHours.openingEnd,
+      openDays: normalizeOpenDays(market?.open_days_json),
       phone: market?.phone || '',
       lineId: market?.line_id || '',
       email: market?.email || '',
@@ -127,6 +183,7 @@ export function MarketInfoPage({ marketId, market, reloadMarkets }) {
     payload.append('description', form.description || '');
     payload.append('address', form.address || '');
     payload.append('openingHours', combineOpeningHours(form.openingStart, form.openingEnd));
+    payload.append('openDays', JSON.stringify(form.openDays?.length ? form.openDays : DEFAULT_OPEN_DAYS));
     payload.append('phone', form.phone || '');
     payload.append('lineId', form.lineId || '');
     payload.append('email', form.email || '');
@@ -159,6 +216,10 @@ export function MarketInfoPage({ marketId, market, reloadMarkets }) {
               <TimePicker label="เวลาเปิด" value={form.openingStart} onChange={(value) => setForm((current) => ({ ...current, openingStart: value }))} />
               <TimePicker label="เวลาปิด" value={form.openingEnd} onChange={(value) => setForm((current) => ({ ...current, openingEnd: value }))} />
             </div>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-start">
+            <Label>วันเปิดตลาด</Label>
+            <OpenDaysCheckboxGroup value={form.openDays} onChange={(value) => setForm((current) => ({ ...current, openDays: value }))} />
           </div>
           <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>เบอร์โทร</Label><TextInputBare value={form.phone} onChange={(value) => setForm((current) => ({ ...current, phone: value }))} /></div>
           <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>Line ID</Label><TextInputBare value={form.lineId} onChange={(value) => setForm((current) => ({ ...current, lineId: value }))} /></div>
