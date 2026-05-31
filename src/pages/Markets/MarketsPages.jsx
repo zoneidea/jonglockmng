@@ -36,6 +36,13 @@ function normalizeOpenDays(value) {
   return DEFAULT_OPEN_DAYS;
 }
 
+function formatOpenDaysThai(value) {
+  const days = normalizeOpenDays(value);
+  if (days.length === DEFAULT_OPEN_DAYS.length) return 'ทุกวัน';
+  const labels = OPEN_DAY_OPTIONS.filter(([day]) => days.includes(day)).map(([, label]) => label);
+  return labels.length ? labels.join(', ') : 'ทุกวัน';
+}
+
 function OpenDaysCheckboxGroup({ value = [], onChange }) {
   const selected = value.length ? value : DEFAULT_OPEN_DAYS;
   return (
@@ -65,13 +72,13 @@ export function MarketsPage({ markets, reloadMarkets }) {
   const { mutate, loading, error } = useMutation();
   const [keyword, setKeyword] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ code: '', name: '', description: '', openDate: '', closeDate: '', openDays: DEFAULT_OPEN_DAYS });
+  const [form, setForm] = useState({ code: '', name: '', description: '', openDays: DEFAULT_OPEN_DAYS });
   const [mainImageFile, setMainImageFile] = useState(null);
   const rows = markets.filter((market) => `${market.code} ${market.name}`.toLowerCase().includes(keyword.toLowerCase()));
 
   async function openCreateModal() {
     setMainImageFile(null);
-    setForm({ code: '', name: '', description: '', openDate: '', closeDate: '', openDays: DEFAULT_OPEN_DAYS });
+    setForm({ code: '', name: '', description: '', openDays: DEFAULT_OPEN_DAYS });
     setModalOpen(true);
     try {
       const payload = await request('/markets/next-code', { token });
@@ -85,12 +92,10 @@ export function MarketsPage({ markets, reloadMarkets }) {
     payload.append('code', form.code);
     payload.append('name', form.name);
     payload.append('description', form.description);
-    if (form.openDate) payload.append('openDate', form.openDate);
-    if (form.closeDate) payload.append('closeDate', form.closeDate);
     payload.append('openDays', JSON.stringify(form.openDays?.length ? form.openDays : DEFAULT_OPEN_DAYS));
     if (mainImageFile) payload.append('mainImage', mainImageFile);
     await mutate('/markets', payload);
-    setForm({ code: '', name: '', description: '', openDate: '', closeDate: '', openDays: DEFAULT_OPEN_DAYS });
+    setForm({ code: '', name: '', description: '', openDays: DEFAULT_OPEN_DAYS });
     setMainImageFile(null);
     setModalOpen(false);
     reloadMarkets();
@@ -107,13 +112,12 @@ export function MarketsPage({ markets, reloadMarkets }) {
         <Card>
           <Toolbar keyword={keyword} onKeyword={setKeyword} />
           <DataTable
-            columns={['ลำดับ', 'รหัสตลาด', 'ชื่อตลาด', 'วันเปิด', 'วันปิด', 'สถานะ']}
+            columns={['ลำดับ', 'รหัสตลาด', 'ชื่อตลาด', 'วันเปิดตลาด', 'สถานะ']}
             rows={rows.map((market, index) => [
               index + 1,
               market.code || '-',
               market.name,
-              formatDate(market.open_date),
-              formatDate(market.close_date),
+              formatOpenDaysThai(market.open_days_json),
               <StatusBadge value={market.status || 'active'} />,
             ])}
           />
@@ -125,8 +129,6 @@ export function MarketsPage({ markets, reloadMarkets }) {
           <TextInput label="คำอธิบาย" value={form.description} onChange={(value) => setForm((current) => ({ ...current, description: value }))} />
           <FileInput label="รูปภาพหลักของตลาด" onChange={setMainImageFile} />
           {mainImageFile ? <FileSummary file={mainImageFile} /> : null}
-          <DatePicker label="วันเปิด" value={form.openDate} onChange={(value) => setForm((current) => ({ ...current, openDate: value }))} />
-          <DatePicker label="วันปิด" value={form.closeDate} onChange={(value) => setForm((current) => ({ ...current, closeDate: value }))} />
           <div>
             <Label>วันเปิดตลาด</Label>
             <div className="mt-2">
@@ -233,18 +235,20 @@ export function MarketInfoPage({ marketId, market, reloadMarkets }) {
 
 export function BoothTypesPage({ marketId }) {
   const { data = [], loading, error, reload } = useApi(marketId ? `/markets/${marketId}/booth-types` : null, { initialData: [] });
+  const { data: categories = [] } = useApi(marketId ? `/markets/${marketId}/categories` : null, { initialData: [] });
   const { mutate, loading: saving, error: saveError } = useMutation();
   const [modalOpen, setModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [copyModalOpen, setCopyModalOpen] = useState(false);
   const [editingBoothType, setEditingBoothType] = useState(null);
-  const [form, setForm] = useState({ name: '', startDate: '', endDate: '', status: 'active' });
+  const [form, setForm] = useState({ name: '', startDate: '', endDate: '', boothCount: '1', categoryId: '', status: 'active' });
   const [editForm, setEditForm] = useState({ name: '', startDate: '', endDate: '', status: 'active' });
   const [copyForm, setCopyForm] = useState({ sourceBoothTypeId: '', name: '', startDate: '', endDate: '', status: 'active' });
   const [planImageFile, setPlanImageFile] = useState(null);
   const [editPlanImageFile, setEditPlanImageFile] = useState(null);
   const [copyPlanImageFile, setCopyPlanImageFile] = useState(null);
   const rows = normalizeRows(data);
+  const categoryRows = normalizeRows(categories);
 
   if (!marketId) return <NeedMarket />;
 
@@ -254,10 +258,12 @@ export function BoothTypesPage({ marketId }) {
     payload.append('name', form.name);
     payload.append('startDate', form.startDate);
     payload.append('endDate', form.endDate);
+    payload.append('boothCount', form.boothCount);
+    if (form.categoryId) payload.append('categoryId', form.categoryId);
     payload.append('status', form.status);
     if (planImageFile) payload.append('planImage', planImageFile);
     await mutate(`/markets/${marketId}/booth-types`, payload);
-    setForm({ name: '', startDate: '', endDate: '', status: 'active' });
+    setForm({ name: '', startDate: '', endDate: '', boothCount: '1', categoryId: '', status: 'active' });
     setPlanImageFile(null);
     setModalOpen(false);
     reload();
@@ -327,11 +333,12 @@ export function BoothTypesPage({ marketId }) {
           <ErrorNotice error={error} hint="ถ้ายังไม่มี endpoint นี้ ให้เพิ่ม backend endpoint /markets/:marketId/booth-types" />
           {loading ? <LoadingBlock /> : (
             <DataTable
-              columns={['ลำดับ', 'ผังภาพรวม', 'ชื่อแบบ', 'เริ่มต้น', 'สิ้นสุด', 'สถานะ', 'จัดการ']}
+              columns={['ลำดับ', 'ผังภาพรวม', 'ชื่อแบบ', 'จำนวนบูธ', 'เริ่มต้น', 'สิ้นสุด', 'สถานะ', 'จัดการ']}
               rows={rows.map((item, index) => [
                 index + 1,
                 item.plan_image_url ? <img src={item.plan_image_url} className="h-16 w-24 rounded-xl object-cover" /> : <div className="flex h-16 w-24 items-center justify-center rounded-xl bg-slate-100 text-xs font-bold text-slate-400">ไม่มีผัง</div>,
                 item.name || item.title,
+                Number(item.booth_count || 0),
                 formatDate(item.start_date),
                 formatDate(item.end_date),
                 <StatusBadge value={item.status || 'active'} />,
@@ -347,6 +354,13 @@ export function BoothTypesPage({ marketId }) {
           {planImageFile ? <FileSummary file={planImageFile} /> : null}
           <DatePicker label="วันที่เริ่มต้น" value={form.startDate} onChange={(value) => setForm((current) => ({ ...current, startDate: value }))} />
           <DatePicker label="วันที่สิ้นสุด" value={form.endDate} onChange={(value) => setForm((current) => ({ ...current, endDate: value }))} />
+          <TextInput label="จำนวนบูธในแผนผัง" type="number" value={form.boothCount} onChange={(value) => setForm((current) => ({ ...current, boothCount: value }))} required />
+          <SelectInput
+            label="หมวดหมู่สินค้าตั้งต้น"
+            value={form.categoryId}
+            onChange={(value) => setForm((current) => ({ ...current, categoryId: value }))}
+            options={[['', 'ไม่ระบุ'], ...categoryRows.map((item) => [String(item.id), item.name])]}
+          />
           <SelectInput label="สถานะ" value={form.status} onChange={(value) => setForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['inactive', 'ระงับการใช้']]} />
         </FormPanel>
         </Modal>
