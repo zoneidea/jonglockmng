@@ -494,6 +494,16 @@ export function BoothsPage({ marketId }) {
     reload();
   }
 
+  async function deleteBooth() {
+    if (!editForm.id) return;
+    const confirmed = window.confirm('ยืนยันลบบูธนี้หรือไม่ บูธที่ลบแล้วจะยังแสดงในหน้าจัดการเป็นสีเทา');
+    if (!confirmed) return;
+    await mutate(`/markets/${marketId}/booths/${editForm.id}`, null, 'DELETE');
+    setEditModalOpen(false);
+    setEditForm({ id: '', floorPlanId: '', categoryId: '', code: '', name: '', price: '500', sortOrder: '0', status: 'active' });
+    reload();
+  }
+
   function toggleBoothSelection(boothId) {
     setSelectedBoothIds((current) => (
       current.includes(boothId)
@@ -503,7 +513,7 @@ export function BoothsPage({ marketId }) {
   }
 
   function selectAllVisible() {
-    setSelectedBoothIds(filteredRows.map((booth) => booth.id));
+    setSelectedBoothIds(filteredRows.filter((booth) => booth.status !== 'deleted').map((booth) => booth.id));
   }
 
   function clearSelection() {
@@ -582,21 +592,29 @@ export function BoothsPage({ marketId }) {
                 key={booth.id || booth.code || booth.name}
                 className={classNames(
                   'relative min-h-20 rounded-xl border-2 border-dashed p-2 text-center shadow-sm transition',
-                  selectedBoothIds.includes(booth.id) ? 'border-amber-300 bg-amber-500 text-white' : booth.status !== 'active' ? 'border-red-300 bg-red-500 text-white' : 'border-cyan-200 bg-cyan-600 text-white hover:bg-cyan-700',
+                  booth.status === 'deleted'
+                    ? 'border-slate-300 bg-slate-300 text-slate-600'
+                    : selectedBoothIds.includes(booth.id)
+                      ? 'border-amber-300 bg-amber-500 text-white'
+                      : booth.status !== 'active'
+                        ? 'border-red-300 bg-red-500 text-white'
+                        : 'border-cyan-200 bg-cyan-600 text-white hover:bg-cyan-700',
                 )}
               >
-                <label className="absolute left-1.5 top-1.5">
-                  <input
-                    type="checkbox"
-                    checked={selectedBoothIds.includes(booth.id)}
-                    onChange={() => toggleBoothSelection(booth.id)}
-                    className="h-4 w-4 rounded border-white/70 text-amber-500 focus:ring-amber-300"
-                  />
-                </label>
-                <button type="button" onClick={() => openEditModal(booth)} className="flex h-full w-full flex-col items-center justify-center pt-3">
+                {booth.status !== 'deleted' ? (
+                  <label className="absolute left-1.5 top-1.5">
+                    <input
+                      type="checkbox"
+                      checked={selectedBoothIds.includes(booth.id)}
+                      onChange={() => toggleBoothSelection(booth.id)}
+                      className="h-4 w-4 rounded border-white/70 text-amber-500 focus:ring-amber-300"
+                    />
+                  </label>
+                ) : null}
+                <button type="button" disabled={booth.status === 'deleted'} onClick={() => openEditModal(booth)} className="flex h-full w-full flex-col items-center justify-center pt-3 disabled:cursor-default">
                   <span className="max-w-full truncate text-sm font-extrabold">{booth.code || booth.name || booth.id}</span>
                   <span className="mt-0.5 text-[11px] font-bold leading-4 opacity-95">{formatMoney(booth.price || 0)}</span>
-                  <span className="mt-0.5 max-w-full truncate text-[10px] leading-4 opacity-80">{booth.category_name || 'ยังไม่ระบุ'}</span>
+                  <span className="mt-0.5 max-w-full truncate text-[10px] leading-4 opacity-80">{booth.status === 'deleted' ? 'ลบแล้ว' : booth.category_name || 'ยังไม่ระบุ'}</span>
                 </button>
               </div>
             ))}
@@ -629,6 +647,11 @@ export function BoothsPage({ marketId }) {
       </Modal>
       <Modal open={editModalOpen} title="แก้ไขบูธ" onClose={() => setEditModalOpen(false)}>
         <FormPanel onSubmit={submitEdit} loading={saving} error={saveError}>
+          {editForm.status !== 'deleted' ? (
+            <div className="flex justify-end">
+              <SmallButton tone="red" onClick={deleteBooth} disabled={saving}>ลบบูธ</SmallButton>
+            </div>
+          ) : null}
           <SelectInput label="แผนผังบูธ" value={editForm.floorPlanId || ''} onChange={(value) => setEditForm((current) => ({ ...current, floorPlanId: value }))} options={typeRows.map((item) => [String(item.id), item.name])} />
           <SelectInput label="ประเภทสินค้า" value={editForm.categoryId || ''} onChange={(value) => setEditForm((current) => ({ ...current, categoryId: value }))} options={categoryRows.map((item) => [String(item.id), item.name])} />
           <TextInput label="รหัสบูธ" value={editForm.code} onChange={(value) => setEditForm((current) => ({ ...current, code: value }))} required />
