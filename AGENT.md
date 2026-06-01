@@ -15,7 +15,7 @@ Frontend นี้พัฒนาขึ้นใหม่จาก legacy CodeIg
 - `Booking/*`: จองแทนสมาชิก, แก้ไขการจอง
 - `Report/*` และ `Reports/*`: รายงานการจอง, บูธว่าง, การชำระเงิน, รายวัน, รายบุคคล, รายการหลุดจอง
 - `Check/*`: ตรวจสอบตลาด, ค่าปรับ, สินค้าชำรุด
-- `Member/*`, `Partners/*`, `Announce/*`: งานเสริมที่ยังไม่มี backend endpoint ครบ
+- `Member/*`, `Partners/*`, `Announce/*`: legacy references only; new membership/profile flows are split between public mobile APIs and management tenant pages.
 
 ระบบใหม่ใช้ React + Vite + Tailwind CSS และเชื่อมกับ backend Node API.
 
@@ -43,12 +43,23 @@ Frontend นี้พัฒนาขึ้นใหม่จาก legacy CodeIg
 - `/login`: login
 - `/`: dashboard
 - `/markets`: list/create markets
-- `/products`: list/create products
-- `/coupons`: list/create coupons
-- `/bookings`: list bookings/create booking for customer
-- `/reports`: booking report
-- `/audit`: audit checks
-- `/accounting`: payments
+- `/market-info`: market profile, opening hours, contact, VAT/payment settings, and deep-link QR
+- `/booth-types`: floor plan/booth type management
+- `/booths`: booth management
+- `/holiday-calendar`: market holiday management
+- `/market-images`: market image gallery
+- `/accessories`: accessory management
+- `/product-categories`, `/product-groups`, `/products`: product master data
+- `/coupons`, `/coupon-assignments`: coupon creation and assignment views
+- `/bookings`, `/booking-edit`, `/booking-edits`: booking creation, edit, and edit history
+- `/booking-payment-proofs`: manual payment proof review
+- `/reports`, `/report-booths`, `/report-payments`, `/report-daily`, `/report-person`: booking/report views
+- `/audit`, `/audit-fines`, `/audit-fines-paid`, `/audit-defective`: audit checks and fine reports
+- `/announcements/news`: news announcement management
+- `/tenant-types`, `/tenants`, `/tenants/pending`: tenant master data and approval
+- `/accounting`, `/accounting-payments`, `/accounting-summary`, `/accounting-documents`, `/accounting-tax-sales`, `/accounting-receivables`, `/accounting-reconciliation`, `/accounting-refunds`, `/accounting-product-types`: accounting reports and documents
+- `/organization-settings`: organization profile, VAT, and payment settings
+- `/pdpa`: PDPA content/assets
 - `/admins`: create admin users and role reference
 - `/support/tickets`: ticket สำหรับแจ้งปัญหา ข้อเสนอแนะ และขอฟีเจอร์เพิ่มเติม พร้อมแนบรูปและผูก event log
 - `/support/chat`: สอบถามทั่วไปแบบ chat thread กับเจ้าหน้าที่ โดยใช้ `support_chats` แยกจาก ticket
@@ -82,6 +93,8 @@ npm install
 npm run dev
 npm run build
 ```
+
+หลังแก้ไข frontend ทุกครั้งต้องรัน `npm run build` ให้ผ่านก่อนส่งงานหรือ push เสมอ แม้เป็นการแก้ข้อความหรือ layout เล็กน้อย เพื่อยืนยันว่า production bundle ยัง build ได้จริง
 
 ถ้าต้องทดสอบกับ backend local:
 
