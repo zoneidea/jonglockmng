@@ -81,7 +81,7 @@ export function TenantTypesPage() {
 
   return (
     <>
-      <PageHeader title="ประเภทผู้เช่า" description="ประเภทสมาชิกถูกกำหนดคงที่ภายใต้องค์กร: บุคคลธรรมดา และ นิติบุคคล" />
+      <PageHeader title="ประเภทผู้เช่า" description="ประเภทสมาชิกเป็นข้อมูลกลางที่ใช้ร่วมกันทั้งระบบ: บุคคลธรรมดา และ นิติบุคคล" />
       <Card>{loading ? <LoadingBlock /> : <DataTable columns={['ลำดับ', 'ประเภทผู้เช่า', 'สถานะ']} rows={rows.map((item, index) => [index + 1, item.name, <StatusBadge value={item.status} />])} />}</Card>
     </>
   );
