@@ -776,8 +776,12 @@ export function MarketImagesPage({ marketId }) {
 
   if (!marketId) return <NeedMarket />;
 
+  function nextImageSortOrder() {
+    return String(rows.reduce((maxOrder, item) => Math.max(maxOrder, Number(item.sort_order ?? item.sortOrder ?? -1)), -1) + 1);
+  }
+
   function openCreateModal() {
-    setForm({ title: '', sortOrder: '0', status: 'active' });
+    setForm({ title: '', sortOrder: nextImageSortOrder(), status: 'active' });
     setSelectedFiles([]);
     setUploadError('');
     setModalOpen(true);
@@ -808,7 +812,7 @@ export function MarketImagesPage({ marketId }) {
     payload.append('status', form.status);
     selectedFiles.forEach((file) => payload.append('images', file));
     await mutate(`/markets/${marketId}/images`, payload);
-    setForm({ title: '', sortOrder: '0', status: 'active' });
+    setForm({ title: '', sortOrder: nextImageSortOrder(), status: 'active' });
     setSelectedFiles([]);
     setModalOpen(false);
     reload();
