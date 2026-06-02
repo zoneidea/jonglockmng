@@ -106,9 +106,10 @@ function readLoginQueryPrefill() {
     const params = new URLSearchParams(window.location.search);
     return {
       organizationCode: (params.get('organizationCode') || '').trim().toUpperCase(),
+      username: (params.get('username') || '').trim(),
     };
   } catch {
-    return { organizationCode: '' };
+    return { organizationCode: '', username: '' };
   }
 }
 
@@ -463,7 +464,7 @@ function LoginPage() {
   const loginPrefill = useMemo(readLoginQueryPrefill, []);
   const [form, setForm] = useState({
     organizationCode: loginPrefill.organizationCode || rememberedLogin?.organizationCode || '',
-    username: rememberedLogin?.username || '',
+    username: loginPrefill.username || rememberedLogin?.username || '',
     password: '',
   });
   const [rememberMe, setRememberMe] = useState(Boolean(rememberedLogin?.organizationCode || rememberedLogin?.username));

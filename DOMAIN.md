@@ -8,7 +8,7 @@
 
 ## Production
 
-- Management app: `https://mng.jonglock.com`
+- Management app: `https://management.jonglock.com`
 - Management API: `https://api.jonglock.com/management`
 - Market deep link base URL: `https://jonglock.com/market`
 
