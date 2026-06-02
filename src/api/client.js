@@ -1,4 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://jonglockapi.zonedevnode.com/management';
+const MARKET_DEEP_LINK_BASE_URL = import.meta.env.VITE_MARKET_DEEP_LINK_BASE_URL || 'https://jonglock.zonedevnode.com/market';
 const SESSION_STORAGE_KEY = 'jonglock.management.session';
 const SESSION_EXPIRED_EVENT = 'jonglock.session.expired';
 
@@ -49,4 +50,4 @@ async function request(path, options = {}) {
   return payload;
 }
 
-export { API_BASE_URL, ApiError, SESSION_EXPIRED_EVENT, expireSession, request };
+export { API_BASE_URL, ApiError, MARKET_DEEP_LINK_BASE_URL, SESSION_EXPIRED_EVENT, expireSession, request };

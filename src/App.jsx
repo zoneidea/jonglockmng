@@ -48,7 +48,7 @@ import {
   Warehouse,
   X,
 } from 'lucide-react';
-import { API_BASE_URL, request } from './api/client.js';
+import { API_BASE_URL, MARKET_DEEP_LINK_BASE_URL, request } from './api/client.js';
 import { menu } from './app/navigation.jsx';
 import { BookingDateSummary } from './components/BookingDateSummary.jsx';
 import { Card } from './components/Card.jsx';
@@ -949,7 +949,7 @@ function buildManagementShareDeeplink(user, market) {
   if (user?.organizationId) params.set('organizationId', String(user.organizationId));
   if (market?.id) params.set('marketId', String(market.id));
   if (market?.code) params.set('marketCode', market.code);
-  return `jonglock://market${params.toString() ? `?${params.toString()}` : ''}`;
+  return `${MARKET_DEEP_LINK_BASE_URL}${params.toString() ? `?${params.toString()}` : ''}`;
 }
 
 function SubscriptionNotice({ message, onDismiss, persistent = false }) {

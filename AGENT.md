@@ -22,7 +22,9 @@ Frontend นี้พัฒนาขึ้นใหม่จาก legacy CodeIg
 ## Route/API Rules
 
 - Management API base URL อยู่ใน `VITE_API_BASE_URL`
-- ค่า default คือ `https://jonglockapi.zonedevnode.com/management`
+- ค่า UAT คือ `https://jonglockapi.zonedevnode.com/management`
+- ค่า Production คือ `https://api.jonglock.com/management`
+- Market deep link base URL อยู่ใน `VITE_MARKET_DEEP_LINK_BASE_URL` เช่น `https://jonglock.com/market`
 - Login ใช้ `POST /auth/login`
 - หลัง login ให้เก็บ token ใน localStorage key `jonglock.management.session`
 - ทุก request หลัง login ต้องส่ง `Authorization: Bearer <token>`
