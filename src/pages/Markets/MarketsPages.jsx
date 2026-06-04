@@ -433,6 +433,7 @@ export function BoothsPage({ marketId }) {
     if (selectedCategory === 'all') return true;
     return String(booth.category_id || booth.categoryId || '') === String(selectedCategory);
   });
+  const selectedFloorPlan = typeRows.find((item) => String(item.id) === String(selectedType));
 
   if (!marketId) return <NeedMarket />;
 
@@ -563,70 +564,105 @@ export function BoothsPage({ marketId }) {
       />
       <Card>
         <ErrorNotice error={error} hint="ตรวจสอบ endpoint /markets/:marketId/booths และความสัมพันธ์ booths.category_id -> product_categories.id" />
-        <div className="mb-8 grid gap-4 xl:grid-cols-[1fr_1.2fr]">
-          <select value={selectedType} onChange={(event) => setSelectedType(event.target.value)} className="h-12 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-cyan-600">
-            <option value="">กรุณาเลือกแผนผังบูธ</option>
-            {typeRows.map((item) => (
-              <option key={item.id} value={item.id}>{item.name}</option>
-            ))}
-          </select>
-          <div className="flex flex-wrap gap-2 xl:justify-end">
-            <FilterPill active={selectedCategory === 'all'} onClick={() => setSelectedCategory('all')}>ทั้งหมด</FilterPill>
-            {categoryRows.map((category) => (
-              <FilterPill key={category.id} active={String(selectedCategory) === String(category.id)} onClick={() => setSelectedCategory(String(category.id))}>
-                {category.name}
-              </FilterPill>
-            ))}
-          </div>
-        </div>
-        {selectedType && filteredRows.length ? (
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="text-sm font-bold text-slate-600">เลือกแล้ว {selectedBoothIds.length} จาก {filteredRows.length} บูธ</p>
-            <div className="flex flex-wrap gap-2">
-              <SmallButton tone="slate" onClick={selectAllVisible}>เลือกทั้งหมด</SmallButton>
-              <SmallButton tone="slate" onClick={clearSelection}>ล้างที่เลือก</SmallButton>
+        <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
+          <aside className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
+            <div className="mb-3 px-2">
+              <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-cyan-700">Floor plan</p>
+              <p className="mt-1 text-sm font-bold text-slate-500">{typeRows.length} แผนผังที่เปิดใช้งาน</p>
             </div>
-          </div>
-        ) : null}
-        {!selectedType ? (
-          <EmptyState title="ยังไม่ได้เลือกแผนผังบูธ" description="เลือกแผนผังบูธจากรายการด้านซ้ายก่อน เพื่อแสดงผังและรายการบูธ" />
-        ) : loading ? <LoadingBlock /> : filteredRows.length ? (
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6 xl:grid-cols-12">
-            {filteredRows.map((booth) => (
-              <div
-                key={booth.id || booth.code || booth.name}
-                className={classNames(
-                  'relative min-h-20 rounded-xl border-2 border-dashed p-2 text-center shadow-sm transition',
-                  booth.status === 'deleted'
-                    ? 'border-slate-300 bg-slate-300 text-slate-600'
-                    : selectedBoothIds.includes(booth.id)
-                      ? 'border-amber-300 bg-amber-500 text-white'
-                      : booth.status !== 'active'
-                        ? 'border-red-300 bg-red-500 text-white'
-                        : 'border-cyan-200 bg-cyan-600 text-white hover:bg-cyan-700',
-                )}
-              >
-                {booth.status !== 'deleted' ? (
-                  <label className="absolute left-1.5 top-1.5">
-                    <input
-                      type="checkbox"
-                      checked={selectedBoothIds.includes(booth.id)}
-                      onChange={() => toggleBoothSelection(booth.id)}
-                      className="h-4 w-4 rounded border-white/70 text-amber-500 focus:ring-amber-300"
-                    />
-                  </label>
-                ) : null}
-                <button type="button" disabled={booth.status === 'deleted'} onClick={() => openEditModal(booth)} className="flex h-full w-full flex-col items-center justify-center pt-3 disabled:cursor-default">
-                  <span className="max-w-full truncate text-sm font-extrabold">{booth.code || booth.name || booth.id}</span>
-                  <span className="mt-0.5 text-[11px] font-bold leading-4 opacity-95">{formatMoney(booth.price || 0)}</span>
-                  <span className="mt-0.5 max-w-full truncate text-[10px] leading-4 opacity-80">{booth.status === 'deleted' ? 'ลบแล้ว' : booth.category_name || 'ยังไม่ระบุ'}</span>
-                </button>
+            <div className="max-h-[620px] space-y-2 overflow-y-auto pr-1">
+              {typeRows.length ? typeRows.map((item) => {
+                const boothCount = rows.filter((booth) => String(booth.floor_plan_id || booth.floorPlanId || '') === String(item.id)).length;
+                const isActive = String(selectedType) === String(item.id);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSelectedType(String(item.id))}
+                    className={classNames(
+                      'w-full rounded-2xl border px-4 py-3 text-left transition',
+                      isActive
+                        ? 'border-cyan-300 bg-cyan-600 text-white shadow-sm'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-cyan-200 hover:bg-cyan-50',
+                    )}
+                  >
+                    <span className="block truncate text-sm font-extrabold">{item.name}</span>
+                    <span className={classNames('mt-1 block text-xs font-bold', isActive ? 'text-cyan-50' : 'text-slate-400')}>{boothCount} บูธ</span>
+                  </button>
+                );
+              }) : (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-sm font-bold text-slate-500">
+                  ยังไม่มีแผนผังที่เปิดใช้งาน
+                </div>
+              )}
+            </div>
+          </aside>
+
+          <section className="min-w-0">
+            <div className="mb-5 flex flex-col gap-4 rounded-3xl border border-slate-200 bg-white px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-extrabold text-slate-950">{selectedFloorPlan?.name || 'เลือกแผนผังบูธ'}</p>
+                <p className="mt-1 text-xs font-bold text-slate-500">กรองประเภทสินค้าแล้วแสดงบูธด้านล่าง</p>
               </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState title="ไม่พบบูธตามเงื่อนไข" description="แผนผังบูธนี้ยังไม่มีบูธ หรือไม่มีบูธในประเภทที่เลือก" />
-        )}
+              <div className="flex flex-wrap gap-2 lg:justify-end">
+                <FilterPill active={selectedCategory === 'all'} onClick={() => setSelectedCategory('all')}>ทั้งหมด</FilterPill>
+                {categoryRows.map((category) => (
+                  <FilterPill key={category.id} active={String(selectedCategory) === String(category.id)} onClick={() => setSelectedCategory(String(category.id))}>
+                    {category.name}
+                  </FilterPill>
+                ))}
+              </div>
+            </div>
+            {selectedType && filteredRows.length ? (
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-sm font-bold text-slate-600">เลือกแล้ว {selectedBoothIds.length} จาก {filteredRows.length} บูธ</p>
+                <div className="flex flex-wrap gap-2">
+                  <SmallButton tone="slate" onClick={selectAllVisible}>เลือกทั้งหมด</SmallButton>
+                  <SmallButton tone="slate" onClick={clearSelection}>ล้างที่เลือก</SmallButton>
+                </div>
+              </div>
+            ) : null}
+            {!selectedType ? (
+              <EmptyState title="ยังไม่ได้เลือกแผนผังบูธ" description="เลือกแผนผังบูธจากรายการด้านซ้ายก่อน เพื่อแสดงผังและรายการบูธ" />
+            ) : loading ? <LoadingBlock /> : filteredRows.length ? (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
+                {filteredRows.map((booth) => (
+                  <div
+                    key={booth.id || booth.code || booth.name}
+                    className={classNames(
+                      'relative min-h-20 rounded-xl border-2 border-dashed p-2 text-center shadow-sm transition',
+                      booth.status === 'deleted'
+                        ? 'border-slate-300 bg-slate-300 text-slate-600'
+                        : selectedBoothIds.includes(booth.id)
+                          ? 'border-amber-300 bg-amber-500 text-white'
+                          : booth.status !== 'active'
+                            ? 'border-red-300 bg-red-500 text-white'
+                            : 'border-cyan-200 bg-cyan-600 text-white hover:bg-cyan-700',
+                    )}
+                  >
+                    {booth.status !== 'deleted' ? (
+                      <label className="absolute left-1.5 top-1.5">
+                        <input
+                          type="checkbox"
+                          checked={selectedBoothIds.includes(booth.id)}
+                          onChange={() => toggleBoothSelection(booth.id)}
+                          className="h-4 w-4 rounded border-white/70 text-amber-500 focus:ring-amber-300"
+                        />
+                      </label>
+                    ) : null}
+                    <button type="button" disabled={booth.status === 'deleted'} onClick={() => openEditModal(booth)} className="flex h-full w-full flex-col items-center justify-center pt-3 disabled:cursor-default">
+                      <span className="max-w-full truncate text-sm font-extrabold">{booth.code || booth.name || booth.id}</span>
+                      <span className="mt-0.5 text-[11px] font-bold leading-4 opacity-95">{formatMoney(booth.price || 0)}</span>
+                      <span className="mt-0.5 max-w-full truncate text-[10px] leading-4 opacity-80">{booth.status === 'deleted' ? 'ลบแล้ว' : booth.category_name || 'ยังไม่ระบุ'}</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="ไม่พบบูธตามเงื่อนไข" description="แผนผังบูธนี้ยังไม่มีบูธ หรือไม่มีบูธในประเภทที่เลือก" />
+            )}
+          </section>
+        </div>
       </Card>
       <Modal open={modalOpen} title="เพิ่มบูธ" onClose={() => setModalOpen(false)}>
         <FormPanel onSubmit={submit} loading={saving} error={saveError}>
