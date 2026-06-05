@@ -570,7 +570,7 @@ export function BoothsPage({ marketId }) {
               <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-cyan-700">Floor plan</p>
               <p className="mt-1 text-sm font-bold text-slate-500">{typeRows.length} แผนผังที่เปิดใช้งาน</p>
             </div>
-            <div className="max-h-[620px] space-y-2 overflow-y-auto pr-1">
+            <div className="max-h-[376px] space-y-2 overflow-y-auto pr-1">
               {typeRows.length ? typeRows.map((item) => {
                 const boothCount = rows.filter((booth) => String(booth.floor_plan_id || booth.floorPlanId || '') === String(item.id)).length;
                 const isActive = String(selectedType) === String(item.id);
@@ -582,12 +582,12 @@ export function BoothsPage({ marketId }) {
                     className={classNames(
                       'w-full rounded-2xl border px-4 py-3 text-left transition',
                       isActive
-                        ? 'border-cyan-300 bg-cyan-600 text-white shadow-sm'
-                        : 'border-slate-200 bg-white text-slate-700 hover:border-cyan-200 hover:bg-cyan-50',
+                        ? 'border-amber-300 bg-slate-950 text-white shadow-sm'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-amber-200 hover:bg-amber-50',
                     )}
                   >
                     <span className="block truncate text-sm font-extrabold">{item.name}</span>
-                    <span className={classNames('mt-1 block text-xs font-bold', isActive ? 'text-cyan-50' : 'text-slate-400')}>{boothCount} บูธ</span>
+                    <span className={classNames('mt-1 block text-xs font-bold', isActive ? 'text-amber-100' : 'text-slate-400')}>{boothCount} บูธ</span>
                   </button>
                 );
               }) : (
