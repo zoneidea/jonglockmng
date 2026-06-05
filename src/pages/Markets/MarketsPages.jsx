@@ -582,12 +582,12 @@ export function BoothsPage({ marketId }) {
                     className={classNames(
                       'w-full rounded-2xl border px-4 py-3 text-left transition',
                       isActive
-                        ? 'border-amber-300 bg-slate-950 text-white shadow-sm'
+                        ? 'border-cyan-200 bg-slate-200 text-cyan-700 shadow-sm'
                         : 'border-slate-200 bg-white text-slate-700 hover:border-amber-200 hover:bg-amber-50',
                     )}
                   >
                     <span className="block truncate text-sm font-extrabold">{item.name}</span>
-                    <span className={classNames('mt-1 block text-xs font-bold', isActive ? 'text-amber-100' : 'text-slate-400')}>{boothCount} บูธ</span>
+                    <span className={classNames('mt-1 block text-xs font-bold', isActive ? 'text-cyan-700' : 'text-slate-400')}>{boothCount} บูธ</span>
                   </button>
                 );
               }) : (
