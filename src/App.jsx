@@ -142,6 +142,7 @@ const DashboardComponent = lazyNamed(() => import('./pages/Dashboard/index.js'),
 const MarketsPage = lazyNamed(() => import('./pages/Markets/index.js'), 'MarketsPage');
 const MarketInfoPage = lazyNamed(() => import('./pages/Markets/index.js'), 'MarketInfoPage');
 const BoothTypesPage = lazyNamed(() => import('./pages/Markets/index.js'), 'BoothTypesPage');
+const VisualPlanPage = lazyNamed(() => import('./pages/Markets/index.js'), 'VisualPlanPage');
 const BoothsPage = lazyNamed(() => import('./pages/Markets/index.js'), 'BoothsPage');
 const HolidayCalendarPage = lazyNamed(() => import('./pages/Markets/index.js'), 'HolidayCalendarPage');
 const MarketImagesPage = lazyNamed(() => import('./pages/Markets/index.js'), 'MarketImagesPage');
@@ -638,6 +639,7 @@ function Shell() {
                   <Route path="/markets" element={<MarketsPage markets={marketRows} reloadMarkets={reloadMarkets} />} />
                   <Route path="/market-info" element={<MarketInfoPage marketId={currentMarketId} market={currentMarket} reloadMarkets={reloadMarkets} />} />
                   <Route path="/booth-types" element={<BoothTypesPage marketId={currentMarketId} />} />
+                  <Route path="/visual-plan" element={<VisualPlanPage marketId={currentMarketId} />} />
                   <Route path="/booths" element={<BoothsPage marketId={currentMarketId} />} />
                   <Route path="/holidays" element={<Navigate to="/holiday-calendar" replace />} />
                   <Route path="/holiday-calendar" element={<HolidayCalendarPage marketId={currentMarketId} />} />

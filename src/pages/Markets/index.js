@@ -7,3 +7,5 @@ export {
   MarketInfoPage,
   MarketsPage,
 } from './MarketsPages.jsx';
+
+export { VisualPlanPage } from './VisualPlanPage.jsx';
