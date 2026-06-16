@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { 
   Plus, Save, Trash2, Eye, Send, Grid3X3, LayoutGrid, DoorOpen, 
   Toilet, TreePine, Presentation, Car, Type, Box, Eraser, 
@@ -45,7 +45,7 @@ const VISUAL_PLAN_OBJECTS = [
     label: 'ทางเข้า', 
     description: 'ประตูทางเข้า',
     rowSpan: 1, 
-    colSpan: 3,
+    colSpan: 1,
     icon: DoorOpen,
     color: 'orange',
     bgColor: 'bg-orange-100',
@@ -58,7 +58,7 @@ const VISUAL_PLAN_OBJECTS = [
     label: 'ทางออก', 
     description: 'ประตูทางออก',
     rowSpan: 1, 
-    colSpan: 3,
+    colSpan: 1,
     icon: DoorOpen,
     color: 'orange',
     bgColor: 'bg-orange-100',
@@ -70,8 +70,8 @@ const VISUAL_PLAN_OBJECTS = [
     type: 'toilet', 
     label: 'ห้องน้ำ', 
     description: 'ห้องน้ำ / สุขา',
-    rowSpan: 2, 
-    colSpan: 2,
+    rowSpan: 1, 
+    colSpan: 1,
     icon: Toilet,
     color: 'blue',
     bgColor: 'bg-blue-100',
@@ -96,8 +96,8 @@ const VISUAL_PLAN_OBJECTS = [
     type: 'stage', 
     label: 'เวที', 
     description: 'เวทีแสดง',
-    rowSpan: 2, 
-    colSpan: 4,
+    rowSpan: 1, 
+    colSpan: 1,
     icon: Presentation,
     color: 'purple',
     bgColor: 'bg-purple-100',
@@ -109,8 +109,8 @@ const VISUAL_PLAN_OBJECTS = [
     type: 'parking', 
     label: 'ที่จอดรถ', 
     description: 'พื้นที่จอดรถ',
-    rowSpan: 2, 
-    colSpan: 4,
+    rowSpan: 1, 
+    colSpan: 1,
     icon: Car,
     color: 'slate',
     bgColor: 'bg-slate-200',
@@ -123,7 +123,7 @@ const VISUAL_PLAN_OBJECTS = [
     label: 'ข้อความ / ป้าย', 
     description: 'ป้ายบอกทาง / ข้อความ',
     rowSpan: 1, 
-    colSpan: 3,
+    colSpan: 1,
     icon: Type,
     color: 'pink',
     bgColor: 'bg-pink-100',
@@ -136,7 +136,7 @@ const VISUAL_PLAN_OBJECTS = [
     label: 'วัตถุอิสระ', 
     description: 'วัตถุทั่วไป',
     rowSpan: 1, 
-    colSpan: 2,
+    colSpan: 1,
     icon: Box,
     color: 'gray',
     bgColor: 'bg-gray-100',
@@ -407,25 +407,20 @@ function ObjectPaletteButton({ item, active, onClick }) {
       type="button"
       onClick={onClick}
       className={classNames(
-        'w-full rounded-2xl border p-3 text-left transition-all',
+        'flex min-w-[112px] flex-col items-center justify-center rounded-2xl border px-3 py-3 text-center transition-all',
         getPaletteButtonClasses(item.type, active),
       )}
     >
-      <div className="flex items-center gap-3">
-        <div className={classNames(
-          'flex h-10 w-10 items-center justify-center rounded-xl',
-          active ? 'bg-white/20' : item.bgColor
-        )}>
-          <IconComponent className={classNames('h-5 w-5', active ? 'text-white' : item.iconColor)} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className={classNames('text-sm font-bold', active ? 'text-white' : 'text-slate-900')}>
-            {item.label}
-          </p>
-          <p className={classNames('truncate text-xs font-medium', active ? 'text-white/80' : 'text-slate-500')}>
-            {item.description}
-          </p>
-        </div>
+      <div className={classNames(
+        'flex h-10 w-10 items-center justify-center rounded-xl',
+        active ? 'bg-white/20' : item.bgColor
+      )}>
+        <IconComponent className={classNames('h-5 w-5', active ? 'text-white' : item.iconColor)} />
+      </div>
+      <div className="mt-2 min-w-0">
+        <p className={classNames('text-xs font-bold leading-4', active ? 'text-white' : 'text-slate-900')}>
+          {item.label}
+        </p>
       </div>
     </button>
   );
@@ -547,6 +542,8 @@ export function VisualPlanPage({ marketId }) {
   const [createForm, setCreateForm] = useState(createDefaultCreateForm());
   const [boothKeyword, setBoothKeyword] = useState('');
   const [showGridView, setShowGridView] = useState(true);
+  const [draggingItemId, setDraggingItemId] = useState('');
+  const dragOriginRef = useRef(null);
 
   // API hooks
   const { data: layouts = [], loading: layoutsLoading, error: layoutsError, reload: reloadLayouts } = useApi(
@@ -847,6 +844,54 @@ export function VisualPlanPage({ marketId }) {
     }
   }
 
+  function moveItemToCell(itemId, row, col) {
+    if (!layoutDraft) return;
+    const targetItem = layoutDraft.items.find((item) => item.id === itemId);
+    if (!targetItem) return;
+    const candidate = {
+      ...targetItem,
+      row,
+      col,
+    };
+    const errorMessage = validatePlacement(
+      layoutDraft.items,
+      candidate,
+      layoutDraft.rows,
+      layoutDraft.columns,
+      targetItem.id,
+    );
+    if (errorMessage) {
+      showAlert({ title: 'ย้ายวัตถุไม่ได้', text: errorMessage, icon: 'warning' });
+      return;
+    }
+    setLayoutDraft((current) => ({
+      ...current,
+      items: current.items.map((item) => (item.id === itemId ? candidate : item)),
+    }));
+    setSelectedItemId(itemId);
+  }
+
+  function handleItemDragStart(event, item) {
+    setDraggingItemId(item.id);
+    dragOriginRef.current = { row: item.row, col: item.col };
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', item.id);
+  }
+
+  function handleGridDrop(event, row, col) {
+    event.preventDefault();
+    const itemId = event.dataTransfer.getData('text/plain') || draggingItemId;
+    if (!itemId) return;
+    moveItemToCell(itemId, row, col);
+    setDraggingItemId('');
+    dragOriginRef.current = null;
+  }
+
+  function handleDragEnd() {
+    setDraggingItemId('');
+    dragOriginRef.current = null;
+  }
+
   // ============================================================================
   // RENDER - LIST VIEW
   // ============================================================================
@@ -988,40 +1033,37 @@ export function VisualPlanPage({ marketId }) {
         onViewPreview={() => showAlert({ title: 'ดูตัวอย่าง', text: 'ฟีเจอร์นี้กำลังพัฒนา', icon: 'info' })}
       />
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)_320px]">
-        {/* Left Panel - Object Palette */}
-        <aside className="space-y-4">
-          <div className="rounded-3xl border border-slate-200 bg-white p-4">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-cyan-700">Object Palette</p>
-                <p className="mt-1 text-sm font-bold text-slate-500">เลือกวัตถุเพื่อวางบนแผนผัง</p>
-              </div>
+      <div className="mt-6 space-y-6">
+        <div className="rounded-3xl border border-slate-200 bg-white p-4">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+              <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-cyan-700">Object Palette</p>
+              <p className="mt-1 text-sm font-bold text-slate-500">เลือกวัตถุเพื่อวางบนแผนผัง จากนั้นคลิกหรือลากในพื้นที่ Grid</p>
             </div>
-            <div className="space-y-2">
-              {VISUAL_PLAN_OBJECTS.map((item) => (
-                <ObjectPaletteButton 
-                  key={item.type} 
-                  item={item} 
-                  active={selectedTool === item.type} 
-                  onClick={() => setSelectedTool(item.type)} 
-                />
-              ))}
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode('list');
+                setSelectedLayoutId('');
+              }}
+              className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+            >
+              ← กลับสู่รายการ Visual Plan
+            </button>
           </div>
+          <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
+            {VISUAL_PLAN_OBJECTS.map((item) => (
+              <ObjectPaletteButton
+                key={item.type}
+                item={item}
+                active={selectedTool === item.type}
+                onClick={() => setSelectedTool(item.type)}
+              />
+            ))}
+          </div>
+        </div>
 
-          {/* Back to List Button */}
-          <button
-            type="button"
-            onClick={() => {
-              setViewMode('list');
-              setSelectedLayoutId('');
-            }}
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-          >
-            ← กลับสู่รายการ Visual Plan
-          </button>
-        </aside>
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_320px]">
 
         {/* Center - Canvas */}
         <section className="min-w-0 space-y-4">
@@ -1069,6 +1111,8 @@ export function VisualPlanPage({ marketId }) {
                         key={`${row}-${col}`}
                         type="button"
                         onClick={() => handleCanvasClick(row, col)}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={(event) => handleGridDrop(event, row, col)}
                         className="h-full min-h-[28px] border border-transparent transition hover:bg-cyan-50/50"
                         aria-label={`วาง object ที่ row ${row} col ${col}`}
                       />
@@ -1083,6 +1127,9 @@ export function VisualPlanPage({ marketId }) {
                     <button
                       key={item.id}
                       type="button"
+                      draggable
+                      onDragStart={(event) => handleItemDragStart(event, item)}
+                      onDragEnd={handleDragEnd}
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedItemId(item.id);
@@ -1090,6 +1137,7 @@ export function VisualPlanPage({ marketId }) {
                       className={classNames(
                         'absolute overflow-hidden rounded-xl border-2 px-1 py-1 text-center shadow-md transition-all',
                         selectedItemId === item.id ? 'ring-2 ring-amber-400 ring-offset-2 z-10' : 'hover:shadow-lg',
+                        draggingItemId === item.id ? 'opacity-70' : '',
                         def.borderColor,
                         def.bgColor,
                         def.textColor
@@ -1097,12 +1145,13 @@ export function VisualPlanPage({ marketId }) {
                       style={buildItemStyle(item, canvasCellSize)}
                     >
                       <div className="flex h-full w-full flex-col items-center justify-center">
-                        {def.icon && (
-                          <def.icon className={classNames('mb-1 h-4 w-4', def.iconColor)} />
-                        )}
-                        <span className="truncate text-xs font-extrabold">
-                          {item.type === 'booth' ? item.boothCode || item.label : item.label}
-                        </span>
+                        {item.type === 'booth' ? (
+                          <span className="truncate text-[10px] font-extrabold leading-none">
+                            {item.boothCode || item.label}
+                          </span>
+                        ) : def.icon ? (
+                          <def.icon className={classNames('h-4 w-4', def.iconColor)} />
+                        ) : null}
                       </div>
                     </button>
                   );
@@ -1128,7 +1177,7 @@ export function VisualPlanPage({ marketId }) {
                 <SearchInput 
                   value={boothKeyword} 
                   onChange={setBoothKeyword} 
-                  placeholder="ค้นหารหัสบูธ ชื่อบูธ หรือหมวดหมู่" 
+                  placeholder="ค้นหารหัสหรือชื่อบูธ" 
                 />
               </div>
               <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600">
@@ -1136,14 +1185,14 @@ export function VisualPlanPage({ marketId }) {
               </div>
               <div className="mt-3 max-h-[360px] overflow-y-auto pr-1">
                 {unplacedBooths.length ? (
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  <div className="grid grid-cols-3 gap-2">
                     {unplacedBooths.map((booth) => (
                       <button
                         key={booth.id}
                         type="button"
                         onClick={() => setSelectedBoothId(String(booth.id))}
                         className={classNames(
-                          'relative min-h-24 rounded-xl border-2 border-dashed p-2 text-center shadow-sm transition',
+                          'relative min-h-16 rounded-xl border-2 border-dashed p-2 text-center shadow-sm transition',
                           String(selectedBoothId) === String(booth.id)
                             ? 'border-amber-300 bg-amber-500 text-white'
                             : 'border-cyan-200 bg-cyan-600 text-white hover:bg-cyan-700'
@@ -1152,12 +1201,6 @@ export function VisualPlanPage({ marketId }) {
                         <div className="flex h-full w-full flex-col items-center justify-center">
                           <span className="max-w-full truncate text-sm font-extrabold">
                             {booth.code || booth.name || booth.id}
-                          </span>
-                          <span className="mt-0.5 text-[11px] font-bold leading-4 opacity-95">
-                            {formatMoney(booth.price || 0)}
-                          </span>
-                          <span className="mt-0.5 max-w-full truncate text-[10px] leading-4 opacity-80">
-                            {booth.category_name || 'ยังไม่ระบุ'}
                           </span>
                         </div>
                       </button>
@@ -1228,11 +1271,7 @@ export function VisualPlanPage({ marketId }) {
                 {selectedItem.type === 'booth' && (
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
                     <p className="text-sm font-extrabold text-emerald-900">{selectedItem.boothCode || selectedItem.label}</p>
-                    <p className="mt-1 text-xs font-medium text-emerald-700">
-                      {formatMoney(filteredBoothRows.find((row) => Number(row.id) === Number(selectedItem.boothId))?.price || 0)}
-                      {' • '}
-                      {filteredBoothRows.find((row) => Number(row.id) === Number(selectedItem.boothId))?.category_name || 'ไม่ระบุหมวดหมู่'}
-                    </p>
+                    <p className="mt-1 text-xs font-medium text-emerald-700">บูธที่เชื่อมกับข้อมูลจริง</p>
                   </div>
                 )}
 
@@ -1279,6 +1318,7 @@ export function VisualPlanPage({ marketId }) {
             )}
           </div>
         </aside>
+      </div>
       </div>
     </>
   );
