@@ -8,4 +8,4 @@ export {
   MarketsPage,
 } from './MarketsPages.jsx';
 
-export { VisualPlanPage } from './VisualPlanPage.jsx';
+export { VisualPlanPage } from './VisualPlanPage_New.jsx';

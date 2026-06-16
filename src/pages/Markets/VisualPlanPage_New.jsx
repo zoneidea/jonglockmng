@@ -15,6 +15,7 @@ import {
   Modal,
   NeedMarket,
   SearchInput,
+  SelectInput,
   SmallButton,
   TextInput,
 } from '../../components/ManagementUi.jsx';
@@ -165,6 +166,7 @@ const DEFAULT_LAYOUT_FORM = {
   columnsCount: '30',
   cellSize: '48',
 };
+const createDefaultCreateForm = () => ({ ...DEFAULT_LAYOUT_FORM, floorPlanId: '' });
 
 const DEFAULT_PROPERTIES_FORM = {
   label: '',
@@ -193,6 +195,42 @@ function createItemId(type) {
 
 function getObjectDefinition(type) {
   return VISUAL_PLAN_OBJECTS.find((item) => item.type === type) || VISUAL_PLAN_OBJECTS[0];
+}
+
+function getPaletteButtonClasses(type, active) {
+  const classes = {
+    booth: active
+      ? 'border-emerald-600 bg-emerald-600 text-white shadow-md'
+      : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50',
+    entrance: active
+      ? 'border-orange-600 bg-orange-600 text-white shadow-md'
+      : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200 hover:bg-orange-50',
+    exit: active
+      ? 'border-orange-600 bg-orange-600 text-white shadow-md'
+      : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200 hover:bg-orange-50',
+    toilet: active
+      ? 'border-blue-600 bg-blue-600 text-white shadow-md'
+      : 'border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50',
+    tree: active
+      ? 'border-green-700 bg-green-700 text-white shadow-md'
+      : 'border-slate-200 bg-white text-slate-700 hover:border-green-200 hover:bg-green-50',
+    stage: active
+      ? 'border-purple-600 bg-purple-600 text-white shadow-md'
+      : 'border-slate-200 bg-white text-slate-700 hover:border-purple-200 hover:bg-purple-50',
+    parking: active
+      ? 'border-slate-700 bg-slate-700 text-white shadow-md'
+      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
+    text: active
+      ? 'border-pink-600 bg-pink-600 text-white shadow-md'
+      : 'border-slate-200 bg-white text-slate-700 hover:border-pink-200 hover:bg-pink-50',
+    custom: active
+      ? 'border-gray-600 bg-gray-600 text-white shadow-md'
+      : 'border-slate-200 bg-white text-slate-700 hover:border-gray-300 hover:bg-gray-50',
+    eraser: active
+      ? 'border-red-600 bg-red-600 text-white shadow-md'
+      : 'border-slate-200 bg-white text-slate-700 hover:border-red-200 hover:bg-red-50',
+  };
+  return classes[type] || classes.custom;
 }
 
 function getItemAtCell(items, row, col) {
@@ -370,9 +408,7 @@ function ObjectPaletteButton({ item, active, onClick }) {
       onClick={onClick}
       className={classNames(
         'w-full rounded-2xl border p-3 text-left transition-all',
-        active
-          ? `border-${item.color}-600 bg-${item.color}-600 text-white shadow-md`
-          : `border-slate-200 bg-white text-slate-700 hover:border-${item.color}-200 hover:bg-${item.color}-50`
+        getPaletteButtonClasses(item.type, active),
       )}
     >
       <div className="flex items-center gap-3">
@@ -503,18 +539,26 @@ export function VisualPlanPage({ marketId }) {
     marketId ? `/markets/${marketId}/layouts` : null, 
     { initialData: [] }
   );
+  const { data: boothTypes = [] } = useApi(
+    marketId ? `/markets/${marketId}/booth-types?status=active` : null,
+    { initialData: [] },
+  );
   const { data: booths = [], loading: boothsLoading, error: boothsError, reload: reloadBooths } = useApi(
     marketId ? `/markets/${marketId}/booths` : null, 
     { initialData: [] }
   );
+  const { data: selectedLayoutData, loading: selectedLayoutLoading, error: selectedLayoutError } = useApi(
+    marketId && selectedLayoutId && viewMode === 'editor' ? `/markets/${marketId}/layouts/${selectedLayoutId}` : null,
+    { initialData: null, skip: !marketId || !selectedLayoutId || viewMode !== 'editor' },
+  );
   const { mutate, loading: saving, error: saveError } = useMutation();
   const layoutRows = normalizeRows(layouts);
+  const floorPlanRows = normalizeRows(boothTypes);
   const boothRows = normalizeRows(booths).filter((row) => row.status !== 'deleted');
 
   // State management
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'editor'
   const [selectedLayoutId, setSelectedLayoutId] = useState('');
-  const [selectedLayout, setSelectedLayout] = useState(null);
   const [layoutForm, setLayoutForm] = useState(DEFAULT_LAYOUT_FORM);
   const [layoutDraft, setLayoutDraft] = useState(null);
   const [selectedTool, setSelectedTool] = useState('booth');
@@ -522,34 +566,10 @@ export function VisualPlanPage({ marketId }) {
   const [selectedItemId, setSelectedItemId] = useState('');
   const [propertiesForm, setPropertiesForm] = useState(DEFAULT_PROPERTIES_FORM);
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [createForm, setCreateForm] = useState(DEFAULT_LAYOUT_FORM);
+  const [createForm, setCreateForm] = useState(createDefaultCreateForm());
   const [boothKeyword, setBoothKeyword] = useState('');
   const [showGridView, setShowGridView] = useState(true);
-
-  // Load layout detail when selected
-  useEffect(() => {
-    async function loadLayoutDetail() {
-      if (!selectedLayoutId) {
-        setSelectedLayout(null);
-        return;
-      }
-      try {
-        const response = await fetch(`/api/markets/${marketId}/layouts/${selectedLayoutId}`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        });
-        const result = await response.json();
-        if (result.success && result.data) {
-          setSelectedLayout(result.data);
-        }
-      } catch (error) {
-        console.error('Failed to load layout detail:', error);
-      }
-    }
-    
-    if (selectedLayoutId && viewMode === 'editor') {
-      loadLayoutDetail();
-    }
-  }, [selectedLayoutId, viewMode, marketId]);
+  const selectedLayout = selectedLayoutData;
 
   // Initialize editor when layout is loaded
   useEffect(() => {
@@ -608,15 +628,20 @@ export function VisualPlanPage({ marketId }) {
     [layoutDraft],
   );
 
+  const filteredBoothRows = useMemo(() => {
+    if (!selectedLayout?.floorPlanId) return boothRows;
+    return boothRows.filter((booth) => Number(booth.floor_plan_id || booth.floorPlanId || 0) === Number(selectedLayout.floorPlanId));
+  }, [boothRows, selectedLayout?.floorPlanId]);
+
   const unplacedBooths = useMemo(() => {
     const keyword = boothKeyword.trim().toLowerCase();
-    return boothRows
+    return filteredBoothRows
       .filter((booth) => !placedBoothIds.has(Number(booth.id)))
       .filter((booth) => {
         if (!keyword) return true;
         return `${booth.code || ''} ${booth.name || ''} ${booth.category_name || ''}`.toLowerCase().includes(keyword);
       });
-  }, [boothKeyword, boothRows, placedBoothIds]);
+  }, [boothKeyword, filteredBoothRows, placedBoothIds]);
 
   const canvasCellSize = useMemo(() => {
     const raw = Number(layoutDraft?.cellSize || layoutForm.cellSize || 48);
@@ -633,12 +658,13 @@ export function VisualPlanPage({ marketId }) {
     const payload = await mutate(`/markets/${marketId}/layouts`, {
       name: createForm.name,
       description: createForm.description,
+      floorPlanId: Number(createForm.floorPlanId) || null,
       rowsCount: Number(createForm.rowsCount),
       columnsCount: Number(createForm.columnsCount),
       cellSize: Number(createForm.cellSize),
     });
     setCreateModalOpen(false);
-    setCreateForm(DEFAULT_LAYOUT_FORM);
+    setCreateForm(createDefaultCreateForm());
     await reloadLayouts();
     if (payload?.id) {
       setSelectedLayoutId(String(payload.id));
@@ -675,9 +701,6 @@ export function VisualPlanPage({ marketId }) {
     if (!confirmed) return;
     await mutate(`/markets/${marketId}/layouts/${selectedLayoutId}/publish`, {}, 'POST');
     await reloadLayouts();
-    if (selectedLayout) {
-      setSelectedLayout({ ...selectedLayout, status: 'published' });
-    }
   }
 
   async function archiveLayout() {
@@ -832,7 +855,7 @@ export function VisualPlanPage({ marketId }) {
             <button
               type="button"
               onClick={() => {
-                setCreateForm(DEFAULT_LAYOUT_FORM);
+                setCreateForm(createDefaultCreateForm());
                 setCreateModalOpen(true);
               }}
               className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white shadow-lg shadow-cyan-600/20 transition hover:bg-cyan-700"
@@ -854,7 +877,7 @@ export function VisualPlanPage({ marketId }) {
                 <button
                   type="button"
                   onClick={() => {
-                    setCreateForm(DEFAULT_LAYOUT_FORM);
+                    setCreateForm(createDefaultCreateForm());
                     setCreateModalOpen(true);
                   }}
                   className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white transition hover:bg-cyan-700"
@@ -868,29 +891,11 @@ export function VisualPlanPage({ marketId }) {
 
           {layoutRows.length ? (
             <div className="space-y-6">
-              {/* View Toggle */}
               <div className="flex items-center justify-between">
                 <p className="text-sm font-bold text-slate-600">
                   พบ {layoutRows.length} แผนผังตลาด
                 </p>
               </div>
-
-              {/* Cards View */}
-              <div className="grid gap-4 lg:grid-cols-2">
-                {layoutRows.map((layout) => (
-                  <VisualPlanListCard
-                    key={layout.id}
-                    layout={layout}
-                    onClick={() => {
-                      setSelectedLayoutId(String(layout.id));
-                      setViewMode('editor');
-                    }}
-                  />
-                ))}
-              </div>
-
-              {/* Table View Alternative */}
-              {/* Uncomment to use table view instead
               <VisualPlanListTable 
                 layouts={layoutRows} 
                 onEdit={(id) => {
@@ -898,12 +903,10 @@ export function VisualPlanPage({ marketId }) {
                   setViewMode('editor');
                 }} 
               />
-              */}
             </div>
           ) : null}
         </Card>
 
-        {/* Create Modal */}
         <Modal open={createModalOpen} title="สร้าง Visual Plan ใหม่" onClose={() => setCreateModalOpen(false)}>
           <FormPanel onSubmit={createLayout} loading={saving} error={saveError}>
             <div className="space-y-4">
@@ -919,6 +922,13 @@ export function VisualPlanPage({ marketId }) {
                 placeholder="รายละเอียดเพิ่มเติมเกี่ยวกับแผนผังนี้"
                 value={createForm.description} 
                 onChange={(value) => setCreateForm((current) => ({ ...current, description: value }))} 
+              />
+              <SelectInput
+                label="อ้างอิงแผนผังบูธ"
+                value={createForm.floorPlanId}
+                onChange={(value) => setCreateForm((current) => ({ ...current, floorPlanId: value }))}
+                options={floorPlanRows.map((item) => [String(item.id), item.name || `Floor plan ${item.id}`])}
+                placeholder="เลือกแผนผังบูธ"
               />
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <p className="mb-3 text-sm font-extrabold text-slate-900">ขนาดของ Grid</p>
@@ -956,8 +966,8 @@ export function VisualPlanPage({ marketId }) {
   // ============================================================================
   // RENDER - EDITOR VIEW
   // ============================================================================
-  const loading = boothsLoading;
-  const pageError = boothsError || saveError;
+  const loading = boothsLoading || selectedLayoutLoading;
+  const pageError = boothsError || selectedLayoutError || saveError;
 
   return (
     <>
@@ -998,7 +1008,6 @@ export function VisualPlanPage({ marketId }) {
             onClick={() => {
               setViewMode('list');
               setSelectedLayoutId('');
-              setSelectedLayout(null);
             }}
             className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-bold text-slate-700 transition hover:bg-slate-100"
           >
@@ -1104,6 +1113,9 @@ export function VisualPlanPage({ marketId }) {
               <p className="mt-1 text-sm font-bold text-slate-500">
                 {unplacedBooths.length} บูธที่ยังไม่ได้วาง
               </p>
+              <p className="mt-1 text-xs font-medium text-slate-400">
+                แผนผังบูธ: {selectedLayout?.floorPlanName || 'ไม่ระบุ'}
+              </p>
               <div className="mt-3">
                 <SearchInput 
                   value={boothKeyword} 
@@ -1197,9 +1209,9 @@ export function VisualPlanPage({ marketId }) {
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
                     <p className="text-sm font-extrabold text-emerald-900">{selectedItem.boothCode || selectedItem.label}</p>
                     <p className="mt-1 text-xs font-medium text-emerald-700">
-                      {formatMoney(boothRows.find((row) => Number(row.id) === Number(selectedItem.boothId))?.price || 0)}
+                      {formatMoney(filteredBoothRows.find((row) => Number(row.id) === Number(selectedItem.boothId))?.price || 0)}
                       {' • '}
-                      {boothRows.find((row) => Number(row.id) === Number(selectedItem.boothId))?.category_name || 'ไม่ระบุหมวดหมู่'}
+                      {filteredBoothRows.find((row) => Number(row.id) === Number(selectedItem.boothId))?.category_name || 'ไม่ระบุหมวดหมู่'}
                     </p>
                   </div>
                 )}
