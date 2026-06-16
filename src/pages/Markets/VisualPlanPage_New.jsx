@@ -534,28 +534,6 @@ function EditorTopbar({ layout, onSave, onPublish, onViewPreview, status }) {
 // MAIN PAGE COMPONENT
 // ============================================================================
 export function VisualPlanPage({ marketId }) {
-  // API hooks
-  const { data: layouts = [], loading: layoutsLoading, error: layoutsError, reload: reloadLayouts } = useApi(
-    marketId ? `/markets/${marketId}/layouts` : null, 
-    { initialData: [] }
-  );
-  const { data: boothTypes = [] } = useApi(
-    marketId ? `/markets/${marketId}/booth-types?status=active` : null,
-    { initialData: [] },
-  );
-  const { data: booths = [], loading: boothsLoading, error: boothsError, reload: reloadBooths } = useApi(
-    marketId ? `/markets/${marketId}/booths` : null, 
-    { initialData: [] }
-  );
-  const { data: selectedLayoutData, loading: selectedLayoutLoading, error: selectedLayoutError } = useApi(
-    marketId && selectedLayoutId && viewMode === 'editor' ? `/markets/${marketId}/layouts/${selectedLayoutId}` : null,
-    { initialData: null, skip: !marketId || !selectedLayoutId || viewMode !== 'editor' },
-  );
-  const { mutate, loading: saving, error: saveError } = useMutation();
-  const layoutRows = normalizeRows(layouts);
-  const floorPlanRows = normalizeRows(boothTypes);
-  const boothRows = normalizeRows(booths).filter((row) => row.status !== 'deleted');
-
   // State management
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'editor'
   const [selectedLayoutId, setSelectedLayoutId] = useState('');
@@ -569,6 +547,28 @@ export function VisualPlanPage({ marketId }) {
   const [createForm, setCreateForm] = useState(createDefaultCreateForm());
   const [boothKeyword, setBoothKeyword] = useState('');
   const [showGridView, setShowGridView] = useState(true);
+
+  // API hooks
+  const { data: layouts = [], loading: layoutsLoading, error: layoutsError, reload: reloadLayouts } = useApi(
+    marketId ? `/markets/${marketId}/layouts` : null,
+    { initialData: [] }
+  );
+  const { data: boothTypes = [] } = useApi(
+    marketId ? `/markets/${marketId}/booth-types?status=active` : null,
+    { initialData: [] },
+  );
+  const { data: booths = [], loading: boothsLoading, error: boothsError, reload: reloadBooths } = useApi(
+    marketId ? `/markets/${marketId}/booths` : null,
+    { initialData: [] }
+  );
+  const { data: selectedLayoutData, loading: selectedLayoutLoading, error: selectedLayoutError } = useApi(
+    marketId && selectedLayoutId && viewMode === 'editor' ? `/markets/${marketId}/layouts/${selectedLayoutId}` : null,
+    { initialData: null, skip: !marketId || !selectedLayoutId || viewMode !== 'editor' },
+  );
+  const { mutate, loading: saving, error: saveError } = useMutation();
+  const layoutRows = normalizeRows(layouts);
+  const floorPlanRows = normalizeRows(boothTypes);
+  const boothRows = normalizeRows(booths).filter((row) => row.status !== 'deleted');
   const selectedLayout = selectedLayoutData;
 
   // Initialize editor when layout is loaded
