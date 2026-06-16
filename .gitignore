@@ -1,5 +1,1 @@
-node_modules/
-dist/
-.env
-.DS_Store
-npm-debug.log*
+(src/pages/Markets/VisualPlanPage_New.jsx is a source file, so it should not be ignored)
