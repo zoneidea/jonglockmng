@@ -643,6 +643,14 @@ export function VisualPlanPage({ marketId }) {
       });
   }, [boothKeyword, filteredBoothRows, placedBoothIds]);
 
+  useEffect(() => {
+    if (!selectedBoothId) return;
+    const stillSelectable = unplacedBooths.some((booth) => String(booth.id) === String(selectedBoothId));
+    if (!stillSelectable) {
+      setSelectedBoothId('');
+    }
+  }, [selectedBoothId, unplacedBooths]);
+
   const canvasCellSize = useMemo(() => {
     const raw = Number(layoutDraft?.cellSize || layoutForm.cellSize || 48);
     return Math.max(28, Math.min(raw, 42));
@@ -734,7 +742,7 @@ export function VisualPlanPage({ marketId }) {
 
     // Handle booth placement
     if (selectedTool === 'booth') {
-      const booth = boothRows.find((item) => String(item.id) === String(selectedBoothId));
+      const booth = filteredBoothRows.find((item) => String(item.id) === String(selectedBoothId));
       if (!booth) {
         showAlert({ title: 'กรุณาเลือกบูธก่อน', text: 'เลือกบูธจริงจากรายการด้านขวาก่อนวางลงบน Grid', icon: 'warning' });
         return;
@@ -1123,26 +1131,38 @@ export function VisualPlanPage({ marketId }) {
                   placeholder="ค้นหารหัสบูธ ชื่อบูธ หรือหมวดหมู่" 
                 />
               </div>
-              <div className="mt-3 max-h-[280px] space-y-2 overflow-y-auto pr-1">
+              <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600">
+                เลือกแล้ว {selectedBoothId ? 1 : 0} / {unplacedBooths.length} บูธ
+              </div>
+              <div className="mt-3 max-h-[360px] overflow-y-auto pr-1">
                 {unplacedBooths.length ? (
-                  unplacedBooths.map((booth) => (
-                    <button
-                      key={booth.id}
-                      type="button"
-                      onClick={() => setSelectedBoothId(String(booth.id))}
-                      className={classNames(
-                        'w-full rounded-2xl border px-3 py-3 text-left transition',
-                        String(selectedBoothId) === String(booth.id)
-                          ? 'border-cyan-600 bg-cyan-50'
-                          : 'border-slate-200 bg-slate-50 hover:border-cyan-200 hover:bg-white'
-                      )}
-                    >
-                      <p className="text-sm font-extrabold text-slate-950">{booth.code || booth.name}</p>
-                      <p className="mt-1 text-xs font-medium text-slate-500">
-                        {formatMoney(booth.price || 0)} • {booth.category_name || 'ไม่ระบุหมวดหมู่'}
-                      </p>
-                    </button>
-                  ))
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {unplacedBooths.map((booth) => (
+                      <button
+                        key={booth.id}
+                        type="button"
+                        onClick={() => setSelectedBoothId(String(booth.id))}
+                        className={classNames(
+                          'relative min-h-24 rounded-xl border-2 border-dashed p-2 text-center shadow-sm transition',
+                          String(selectedBoothId) === String(booth.id)
+                            ? 'border-amber-300 bg-amber-500 text-white'
+                            : 'border-cyan-200 bg-cyan-600 text-white hover:bg-cyan-700'
+                        )}
+                      >
+                        <div className="flex h-full w-full flex-col items-center justify-center">
+                          <span className="max-w-full truncate text-sm font-extrabold">
+                            {booth.code || booth.name || booth.id}
+                          </span>
+                          <span className="mt-0.5 text-[11px] font-bold leading-4 opacity-95">
+                            {formatMoney(booth.price || 0)}
+                          </span>
+                          <span className="mt-0.5 max-w-full truncate text-[10px] leading-4 opacity-80">
+                            {booth.category_name || 'ยังไม่ระบุ'}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 ) : (
                   <EmptyState 
                     title="บูธถูกวางครบแล้ว" 
