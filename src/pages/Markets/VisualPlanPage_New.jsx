@@ -42,21 +42,8 @@ const VISUAL_PLAN_OBJECTS = [
   },
   { 
     type: 'entrance', 
-    label: 'ทางเข้า', 
-    description: 'ประตูทางเข้า',
-    rowSpan: 1, 
-    colSpan: 1,
-    icon: DoorOpen,
-    color: 'orange',
-    bgColor: 'bg-orange-100',
-    borderColor: 'border-orange-300',
-    textColor: 'text-orange-900',
-    iconColor: 'text-orange-600'
-  },
-  { 
-    type: 'exit', 
-    label: 'ทางออก', 
-    description: 'ประตูทางออก',
+    label: 'ทางเข้า / ออก', 
+    description: 'ประตูทางเข้าและทางออก',
     rowSpan: 1, 
     colSpan: 1,
     icon: DoorOpen,
@@ -170,8 +157,6 @@ const createDefaultCreateForm = () => ({ ...DEFAULT_LAYOUT_FORM, floorPlanId: ''
 
 const DEFAULT_PROPERTIES_FORM = {
   label: '',
-  row: '1',
-  col: '1',
   rowSpan: '1',
   colSpan: '1',
 };
@@ -194,6 +179,9 @@ function createItemId(type) {
 }
 
 function getObjectDefinition(type) {
+  if (type === 'exit') {
+    return VISUAL_PLAN_OBJECTS.find((item) => item.type === 'entrance') || VISUAL_PLAN_OBJECTS[0];
+  }
   return VISUAL_PLAN_OBJECTS.find((item) => item.type === type) || VISUAL_PLAN_OBJECTS[0];
 }
 
@@ -203,9 +191,6 @@ function getPaletteButtonClasses(type, active) {
       ? 'border-emerald-600 bg-emerald-600 text-white shadow-md'
       : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50',
     entrance: active
-      ? 'border-orange-600 bg-orange-600 text-white shadow-md'
-      : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200 hover:bg-orange-50',
-    exit: active
       ? 'border-orange-600 bg-orange-600 text-white shadow-md'
       : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200 hover:bg-orange-50',
     toilet: active
@@ -274,6 +259,42 @@ function buildItemStyle(item, cellSize) {
     top: `${(Number(item.row) - 1) * cellSize}px`,
     width: `${Number(item.colSpan || 1) * cellSize}px`,
     height: `${Number(item.rowSpan || 1) * cellSize}px`,
+  };
+}
+
+function normalizeLayoutForSave(layoutDraft, fallbackRows, fallbackColumns, fallbackCellSize) {
+  const sourceItems = Array.isArray(layoutDraft?.items) ? layoutDraft.items : [];
+  const cellSize = Number(layoutDraft?.cellSize || fallbackCellSize || 48);
+
+  if (!sourceItems.length) {
+    return {
+      rows: Number(fallbackRows || layoutDraft?.rows || 20),
+      columns: Number(fallbackColumns || layoutDraft?.columns || 30),
+      cellSize,
+      items: [],
+      bounds: { minRow: 1, minCol: 1, maxRow: Number(fallbackRows || 20), maxCol: Number(fallbackColumns || 30) },
+    };
+  }
+
+  const minRow = Math.min(...sourceItems.map((item) => Number(item.row || 1)));
+  const minCol = Math.min(...sourceItems.map((item) => Number(item.col || 1)));
+  const maxRow = Math.max(...sourceItems.map((item) => Number(item.row || 1) + Number(item.rowSpan || 1) - 1));
+  const maxCol = Math.max(...sourceItems.map((item) => Number(item.col || 1) + Number(item.colSpan || 1) - 1));
+
+  const normalizedItems = sourceItems.map((item) => ({
+    ...item,
+    row: Number(item.row || 1) - minRow + 2,
+    col: Number(item.col || 1) - minCol + 2,
+    rowSpan: Number(item.rowSpan || 1),
+    colSpan: Number(item.colSpan || 1),
+  }));
+
+  return {
+    rows: (maxRow - minRow + 1) + 2,
+    columns: (maxCol - minCol + 1) + 2,
+    cellSize,
+    items: normalizedItems,
+    bounds: { minRow, minCol, maxRow, maxCol },
   };
 }
 
@@ -543,6 +564,7 @@ export function VisualPlanPage({ marketId }) {
   const [boothKeyword, setBoothKeyword] = useState('');
   const [showGridView, setShowGridView] = useState(true);
   const [draggingItemId, setDraggingItemId] = useState('');
+  const [previewOpen, setPreviewOpen] = useState(false);
   const dragOriginRef = useRef(null);
 
   // API hooks
@@ -612,8 +634,6 @@ export function VisualPlanPage({ marketId }) {
     }
     setPropertiesForm({
       label: selectedItem.label || '',
-      row: String(selectedItem.row || 1),
-      col: String(selectedItem.col || 1),
       rowSpan: String(selectedItem.rowSpan || 1),
       colSpan: String(selectedItem.colSpan || 1),
     });
@@ -653,6 +673,11 @@ export function VisualPlanPage({ marketId }) {
     return Math.max(28, Math.min(raw, 42));
   }, [layoutDraft, layoutForm.cellSize]);
 
+  const previewLayout = useMemo(() => {
+    if (!layoutDraft) return null;
+    return normalizeLayoutForSave(layoutDraft, layoutForm.rowsCount, layoutForm.columnsCount, layoutForm.cellSize);
+  }, [layoutDraft, layoutForm.rowsCount, layoutForm.columnsCount, layoutForm.cellSize]);
+
   if (!marketId) return <NeedMarket />;
 
   // ============================================================================
@@ -679,19 +704,39 @@ export function VisualPlanPage({ marketId }) {
 
   async function saveLayout() {
     if (!selectedLayoutId || !layoutDraft) return;
+    const normalizedLayout = normalizeLayoutForSave(
+      layoutDraft,
+      layoutForm.rowsCount,
+      layoutForm.columnsCount,
+      layoutForm.cellSize,
+    );
     await mutate(`/markets/${marketId}/layouts/${selectedLayoutId}`, {
       name: layoutForm.name,
       description: layoutForm.description,
-      rowsCount: Number(layoutForm.rowsCount),
-      columnsCount: Number(layoutForm.columnsCount),
-      cellSize: Number(layoutForm.cellSize),
+      rowsCount: normalizedLayout.rows,
+      columnsCount: normalizedLayout.columns,
+      cellSize: normalizedLayout.cellSize,
       layoutJson: {
-        ...layoutDraft,
-        rows: Number(layoutForm.rowsCount),
-        columns: Number(layoutForm.columnsCount),
-        cellSize: Number(layoutForm.cellSize),
+        version: 1,
+        rows: normalizedLayout.rows,
+        columns: normalizedLayout.columns,
+        cellSize: normalizedLayout.cellSize,
+        items: normalizedLayout.items,
       },
     }, 'PATCH');
+    setLayoutForm((current) => ({
+      ...current,
+      rowsCount: String(normalizedLayout.rows),
+      columnsCount: String(normalizedLayout.columns),
+      cellSize: String(normalizedLayout.cellSize),
+    }));
+    setLayoutDraft({
+      version: 1,
+      rows: normalizedLayout.rows,
+      columns: normalizedLayout.columns,
+      cellSize: normalizedLayout.cellSize,
+      items: normalizedLayout.items,
+    });
     await reloadLayouts();
     await showAlert({ title: 'บันทึกแล้ว', text: 'อัปเดต Visual Plan เรียบร้อย', icon: 'success' });
   }
@@ -796,8 +841,8 @@ export function VisualPlanPage({ marketId }) {
     const candidate = {
       ...selectedItem,
       label: selectedItem.type === 'booth' ? selectedItem.label : propertiesForm.label.trim() || selectedItem.label,
-      row: Number(propertiesForm.row),
-      col: Number(propertiesForm.col),
+      row: Number(selectedItem.row || 1),
+      col: Number(selectedItem.col || 1),
       rowSpan: Number(propertiesForm.rowSpan),
       colSpan: Number(propertiesForm.colSpan),
     };
@@ -1030,7 +1075,7 @@ export function VisualPlanPage({ marketId }) {
         status={selectedLayout?.status || 'draft'}
         onSave={saveLayout}
         onPublish={publishLayout}
-        onViewPreview={() => showAlert({ title: 'ดูตัวอย่าง', text: 'ฟีเจอร์นี้กำลังพัฒนา', icon: 'info' })}
+        onViewPreview={() => setPreviewOpen(true)}
       />
 
       <div className="mt-6 space-y-6">
@@ -1185,21 +1230,21 @@ export function VisualPlanPage({ marketId }) {
               </div>
               <div className="mt-3 max-h-[360px] overflow-y-auto pr-1">
                 {unplacedBooths.length ? (
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-4 gap-1.5">
                     {unplacedBooths.map((booth) => (
                       <button
                         key={booth.id}
                         type="button"
                         onClick={() => setSelectedBoothId(String(booth.id))}
                         className={classNames(
-                          'relative min-h-16 rounded-xl border-2 border-dashed p-2 text-center shadow-sm transition',
+                          'relative min-h-14 rounded-lg border-2 border-dashed p-1.5 text-center shadow-sm transition',
                           String(selectedBoothId) === String(booth.id)
                             ? 'border-amber-300 bg-amber-500 text-white'
                             : 'border-cyan-200 bg-cyan-600 text-white hover:bg-cyan-700'
                         )}
                       >
                         <div className="flex h-full w-full flex-col items-center justify-center">
-                          <span className="max-w-full truncate text-sm font-extrabold">
+                          <span className="max-w-full truncate text-xs font-extrabold">
                             {booth.code || booth.name || booth.id}
                           </span>
                         </div>
@@ -1216,39 +1261,12 @@ export function VisualPlanPage({ marketId }) {
             </div>
           )}
 
-          {/* Tool Info Panel */}
-          {selectedTool !== 'booth' && (
-            <div className="rounded-3xl border border-slate-200 bg-white p-4">
-              <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-cyan-700">เครื่องมือที่เลือก</p>
-              <div className="mt-3 flex items-center gap-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3">
-                {(() => {
-                  const tool = VISUAL_PLAN_OBJECTS.find(t => t.type === selectedTool);
-                  const IconComponent = tool?.icon;
-                  return (
-                    <>
-                      <div className={classNames('flex h-10 w-10 items-center justify-center rounded-xl', tool?.bgColor)}>
-                        <IconComponent className={classNames('h-5 w-5', tool?.iconColor)} />
-                      </div>
-                      <div>
-                        <p className="text-sm font-bold text-slate-900">{tool?.label || 'เครื่องมือ'}</p>
-                        <p className="text-xs font-medium text-slate-500">{tool?.description || ''}</p>
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
-              <p className="mt-3 text-xs font-medium text-slate-500">
-                คลิกที่ cell บน Grid เพื่อวางวัตถุประเภทนี้
-              </p>
-            </div>
-          )}
-
           {/* Properties Panel */}
           <div className="rounded-3xl border border-slate-200 bg-white p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-cyan-700">Properties</p>
-                <p className="mt-1 text-sm font-bold text-slate-500">แก้ไขตำแหน่งและขนาด</p>
+                <p className="mt-1 text-sm font-bold text-slate-500">แก้ไขขนาดแบบ 1x1, 1x2, 2x2</p>
               </div>
               {selectedItem ? (
                 <button
@@ -1286,39 +1304,83 @@ export function VisualPlanPage({ marketId }) {
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <TextInput 
-                    label="Row" 
-                    type="number" 
-                    value={propertiesForm.row} 
-                    onChange={(value) => setPropertiesForm((current) => ({ ...current, row: value }))} 
-                  />
-                  <TextInput 
-                    label="Column" 
-                    type="number" 
-                    value={propertiesForm.col} 
-                    onChange={(value) => setPropertiesForm((current) => ({ ...current, col: value }))} 
-                  />
-                  <TextInput 
-                    label="Row Span" 
+                    label="ความสูง (Row Span)" 
                     type="number" 
                     value={propertiesForm.rowSpan} 
                     onChange={(value) => setPropertiesForm((current) => ({ ...current, rowSpan: value }))} 
                   />
                   <TextInput 
-                    label="Col Span" 
+                    label="ความกว้าง (Col Span)" 
                     type="number" 
                     value={propertiesForm.colSpan} 
                     onChange={(value) => setPropertiesForm((current) => ({ ...current, colSpan: value }))} 
                   />
                 </div>
 
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700">
+                  Dimension: {propertiesForm.colSpan || '1'} x {propertiesForm.rowSpan || '1'}
+                </div>
+
                 <SmallButton tone="cyan" onClick={updateSelectedItem} fullWidth>
-                  อัปเดตตำแหน่ง
+                  อัปเดตขนาด
                 </SmallButton>
               </div>
             )}
           </div>
         </aside>
       </div>
+
+      <Modal open={previewOpen} title="ดูตัวอย่างแผนผัง" onClose={() => setPreviewOpen(false)} size="xl">
+        {!previewLayout ? (
+          <EmptyState title="ยังไม่มีข้อมูล" description="ยังไม่มีวัตถุในแผนผังนี้" />
+        ) : (
+          <div className="overflow-auto rounded-3xl border border-slate-200 bg-slate-100 p-4">
+            <div
+              className="relative mx-auto bg-white shadow-inner"
+              style={{
+                width: `${previewLayout.columns * canvasCellSize}px`,
+                height: `${previewLayout.rows * canvasCellSize}px`,
+              }}
+            >
+              <div
+                className="absolute inset-0"
+                style={{
+                  backgroundImage: `
+                    linear-gradient(to right, #e2e8f0 1px, transparent 1px),
+                    linear-gradient(to bottom, #e2e8f0 1px, transparent 1px)
+                  `,
+                  backgroundSize: `${canvasCellSize}px ${canvasCellSize}px`,
+                }}
+              />
+              {previewLayout.items.map((item) => {
+                const def = getObjectDefinition(item.type);
+                return (
+                  <div
+                    key={item.id}
+                    className={classNames(
+                      'absolute overflow-hidden rounded-xl border-2 px-1 py-1 text-center shadow-md',
+                      def.borderColor,
+                      def.bgColor,
+                      def.textColor,
+                    )}
+                    style={buildItemStyle(item, canvasCellSize)}
+                  >
+                    <div className="flex h-full w-full flex-col items-center justify-center">
+                      {item.type === 'booth' ? (
+                        <span className="truncate text-[10px] font-extrabold leading-none">
+                          {item.boothCode || item.label}
+                        </span>
+                      ) : def.icon ? (
+                        <def.icon className={classNames('h-4 w-4', def.iconColor)} />
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </Modal>
       </div>
     </>
   );
