@@ -609,7 +609,10 @@ export function VisualPlanPage({ marketId }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [editorViewMode, setEditorViewMode] = useState('2d');
   const [editorZoom, setEditorZoom] = useState(1);
+  const [editorPan, setEditorPan] = useState({ x: 0, y: 0 });
   const dragOriginRef = useRef(null);
+  const panOriginRef = useRef(null);
+  const suppressCanvasClickRef = useRef(false);
 
   // API hooks
   const { data: layouts = [], loading: layoutsLoading, error: layoutsError, reload: reloadLayouts } = useApi(
@@ -722,6 +725,10 @@ export function VisualPlanPage({ marketId }) {
   const scaledCanvasWidth = Math.max(canvasWidth * editorZoom, 1);
   const scaledCanvasHeight = Math.max(canvasHeight * editorZoom, 1);
   const is3DMode = editorViewMode === '3d';
+  const editor3DScale = useMemo(() => {
+    const maxDimension = Math.max(canvasWidth, canvasHeight, 1);
+    return Math.max(0.46, Math.min(0.78, 720 / maxDimension));
+  }, [canvasHeight, canvasWidth]);
 
   const previewLayout = useMemo(() => {
     if (!layoutDraft) return null;
@@ -754,6 +761,51 @@ export function VisualPlanPage({ marketId }) {
 
   function updateEditorZoom(nextZoom) {
     setEditorZoom(Math.max(0.5, Math.min(2, Number(nextZoom))));
+  }
+
+  function changeEditorViewMode(nextMode) {
+    setEditorViewMode(nextMode);
+    setEditorPan({ x: 0, y: 0 });
+  }
+
+  function startPlanPan(event) {
+    if (!is3DMode || event.button !== 0 || event.target.closest('[data-plan-item="true"]')) return;
+    panOriginRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: editorPan.x,
+      originY: editorPan.y,
+      moved: false,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function movePlanPan(event) {
+    const panOrigin = panOriginRef.current;
+    if (!is3DMode || !panOrigin || panOrigin.pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - panOrigin.startX;
+    const deltaY = event.clientY - panOrigin.startY;
+    if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
+      panOrigin.moved = true;
+      suppressCanvasClickRef.current = true;
+    }
+    setEditorPan({
+      x: panOrigin.originX + deltaX,
+      y: panOrigin.originY + deltaY,
+    });
+  }
+
+  function stopPlanPan(event) {
+    const panOrigin = panOriginRef.current;
+    if (!panOrigin || panOrigin.pointerId !== event.pointerId) return;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    panOriginRef.current = null;
+    if (panOrigin.moved) {
+      window.setTimeout(() => {
+        suppressCanvasClickRef.current = false;
+      }, 0);
+    }
   }
 
   async function saveLayout() {
@@ -1131,7 +1183,7 @@ export function VisualPlanPage({ marketId }) {
         onPublish={publishLayout}
         onViewPreview={() => setPreviewOpen(true)}
         viewMode={editorViewMode}
-        onViewModeChange={setEditorViewMode}
+        onViewModeChange={changeEditorViewMode}
         zoom={editorZoom}
         onZoomChange={updateEditorZoom}
         showGrid={showGridView}
@@ -1178,33 +1230,47 @@ export function VisualPlanPage({ marketId }) {
           {!layoutDraft ? (
             <EmptyState title="กำลังโหลดแผนผัง" description="กรุณารอสักครู่" />
           ) : (
-            <div className={classNames(
-              'overflow-auto rounded-3xl border border-slate-200 p-4',
-              is3DMode ? 'bg-slate-900' : 'bg-slate-100',
-            )}>
+            <div
+              className={classNames(
+                'rounded-3xl border border-slate-200',
+                is3DMode
+                  ? 'h-[620px] cursor-grab overflow-hidden bg-slate-950 active:cursor-grabbing'
+                  : 'overflow-auto bg-slate-100 p-4',
+              )}
+              onPointerDown={startPlanPan}
+              onPointerMove={movePlanPan}
+              onPointerUp={stopPlanPan}
+              onPointerCancel={stopPlanPan}
+              style={{
+                background: is3DMode
+                  ? 'radial-gradient(circle at 50% 20%, #1e293b 0%, #0f172a 42%, #020617 100%)'
+                  : undefined,
+                touchAction: is3DMode ? 'none' : undefined,
+              }}
+            >
               <div
                 className={classNames(
                   'relative',
-                  is3DMode ? 'min-h-[520px] pt-10' : '',
+                  is3DMode ? 'h-full w-full' : '',
                 )}
                 style={{
-                  width: is3DMode ? `${Math.max(scaledCanvasWidth + 280, 760)}px` : `${scaledCanvasWidth}px`,
-                  height: is3DMode ? `${Math.max(scaledCanvasHeight + 260, 560)}px` : `${scaledCanvasHeight}px`,
-                  perspective: is3DMode ? '1200px' : undefined,
+                  width: is3DMode ? '100%' : `${scaledCanvasWidth}px`,
+                  height: is3DMode ? '100%' : `${scaledCanvasHeight}px`,
+                  perspective: is3DMode ? '1400px' : undefined,
                 }}
               >
                 <div
                   className={classNames(
                     'relative bg-white shadow-inner',
-                    is3DMode ? 'shadow-2xl' : '',
+                    is3DMode ? 'absolute left-1/2 top-[52%] rounded-sm shadow-2xl' : '',
                   )}
                   style={{
                     width: `${canvasWidth}px`,
                     height: `${canvasHeight}px`,
                     transform: is3DMode
-                      ? `translate(${Math.max(120 * editorZoom, 80)}px, ${Math.max(120 * editorZoom, 80)}px) scale(${editorZoom}) rotateX(58deg) rotateZ(-35deg)`
+                      ? `translate(-50%, -50%) translate(${editorPan.x}px, ${editorPan.y}px) scale(${editorZoom * editor3DScale}) rotateX(55deg) rotateZ(-32deg)`
                       : `scale(${editorZoom})`,
-                    transformOrigin: 'top left',
+                    transformOrigin: is3DMode ? 'center center' : 'top left',
                     transformStyle: is3DMode ? 'preserve-3d' : undefined,
                   }}
                 >
@@ -1239,7 +1305,13 @@ export function VisualPlanPage({ marketId }) {
                         <button
                           key={`${row}-${col}`}
                           type="button"
-                          onClick={() => handleCanvasClick(row, col)}
+                          onClick={() => {
+                            if (suppressCanvasClickRef.current) {
+                              suppressCanvasClickRef.current = false;
+                              return;
+                            }
+                            handleCanvasClick(row, col);
+                          }}
                           onDragOver={(event) => event.preventDefault()}
                           onDrop={(event) => handleGridDrop(event, row, col)}
                           className="h-full min-h-[28px] border border-transparent transition hover:bg-cyan-50/50"
@@ -1256,7 +1328,9 @@ export function VisualPlanPage({ marketId }) {
                       <button
                         key={item.id}
                         type="button"
+                        data-plan-item="true"
                         draggable
+                        onPointerDown={(event) => event.stopPropagation()}
                         onDragStart={(event) => handleItemDragStart(event, item)}
                         onDragEnd={handleDragEnd}
                         onClick={(e) => {
