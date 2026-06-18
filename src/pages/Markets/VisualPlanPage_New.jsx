@@ -262,6 +262,17 @@ function buildItemStyle(item, cellSize) {
   };
 }
 
+function buildItem3DStyle(item, cellSize) {
+  const baseStyle = buildItemStyle(item, cellSize);
+  const depth = item.type === 'booth' ? 10 : 14;
+  const shadowColor = item.type === 'booth' ? '#059669' : '#0891b2';
+  return {
+    ...baseStyle,
+    transform: `translateZ(${depth}px)`,
+    boxShadow: `0 ${depth}px 0 ${shadowColor}, 0 ${depth + 8}px 18px rgba(15, 23, 42, 0.28)`,
+  };
+}
+
 function normalizeLayoutForSave(layoutDraft, fallbackRows, fallbackColumns, fallbackCellSize) {
   const sourceItems = Array.isArray(layoutDraft?.items) ? layoutDraft.items : [];
   const cellSize = Number(layoutDraft?.cellSize || fallbackCellSize || 48);
@@ -447,7 +458,21 @@ function ObjectPaletteButton({ item, active, onClick }) {
   );
 }
 
-function EditorTopbar({ layout, onSave, onPublish, onViewPreview, status }) {
+function EditorTopbar({
+  layout,
+  onSave,
+  onPublish,
+  onViewPreview,
+  status,
+  viewMode,
+  onViewModeChange,
+  zoom,
+  onZoomChange,
+  showGrid,
+  onToggleGrid,
+}) {
+  const is3DMode = viewMode === '3d';
+
   return (
     <div className="sticky top-0 z-20 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between gap-4">
@@ -504,16 +529,28 @@ function EditorTopbar({ layout, onSave, onPublish, onViewPreview, status }) {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700"
+            onClick={() => onViewModeChange('2d')}
+            className={classNames(
+              'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold transition',
+              !is3DMode
+                ? 'border-cyan-200 bg-cyan-50 text-cyan-700'
+                : 'border-slate-200 bg-white text-slate-600 hover:border-cyan-200 hover:bg-cyan-50',
+            )}
           >
             <Monitor size={14} />
             2D Flat
           </button>
           <button
             type="button"
-            disabled
-            className="inline-flex cursor-not-allowed items-center gap-2 rounded-lg border border-slate-200 bg-slate-100 px-3 py-2 text-xs font-medium text-slate-400"
+            onClick={() => onViewModeChange('3d')}
+            className={classNames(
+              'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold transition',
+              is3DMode
+                ? 'border-cyan-600 bg-cyan-600 text-white'
+                : 'border-slate-200 bg-white text-slate-600 hover:border-cyan-200 hover:bg-cyan-50',
+            )}
           >
+            <Box size={14} />
             3D Interactive
           </button>
         </div>
@@ -521,24 +558,29 @@ function EditorTopbar({ layout, onSave, onPublish, onViewPreview, status }) {
         <div className="flex items-center gap-2">
           <button
             type="button"
+            onClick={() => onZoomChange(zoom - 0.1)}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:border-cyan-200 hover:bg-cyan-50"
+            aria-label="ซูมออก"
           >
             <ZoomOut size={16} />
           </button>
-          <span className="text-xs font-bold text-slate-600">100%</span>
+          <span className="w-11 text-center text-xs font-bold text-slate-600">{Math.round(zoom * 100)}%</span>
           <button
             type="button"
+            onClick={() => onZoomChange(zoom + 0.1)}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:border-cyan-200 hover:bg-cyan-50"
+            aria-label="ซูมเข้า"
           >
             <ZoomIn size={16} />
           </button>
           <div className="mx-2 h-5 w-px bg-slate-200"></div>
           <button
             type="button"
+            onClick={onToggleGrid}
             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-cyan-200 hover:bg-cyan-50"
           >
             <Grid3X3 size={14} />
-            เปิด Grid
+            {showGrid ? 'ปิด Grid' : 'เปิด Grid'}
           </button>
         </div>
       </div>
@@ -565,6 +607,8 @@ export function VisualPlanPage({ marketId }) {
   const [showGridView, setShowGridView] = useState(true);
   const [draggingItemId, setDraggingItemId] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [editorViewMode, setEditorViewMode] = useState('2d');
+  const [editorZoom, setEditorZoom] = useState(1);
   const dragOriginRef = useRef(null);
 
   // API hooks
@@ -673,6 +717,12 @@ export function VisualPlanPage({ marketId }) {
     return Math.max(28, Math.min(raw, 42));
   }, [layoutDraft, layoutForm.cellSize]);
 
+  const canvasWidth = (layoutDraft?.columns || 0) * canvasCellSize;
+  const canvasHeight = (layoutDraft?.rows || 0) * canvasCellSize;
+  const scaledCanvasWidth = Math.max(canvasWidth * editorZoom, 1);
+  const scaledCanvasHeight = Math.max(canvasHeight * editorZoom, 1);
+  const is3DMode = editorViewMode === '3d';
+
   const previewLayout = useMemo(() => {
     if (!layoutDraft) return null;
     return normalizeLayoutForSave(layoutDraft, layoutForm.rowsCount, layoutForm.columnsCount, layoutForm.cellSize);
@@ -700,6 +750,10 @@ export function VisualPlanPage({ marketId }) {
       setSelectedLayoutId(String(payload.id));
       setViewMode('editor');
     }
+  }
+
+  function updateEditorZoom(nextZoom) {
+    setEditorZoom(Math.max(0.5, Math.min(2, Number(nextZoom))));
   }
 
   async function saveLayout() {
@@ -1076,6 +1130,12 @@ export function VisualPlanPage({ marketId }) {
         onSave={saveLayout}
         onPublish={publishLayout}
         onViewPreview={() => setPreviewOpen(true)}
+        viewMode={editorViewMode}
+        onViewModeChange={setEditorViewMode}
+        zoom={editorZoom}
+        onZoomChange={updateEditorZoom}
+        showGrid={showGridView}
+        onToggleGrid={() => setShowGridView((current) => !current)}
       />
 
       <div className="mt-6 space-y-6">
@@ -1118,16 +1178,38 @@ export function VisualPlanPage({ marketId }) {
           {!layoutDraft ? (
             <EmptyState title="กำลังโหลดแผนผัง" description="กรุณารอสักครู่" />
           ) : (
-            <div className="overflow-auto rounded-3xl border border-slate-200 bg-slate-100 p-4">
+            <div className={classNames(
+              'overflow-auto rounded-3xl border border-slate-200 p-4',
+              is3DMode ? 'bg-slate-900' : 'bg-slate-100',
+            )}>
               <div
-                className="relative bg-white shadow-inner"
+                className={classNames(
+                  'relative',
+                  is3DMode ? 'min-h-[520px] pt-10' : '',
+                )}
                 style={{
-                  width: `${layoutDraft.columns * canvasCellSize}px`,
-                  height: `${layoutDraft.rows * canvasCellSize}px`,
+                  width: is3DMode ? `${Math.max(scaledCanvasWidth + 280, 760)}px` : `${scaledCanvasWidth}px`,
+                  height: is3DMode ? `${Math.max(scaledCanvasHeight + 260, 560)}px` : `${scaledCanvasHeight}px`,
+                  perspective: is3DMode ? '1200px' : undefined,
                 }}
               >
-                {/* Grid Background */}
-                {showGridView && (
+                <div
+                  className={classNames(
+                    'relative bg-white shadow-inner',
+                    is3DMode ? 'shadow-2xl' : '',
+                  )}
+                  style={{
+                    width: `${canvasWidth}px`,
+                    height: `${canvasHeight}px`,
+                    transform: is3DMode
+                      ? `translate(${Math.max(120 * editorZoom, 80)}px, ${Math.max(120 * editorZoom, 80)}px) scale(${editorZoom}) rotateX(58deg) rotateZ(-35deg)`
+                      : `scale(${editorZoom})`,
+                    transformOrigin: 'top left',
+                    transformStyle: is3DMode ? 'preserve-3d' : undefined,
+                  }}
+                >
+                  {/* Grid Background */}
+                  {showGridView && (
                   <div
                     className="absolute inset-0"
                     style={{
@@ -1136,71 +1218,75 @@ export function VisualPlanPage({ marketId }) {
                         linear-gradient(to bottom, #e2e8f0 1px, transparent 1px)
                       `,
                       backgroundSize: `${canvasCellSize}px ${canvasCellSize}px`,
+                      transformStyle: is3DMode ? 'preserve-3d' : undefined,
                     }}
                   />
-                )}
+                  )}
 
-                {/* Grid Cells (for interaction) */}
-                <div
-                  className="relative grid"
-                  style={{
-                    gridTemplateColumns: `repeat(${layoutDraft.columns}, minmax(0, ${canvasCellSize}px))`,
-                    gridTemplateRows: `repeat(${layoutDraft.rows}, minmax(0, ${canvasCellSize}px))`,
-                  }}
-                >
-                  {Array.from({ length: layoutDraft.rows * layoutDraft.columns }).map((_, index) => {
-                    const row = Math.floor(index / layoutDraft.columns) + 1;
-                    const col = (index % layoutDraft.columns) + 1;
+                  {/* Grid Cells (for interaction) */}
+                  <div
+                    className="relative grid"
+                    style={{
+                      gridTemplateColumns: `repeat(${layoutDraft.columns}, minmax(0, ${canvasCellSize}px))`,
+                      gridTemplateRows: `repeat(${layoutDraft.rows}, minmax(0, ${canvasCellSize}px))`,
+                      transformStyle: is3DMode ? 'preserve-3d' : undefined,
+                    }}
+                  >
+                    {Array.from({ length: layoutDraft.rows * layoutDraft.columns }).map((_, index) => {
+                      const row = Math.floor(index / layoutDraft.columns) + 1;
+                      const col = (index % layoutDraft.columns) + 1;
+                      return (
+                        <button
+                          key={`${row}-${col}`}
+                          type="button"
+                          onClick={() => handleCanvasClick(row, col)}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={(event) => handleGridDrop(event, row, col)}
+                          className="h-full min-h-[28px] border border-transparent transition hover:bg-cyan-50/50"
+                          aria-label={`วาง object ที่ row ${row} col ${col}`}
+                        />
+                      );
+                    })}
+                  </div>
+
+                  {/* Placed Items */}
+                  {layoutDraft.items.map((item) => {
+                    const def = getObjectDefinition(item.type);
                     return (
                       <button
-                        key={`${row}-${col}`}
+                        key={item.id}
                         type="button"
-                        onClick={() => handleCanvasClick(row, col)}
-                        onDragOver={(event) => event.preventDefault()}
-                        onDrop={(event) => handleGridDrop(event, row, col)}
-                        className="h-full min-h-[28px] border border-transparent transition hover:bg-cyan-50/50"
-                        aria-label={`วาง object ที่ row ${row} col ${col}`}
-                      />
+                        draggable
+                        onDragStart={(event) => handleItemDragStart(event, item)}
+                        onDragEnd={handleDragEnd}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedItemId(item.id);
+                        }}
+                        className={classNames(
+                          'absolute overflow-hidden rounded-xl border-2 px-1 py-1 text-center shadow-md transition-all',
+                          selectedItemId === item.id ? 'ring-2 ring-amber-400 ring-offset-2 z-10' : 'hover:shadow-lg',
+                          draggingItemId === item.id ? 'opacity-70' : '',
+                          is3DMode ? 'shadow-xl' : '',
+                          def.borderColor,
+                          def.bgColor,
+                          def.textColor
+                        )}
+                        style={is3DMode ? buildItem3DStyle(item, canvasCellSize) : buildItemStyle(item, canvasCellSize)}
+                      >
+                        <div className="flex h-full w-full flex-col items-center justify-center">
+                          {item.type === 'booth' ? (
+                            <span className="truncate text-[10px] font-extrabold leading-none">
+                              {item.boothCode || item.label}
+                            </span>
+                          ) : def.icon ? (
+                            <def.icon className={classNames('h-4 w-4', def.iconColor)} />
+                          ) : null}
+                        </div>
+                      </button>
                     );
                   })}
                 </div>
-
-                {/* Placed Items */}
-                {layoutDraft.items.map((item) => {
-                  const def = getObjectDefinition(item.type);
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      draggable
-                      onDragStart={(event) => handleItemDragStart(event, item)}
-                      onDragEnd={handleDragEnd}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedItemId(item.id);
-                      }}
-                      className={classNames(
-                        'absolute overflow-hidden rounded-xl border-2 px-1 py-1 text-center shadow-md transition-all',
-                        selectedItemId === item.id ? 'ring-2 ring-amber-400 ring-offset-2 z-10' : 'hover:shadow-lg',
-                        draggingItemId === item.id ? 'opacity-70' : '',
-                        def.borderColor,
-                        def.bgColor,
-                        def.textColor
-                      )}
-                      style={buildItemStyle(item, canvasCellSize)}
-                    >
-                      <div className="flex h-full w-full flex-col items-center justify-center">
-                        {item.type === 'booth' ? (
-                          <span className="truncate text-[10px] font-extrabold leading-none">
-                            {item.boothCode || item.label}
-                          </span>
-                        ) : def.icon ? (
-                          <def.icon className={classNames('h-4 w-4', def.iconColor)} />
-                        ) : null}
-                      </div>
-                    </button>
-                  );
-                })}
               </div>
             </div>
           )}
