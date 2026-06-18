@@ -264,12 +264,12 @@ function buildItemStyle(item, cellSize) {
 
 function buildItem3DStyle(item, cellSize) {
   const baseStyle = buildItemStyle(item, cellSize);
-  const depth = item.type === 'booth' ? 10 : 14;
-  const shadowColor = item.type === 'booth' ? '#059669' : '#0891b2';
+  const depth = item.type === 'booth' ? 5 : 7;
+  const shadowColor = item.type === 'booth' ? '#10b981' : '#0ea5e9';
   return {
     ...baseStyle,
-    transform: `translateZ(${depth}px)`,
-    boxShadow: `0 ${depth}px 0 ${shadowColor}, 0 ${depth + 8}px 18px rgba(15, 23, 42, 0.28)`,
+    transform: 'translateZ(1px)',
+    boxShadow: `0 ${depth}px 0 ${shadowColor}, 0 ${depth + 8}px 18px rgba(15, 23, 42, 0.16)`,
   };
 }
 
@@ -725,9 +725,9 @@ export function VisualPlanPage({ marketId }) {
   const scaledCanvasWidth = Math.max(canvasWidth * editorZoom, 1);
   const scaledCanvasHeight = Math.max(canvasHeight * editorZoom, 1);
   const is3DMode = editorViewMode === '3d';
-  const editor3DScale = useMemo(() => {
+  const interactiveMapScale = useMemo(() => {
     const maxDimension = Math.max(canvasWidth, canvasHeight, 1);
-    return Math.max(0.46, Math.min(0.78, 720 / maxDimension));
+    return Math.max(0.52, Math.min(1, 760 / maxDimension));
   }, [canvasHeight, canvasWidth]);
 
   const previewLayout = useMemo(() => {
@@ -806,6 +806,13 @@ export function VisualPlanPage({ marketId }) {
         suppressCanvasClickRef.current = false;
       }, 0);
     }
+  }
+
+  function handlePlanWheel(event) {
+    if (!is3DMode) return;
+    event.preventDefault();
+    const direction = event.deltaY > 0 ? -0.08 : 0.08;
+    updateEditorZoom(editorZoom + direction);
   }
 
   async function saveLayout() {
@@ -1232,7 +1239,7 @@ export function VisualPlanPage({ marketId }) {
           ) : (
             <div
               className={classNames(
-                'rounded-3xl border border-slate-200',
+                'relative rounded-3xl border border-slate-200',
                 is3DMode
                   ? 'h-[620px] cursor-grab overflow-hidden bg-slate-950 active:cursor-grabbing'
                   : 'overflow-auto bg-slate-100 p-4',
@@ -1241,13 +1248,26 @@ export function VisualPlanPage({ marketId }) {
               onPointerMove={movePlanPan}
               onPointerUp={stopPlanPan}
               onPointerCancel={stopPlanPan}
+              onWheel={handlePlanWheel}
               style={{
                 background: is3DMode
-                  ? 'radial-gradient(circle at 50% 20%, #1e293b 0%, #0f172a 42%, #020617 100%)'
+                  ? 'linear-gradient(135deg, #f8fafc 0%, #eef6ff 45%, #f8fafc 100%)'
                   : undefined,
                 touchAction: is3DMode ? 'none' : undefined,
               }}
             >
+              {is3DMode ? (
+                <>
+                  <div className="pointer-events-none absolute left-4 top-4 z-10 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-lg shadow-slate-200/70 backdrop-blur">
+                    <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-cyan-700">Indoor Map</p>
+                    <p className="mt-1 text-sm font-extrabold text-slate-950">{selectedLayout?.floorPlanName || selectedLayout?.name || 'Visual Plan'}</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">{layoutDraft.items.length} objects · {Math.round(editorZoom * 100)}%</p>
+                  </div>
+                  <div className="pointer-events-none absolute bottom-4 left-4 z-10 rounded-2xl border border-slate-200 bg-white/95 px-4 py-2 text-xs font-bold text-slate-600 shadow-lg shadow-slate-200/70 backdrop-blur">
+                    ลากพื้นที่ว่างเพื่อเลื่อนแผนผัง · ใช้ล้อเมาส์เพื่อซูม
+                  </div>
+                </>
+              ) : null}
               <div
                 className={classNames(
                   'relative',
@@ -1262,16 +1282,17 @@ export function VisualPlanPage({ marketId }) {
                 <div
                   className={classNames(
                     'relative bg-white shadow-inner',
-                    is3DMode ? 'absolute left-1/2 top-[52%] rounded-sm shadow-2xl' : '',
+                    is3DMode ? 'absolute left-1/2 top-1/2 rounded-[22px] border border-slate-200 shadow-2xl shadow-slate-300/70' : '',
                   )}
                   style={{
                     width: `${canvasWidth}px`,
                     height: `${canvasHeight}px`,
                     transform: is3DMode
-                      ? `translate(-50%, -50%) translate(${editorPan.x}px, ${editorPan.y}px) scale(${editorZoom * editor3DScale}) rotateX(55deg) rotateZ(-32deg)`
+                      ? `translate(-50%, -50%) translate(${editorPan.x}px, ${editorPan.y}px) scale(${editorZoom * interactiveMapScale})`
                       : `scale(${editorZoom})`,
                     transformOrigin: is3DMode ? 'center center' : 'top left',
                     transformStyle: is3DMode ? 'preserve-3d' : undefined,
+                    backgroundColor: is3DMode ? '#ffffff' : undefined,
                   }}
                 >
                   {/* Grid Background */}
@@ -1280,8 +1301,8 @@ export function VisualPlanPage({ marketId }) {
                     className="absolute inset-0"
                     style={{
                       backgroundImage: `
-                        linear-gradient(to right, #e2e8f0 1px, transparent 1px),
-                        linear-gradient(to bottom, #e2e8f0 1px, transparent 1px)
+                        linear-gradient(to right, ${is3DMode ? '#dbeafe' : '#e2e8f0'} 1px, transparent 1px),
+                        linear-gradient(to bottom, ${is3DMode ? '#dbeafe' : '#e2e8f0'} 1px, transparent 1px)
                       `,
                       backgroundSize: `${canvasCellSize}px ${canvasCellSize}px`,
                       transformStyle: is3DMode ? 'preserve-3d' : undefined,
