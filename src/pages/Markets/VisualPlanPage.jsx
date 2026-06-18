@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Save, Trash2 } from 'lucide-react';
+import { Box, Monitor, Plus, RotateCcw, Save, Trash2, ZoomIn, ZoomOut } from 'lucide-react';
 import { Card } from '../../components/Card.jsx';
 import { EmptyState } from '../../components/EmptyState.jsx';
 import { LoadingBlock } from '../../components/LoadingBlock.jsx';
@@ -110,6 +110,17 @@ function buildItemStyle(item, cellSize) {
   };
 }
 
+function get3DItemStyle(item, cellSize) {
+  const baseStyle = buildItemStyle(item, cellSize);
+  const depth = item.type === 'booth' ? 10 : 14;
+  const shadowColor = item.type === 'booth' ? '#059669' : '#0891b2';
+  return {
+    ...baseStyle,
+    transform: `translateZ(${depth}px)`,
+    boxShadow: `0 ${depth}px 0 ${shadowColor}, 0 ${depth + 8}px 18px rgba(15, 23, 42, 0.28)`,
+  };
+}
+
 function VisualPlanObjectButton({ item, active, onClick }) {
   return (
     <button
@@ -172,6 +183,8 @@ export function VisualPlanPage({ marketId }) {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createForm, setCreateForm] = useState(DEFAULT_LAYOUT_FORM);
   const [boothKeyword, setBoothKeyword] = useState('');
+  const [planViewMode, setPlanViewMode] = useState('2d');
+  const [planZoom, setPlanZoom] = useState(1);
 
   useEffect(() => {
     if (!layoutRows.length) {
@@ -251,6 +264,12 @@ export function VisualPlanPage({ marketId }) {
     const raw = Number(layoutDraft?.cellSize || layoutForm.cellSize || 48);
     return Math.max(28, Math.min(raw, 42));
   }, [layoutDraft, layoutForm.cellSize]);
+
+  const canvasWidth = (layoutDraft?.columns || 0) * canvasCellSize;
+  const canvasHeight = (layoutDraft?.rows || 0) * canvasCellSize;
+  const scaledCanvasWidth = Math.max(canvasWidth * planZoom, 1);
+  const scaledCanvasHeight = Math.max(canvasHeight * planZoom, 1);
+  const is3DMode = planViewMode === '3d';
 
   if (!marketId) return <NeedMarket />;
 
@@ -413,6 +432,10 @@ export function VisualPlanPage({ marketId }) {
     setSelectedItemId('');
   }
 
+  function updateZoom(nextZoom) {
+    setPlanZoom(Math.max(0.5, Math.min(2, Number(nextZoom))));
+  }
+
   const loading = layoutsLoading || boothsLoading || (selectedLayoutId && layoutLoading);
   const pageError = layoutsError || boothsError || layoutError || saveError;
 
@@ -511,19 +534,110 @@ export function VisualPlanPage({ marketId }) {
                 {!layoutDraft ? (
                   <EmptyState title="ยังไม่ได้เลือก layout" description="เลือก layout จากรายการด้านซ้ายก่อน" />
                 ) : (
-                  <div className="overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="inline-flex w-fit rounded-xl border border-slate-200 bg-white p-1">
+                        <button
+                          type="button"
+                          onClick={() => setPlanViewMode('2d')}
+                          className={classNames(
+                            'inline-flex h-9 items-center gap-2 rounded-lg px-3 text-xs font-extrabold transition',
+                            !is3DMode ? 'bg-cyan-600 text-white' : 'text-slate-600 hover:bg-slate-100',
+                          )}
+                        >
+                          <Monitor size={15} />
+                          2D
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPlanViewMode('3d')}
+                          className={classNames(
+                            'inline-flex h-9 items-center gap-2 rounded-lg px-3 text-xs font-extrabold transition',
+                            is3DMode ? 'bg-cyan-600 text-white' : 'text-slate-600 hover:bg-slate-100',
+                          )}
+                        >
+                          <Box size={15} />
+                          3D
+                        </button>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => updateZoom(planZoom - 0.1)}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:border-cyan-200 hover:bg-cyan-50"
+                          aria-label="ซูมออก"
+                        >
+                          <ZoomOut size={16} />
+                        </button>
+                        <input
+                          type="range"
+                          min="0.5"
+                          max="2"
+                          step="0.1"
+                          value={planZoom}
+                          onChange={(event) => updateZoom(event.target.value)}
+                          className="h-2 w-32 accent-cyan-600"
+                          aria-label="ปรับซูมแผนผัง"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => updateZoom(planZoom + 0.1)}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 transition hover:border-cyan-200 hover:bg-cyan-50"
+                          aria-label="ซูมเข้า"
+                        >
+                          <ZoomIn size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateZoom(1)}
+                          className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-xs font-extrabold text-slate-700 transition hover:border-cyan-200 hover:bg-cyan-50"
+                        >
+                          <RotateCcw size={15} />
+                          {Math.round(planZoom * 100)}%
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className={classNames(
+                      'overflow-auto rounded-2xl border border-slate-200 p-3',
+                      is3DMode ? 'bg-slate-900' : 'bg-slate-50',
+                    )}>
+                      <div
+                        className={classNames(
+                          'relative',
+                          is3DMode ? 'min-h-[520px] pt-10' : '',
+                        )}
+                        style={{
+                          width: is3DMode ? `${Math.max(scaledCanvasWidth + 280, 760)}px` : `${scaledCanvasWidth}px`,
+                          height: is3DMode ? `${Math.max(scaledCanvasHeight + 260, 560)}px` : `${scaledCanvasHeight}px`,
+                          perspective: is3DMode ? '1200px' : undefined,
+                        }}
+                      >
                     <div
-                      className="relative"
+                      className={classNames(
+                        'relative',
+                        is3DMode ? 'bg-slate-100 shadow-2xl' : '',
+                      )}
                       style={{
-                        width: `${layoutDraft.columns * canvasCellSize}px`,
-                        height: `${layoutDraft.rows * canvasCellSize}px`,
+                        width: `${canvasWidth}px`,
+                        height: `${canvasHeight}px`,
+                        transform: is3DMode
+                          ? `translate(${Math.max(120 * planZoom, 80)}px, ${Math.max(120 * planZoom, 80)}px) scale(${planZoom}) rotateX(58deg) rotateZ(-35deg)`
+                          : `scale(${planZoom})`,
+                        transformOrigin: 'top left',
+                        transformStyle: is3DMode ? 'preserve-3d' : undefined,
                       }}
                     >
                       <div
-                        className="grid"
+                        className={classNames(
+                          'grid',
+                          is3DMode ? 'absolute inset-0 bg-white' : '',
+                        )}
                         style={{
                           gridTemplateColumns: `repeat(${layoutDraft.columns}, minmax(0, ${canvasCellSize}px))`,
                           gridTemplateRows: `repeat(${layoutDraft.rows}, minmax(0, ${canvasCellSize}px))`,
+                          transformStyle: is3DMode ? 'preserve-3d' : undefined,
                         }}
                       >
                         {Array.from({ length: layoutDraft.rows * layoutDraft.columns }).map((_, index) => {
@@ -534,7 +648,10 @@ export function VisualPlanPage({ marketId }) {
                               key={`${row}-${col}`}
                               type="button"
                               onClick={() => placeItemAtCell(row, col)}
-                              className="h-full min-h-[28px] border border-slate-200 bg-white transition hover:bg-cyan-50"
+                              className={classNames(
+                                'h-full min-h-[28px] border transition hover:bg-cyan-50',
+                                is3DMode ? 'border-slate-300 bg-slate-50' : 'border-slate-200 bg-white',
+                              )}
                               aria-label={`วาง object ที่ row ${row} col ${col}`}
                             />
                           );
@@ -552,14 +669,17 @@ export function VisualPlanPage({ marketId }) {
                               ? 'border-emerald-300 bg-emerald-100 text-emerald-900'
                               : 'border-cyan-300 bg-cyan-100 text-cyan-900',
                             selectedItemId === item.id ? 'ring-2 ring-amber-400 ring-offset-2' : '',
+                            is3DMode ? 'shadow-xl' : '',
                           )}
-                          style={buildItemStyle(item, canvasCellSize)}
+                          style={is3DMode ? get3DItemStyle(item, canvasCellSize) : buildItemStyle(item, canvasCellSize)}
                         >
                           <div className="flex h-full w-full items-center justify-center text-xs font-extrabold">
                             <span className="truncate">{item.type === 'booth' ? item.boothCode || item.label : item.label}</span>
                           </div>
                         </button>
                       ))}
+                    </div>
+                      </div>
                     </div>
                   </div>
                 )}
