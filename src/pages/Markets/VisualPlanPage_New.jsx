@@ -237,6 +237,12 @@ function getPaletteButtonClasses(type, active) {
     custom: active
       ? 'border-gray-600 bg-gray-600 text-white shadow-md'
       : 'border-slate-200 bg-white text-slate-700 hover:border-gray-300 hover:bg-gray-50',
+    walkway: active
+      ? 'border-slate-600 bg-slate-600 text-white shadow-md'
+      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
+    road: active
+      ? 'border-slate-700 bg-slate-700 text-white shadow-md'
+      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
     eraser: active
       ? 'border-red-600 bg-red-600 text-white shadow-md'
       : 'border-slate-200 bg-white text-slate-700 hover:border-red-200 hover:bg-red-50',
@@ -288,46 +294,102 @@ function buildItemStyle(item, cellSize) {
   };
 }
 
-function buildItem3DStyle(item, cellSize) {
-  const baseStyle = buildItemStyle(item, cellSize);
-  const depth = item.type === 'booth' ? 5 : 7;
-  const shadowColorByType = {
-    booth: '#10b981',
-    entrance: '#fb923c',
-    toilet: '#60a5fa',
-    tree: '#22c55e',
-    stage: '#a855f7',
-    parking: '#94a3b8',
-    text: '#f472b6',
-    custom: '#9ca3af',
-    walkway: '#cbd5e1',
-    road: '#94a3b8',
-    eraser: '#f87171',
-  };
-  const shadowColor = shadowColorByType[item.type] || '#0ea5e9';
-  return {
-    ...baseStyle,
-    transform: 'translateZ(1px)',
-    boxShadow: `0 ${depth}px 0 ${shadowColor}, 0 ${depth + 8}px 18px rgba(15, 23, 42, 0.16)`,
-  };
+const ISO_ITEM_COLORS = {
+  booth: { top: '#d1fae5', stroke: '#6ee7b7', front: '#34d399', side: '#059669', text: '#064e3b' },
+  entrance: { top: '#ffedd5', stroke: '#fdba74', front: '#fb923c', side: '#ea580c', text: '#c2410c' },
+  toilet: { top: '#dbeafe', stroke: '#93c5fd', front: '#60a5fa', side: '#2563eb', text: '#1d4ed8' },
+  tree: { top: '#dcfce7', stroke: '#86efac', front: '#4ade80', side: '#16a34a', text: '#166534' },
+  stage: { top: '#f3e8ff', stroke: '#d8b4fe', front: '#c084fc', side: '#9333ea', text: '#6b21a8' },
+  parking: { top: '#e2e8f0', stroke: '#94a3b8', front: '#cbd5e1', side: '#64748b', text: '#334155' },
+  text: { top: '#fce7f3', stroke: '#f9a8d4', front: '#f472b6', side: '#db2777', text: '#9d174d' },
+  custom: { top: '#f3f4f6', stroke: '#d1d5db', front: '#d1d5db', side: '#6b7280', text: '#374151' },
+  walkway: { top: '#f8fafc', stroke: '#cbd5e1', front: '#e2e8f0', side: '#94a3b8', text: '#475569' },
+  road: { top: '#e2e8f0', stroke: '#94a3b8', front: '#cbd5e1', side: '#64748b', text: '#334155' },
+  eraser: { top: '#fee2e2', stroke: '#fca5a5', front: '#f87171', side: '#dc2626', text: '#991b1b' },
+};
+
+function pointString(points) {
+  return points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
 }
 
-function getItemDepthFaceStyle(type, side) {
-  const colors = {
-    booth: ['#34d399', '#059669'],
-    entrance: ['#fdba74', '#ea580c'],
-    toilet: ['#93c5fd', '#2563eb'],
-    tree: ['#86efac', '#16a34a'],
-    stage: ['#d8b4fe', '#9333ea'],
-    parking: ['#cbd5e1', '#64748b'],
-    text: ['#f9a8d4', '#db2777'],
-    custom: ['#d1d5db', '#6b7280'],
-    walkway: ['#e2e8f0', '#94a3b8'],
-    road: ['#cbd5e1', '#64748b'],
-    eraser: ['#fca5a5', '#dc2626'],
+function getIsoItemColors(type) {
+  return ISO_ITEM_COLORS[type] || ISO_ITEM_COLORS.custom;
+}
+
+function getIsoItemHeight(type) {
+  if (type === 'walkway') return 5;
+  if (type === 'road') return 7;
+  if (type === 'booth') return 11;
+  return 14;
+}
+
+function getIsoItemLabel(item) {
+  const label = item.type === 'booth' ? (item.boothCode || item.label) : item.label;
+  const text = String(label || getObjectDefinition(item.type).label || '').trim();
+  return text.length > 10 ? `${text.slice(0, 9)}…` : text;
+}
+
+function createIsoMapModel(layoutDraft, cellSize, publishedMode) {
+  const items = Array.isArray(layoutDraft?.items) ? layoutDraft.items : [];
+  const rows = Number(layoutDraft?.rows || 1);
+  const columns = Number(layoutDraft?.columns || 1);
+  const tileWidth = cellSize * 1.62;
+  const tileHeight = cellSize * 0.94;
+  const marginCells = publishedMode ? 1 : 0;
+  let minRow = 0;
+  let minCol = 0;
+  let maxRow = rows;
+  let maxCol = columns;
+
+  if (publishedMode && items.length) {
+    minRow = Math.max(0, Math.min(...items.map((item) => Number(item.row || 1) - 1)) - marginCells);
+    minCol = Math.max(0, Math.min(...items.map((item) => Number(item.col || 1) - 1)) - marginCells);
+    maxRow = Math.min(rows, Math.max(...items.map((item) => Number(item.row || 1) - 1 + Number(item.rowSpan || 1))) + marginCells);
+    maxCol = Math.min(columns, Math.max(...items.map((item) => Number(item.col || 1) - 1 + Number(item.colSpan || 1))) + marginCells);
+  }
+
+  const project = (rowEdge, colEdge) => ({
+    x: (colEdge - rowEdge) * (tileWidth / 2),
+    y: (colEdge + rowEdge) * (tileHeight / 2),
+  });
+  const floorPoints = [
+    project(minRow, minCol),
+    project(minRow, maxCol),
+    project(maxRow, maxCol),
+    project(maxRow, minCol),
+  ];
+  const projectedPoints = [...floorPoints];
+  for (const item of items) {
+    const row = Number(item.row || 1) - 1;
+    const col = Number(item.col || 1) - 1;
+    const rowSpan = Number(item.rowSpan || 1);
+    const colSpan = Number(item.colSpan || 1);
+    const depth = getIsoItemHeight(item.type);
+    const corners = [
+      project(row, col),
+      project(row, col + colSpan),
+      project(row + rowSpan, col + colSpan),
+      project(row + rowSpan, col),
+    ];
+    projectedPoints.push(...corners, ...corners.map((point) => ({ x: point.x, y: point.y + depth })));
+  }
+  const minX = Math.min(...projectedPoints.map((point) => point.x));
+  const maxX = Math.max(...projectedPoints.map((point) => point.x));
+  const minY = Math.min(...projectedPoints.map((point) => point.y));
+  const maxY = Math.max(...projectedPoints.map((point) => point.y));
+  const padding = Math.max(72, cellSize * 2);
+
+  return {
+    minRow,
+    minCol,
+    maxRow,
+    maxCol,
+    tileWidth,
+    tileHeight,
+    project,
+    floorPoints,
+    viewBox: `${minX - padding} ${minY - padding} ${(maxX - minX) + (padding * 2)} ${(maxY - minY) + (padding * 2.4)}`,
   };
-  const [light, dark] = colors[type] || ['#bae6fd', '#0891b2'];
-  return { backgroundColor: side === 'right' ? dark : light };
 }
 
 function normalizeLayoutForSave(layoutDraft, fallbackRows, fallbackColumns, fallbackCellSize) {
@@ -669,6 +731,8 @@ export function VisualPlanPage({ marketId }) {
   const [editorPan, setEditorPan] = useState({ x: 0, y: 0 });
   const dragOriginRef = useRef(null);
   const panOriginRef = useRef(null);
+  const isoSvgRef = useRef(null);
+  const isoDragRef = useRef(null);
   const suppressCanvasClickRef = useRef(false);
 
   // API hooks
@@ -793,56 +857,20 @@ export function VisualPlanPage({ marketId }) {
     const maxDimension = Math.max(canvasWidth, canvasHeight, 1);
     return Math.max(0.52, Math.min(1, 760 / maxDimension));
   }, [canvasHeight, canvasWidth]);
-  const publishedMapBounds = useMemo(() => {
-    const items = layoutDraft?.items || [];
-    if (!items.length || !canvasWidth || !canvasHeight) {
-      return {
-        top: 0,
-        left: 0,
-        right: canvasWidth,
-        bottom: canvasHeight,
-      };
-    }
-    const padding = canvasCellSize;
-    const minLeft = Math.min(...items.map((item) => (Number(item.col || 1) - 1) * canvasCellSize));
-    const minTop = Math.min(...items.map((item) => (Number(item.row || 1) - 1) * canvasCellSize));
-    const maxRight = Math.max(...items.map((item) => (Number(item.col || 1) - 1 + Number(item.colSpan || 1)) * canvasCellSize));
-    const maxBottom = Math.max(...items.map((item) => (Number(item.row || 1) - 1 + Number(item.rowSpan || 1)) * canvasCellSize));
-    return {
-      top: Math.max(minTop - padding, 0),
-      left: Math.max(minLeft - padding, 0),
-      right: Math.min(maxRight + padding, canvasWidth),
-      bottom: Math.min(maxBottom + padding, canvasHeight),
-    };
-  }, [canvasCellSize, canvasHeight, canvasWidth, layoutDraft?.items]);
-  const publishedCutoutStyle = useMemo(() => {
-    if (!canvasWidth || !canvasHeight) return {};
-    const floorColor = '#f8fafc';
-    const cutColor = '#cbd5e1';
-    const { top, left, right, bottom } = publishedMapBounds;
-    return {
-      backgroundColor: floorColor,
-      backgroundImage: [
-        `linear-gradient(${cutColor}, ${cutColor})`,
-        `linear-gradient(${cutColor}, ${cutColor})`,
-        `linear-gradient(${cutColor}, ${cutColor})`,
-        `linear-gradient(${cutColor}, ${cutColor})`,
-      ].join(', '),
-      backgroundPosition: [
-        '0 0',
-        `0 ${top}px`,
-        `${right}px ${top}px`,
-        `0 ${bottom}px`,
-      ].join(', '),
-      backgroundSize: [
-        `${canvasWidth}px ${top}px`,
-        `${left}px ${Math.max(bottom - top, 0)}px`,
-        `${Math.max(canvasWidth - right, 0)}px ${Math.max(bottom - top, 0)}px`,
-        `${canvasWidth}px ${Math.max(canvasHeight - bottom, 0)}px`,
-      ].join(', '),
-      backgroundRepeat: 'no-repeat',
-    };
-  }, [canvasHeight, canvasWidth, publishedMapBounds]);
+  const isoMapModel = useMemo(
+    () => createIsoMapModel(layoutDraft, canvasCellSize, isPublishedRender),
+    [canvasCellSize, isPublishedRender, layoutDraft],
+  );
+  const isoItems = useMemo(() => {
+    const items = [...(layoutDraft?.items || [])];
+    return items.sort((first, second) => {
+      if (first.id === selectedItemId) return 1;
+      if (second.id === selectedItemId) return -1;
+      const firstDepth = Number(first.row || 1) + Number(first.col || 1) + Number(first.rowSpan || 1) + Number(first.colSpan || 1);
+      const secondDepth = Number(second.row || 1) + Number(second.col || 1) + Number(second.rowSpan || 1) + Number(second.colSpan || 1);
+      return firstDepth - secondDepth;
+    });
+  }, [layoutDraft?.items, selectedItemId]);
 
   const previewLayout = useMemo(() => {
     if (!layoutDraft) return null;
@@ -1205,6 +1233,62 @@ export function VisualPlanPage({ marketId }) {
     setSelectedItemId(itemId);
   }
 
+  function getIsoCellFromPointer(event) {
+    const svg = isoSvgRef.current;
+    if (!svg || !isoMapModel) return null;
+    const point = svg.createSVGPoint();
+    point.x = event.clientX;
+    point.y = event.clientY;
+    const matrix = svg.getScreenCTM();
+    if (!matrix) return null;
+    const svgPoint = point.matrixTransform(matrix.inverse());
+    const rowFloat = (svgPoint.y / isoMapModel.tileHeight) - (svgPoint.x / isoMapModel.tileWidth);
+    const colFloat = (svgPoint.y / isoMapModel.tileHeight) + (svgPoint.x / isoMapModel.tileWidth);
+    const row = Math.max(1, Math.min(layoutDraft.rows, Math.floor(rowFloat) + 1));
+    const col = Math.max(1, Math.min(layoutDraft.columns, Math.floor(colFloat) + 1));
+    return { row, col };
+  }
+
+  function handleIsoItemPointerDown(event, item) {
+    if (!is3DMode || event.button !== 0) return;
+    event.stopPropagation();
+    setSelectedItemId(item.id);
+    setDraggingItemId(item.id);
+    isoDragRef.current = {
+      itemId: item.id,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function handleIsoItemPointerMove(event) {
+    const dragState = isoDragRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - dragState.startX;
+    const deltaY = event.clientY - dragState.startY;
+    if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) {
+      dragState.moved = true;
+    }
+  }
+
+  function handleIsoItemPointerUp(event) {
+    const dragState = isoDragRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) return;
+    event.stopPropagation();
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    isoDragRef.current = null;
+    setDraggingItemId('');
+    if (!dragState.moved) {
+      setSelectedItemId(dragState.itemId);
+      return;
+    }
+    const cell = getIsoCellFromPointer(event);
+    if (cell) moveItemToCell(dragState.itemId, cell.row, cell.col);
+  }
+
   function handleItemDragStart(event, item) {
     setDraggingItemId(item.id);
     dragOriginRef.current = { row: item.row, col: item.col };
@@ -1224,6 +1308,175 @@ export function VisualPlanPage({ marketId }) {
   function handleDragEnd() {
     setDraggingItemId('');
     dragOriginRef.current = null;
+  }
+
+  function renderIsoMap() {
+    if (!layoutDraft) return null;
+    const model = isoMapModel;
+    const gridLines = [];
+    for (let row = model.minRow; row <= model.maxRow; row += 1) {
+      gridLines.push({ id: `r-${row}`, points: [model.project(row, model.minCol), model.project(row, model.maxCol)] });
+    }
+    for (let col = model.minCol; col <= model.maxCol; col += 1) {
+      gridLines.push({ id: `c-${col}`, points: [model.project(model.minRow, col), model.project(model.maxRow, col)] });
+    }
+    const cellHits = [];
+    for (let row = model.minRow; row < model.maxRow; row += 1) {
+      for (let col = model.minCol; col < model.maxCol; col += 1) {
+        cellHits.push({
+          row: row + 1,
+          col: col + 1,
+          points: [
+            model.project(row, col),
+            model.project(row, col + 1),
+            model.project(row + 1, col + 1),
+            model.project(row + 1, col),
+          ],
+        });
+      }
+    }
+
+    return (
+      <svg
+        ref={isoSvgRef}
+        className="h-full w-full select-none"
+        viewBox={model.viewBox}
+        role="img"
+        aria-label="Isometric interactive market map"
+        style={{
+          transform: `translate(${editorPan.x}px, ${editorPan.y}px) scale(${editorZoom * interactiveMapScale})`,
+          transformOrigin: 'center center',
+          overflow: 'visible',
+        }}
+      >
+        <defs>
+          <filter id="visual-plan-iso-shadow" x="-20%" y="-20%" width="140%" height="160%">
+            <feDropShadow dx="0" dy="10" stdDeviation="10" floodColor="#64748b" floodOpacity="0.16" />
+          </filter>
+          <linearGradient id="visual-plan-floor" x1="0" x2="1" y1="0" y2="1">
+            <stop offset="0%" stopColor="#ffffff" />
+            <stop offset="100%" stopColor="#f8fafc" />
+          </linearGradient>
+        </defs>
+
+        <polygon
+          points={pointString(model.floorPoints)}
+          fill="url(#visual-plan-floor)"
+          stroke="#dbeafe"
+          strokeWidth="1.5"
+          filter="url(#visual-plan-iso-shadow)"
+        />
+
+        {showGridView && !isPublishedRender ? gridLines.map((line) => (
+          <line
+            key={line.id}
+            x1={line.points[0].x}
+            y1={line.points[0].y}
+            x2={line.points[1].x}
+            y2={line.points[1].y}
+            stroke="#dbeafe"
+            strokeWidth="1"
+          />
+        )) : null}
+
+        {cellHits.map((cell) => (
+          <polygon
+            key={`${cell.row}-${cell.col}`}
+            points={pointString(cell.points)}
+            fill="transparent"
+            stroke="transparent"
+            className="cursor-crosshair transition hover:fill-cyan-100/30"
+            role="button"
+            tabIndex={0}
+            aria-label={`วาง object ที่ row ${cell.row} col ${cell.col}`}
+            onClick={() => {
+              if (suppressCanvasClickRef.current) {
+                suppressCanvasClickRef.current = false;
+                return;
+              }
+              handleCanvasClick(cell.row, cell.col);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                handleCanvasClick(cell.row, cell.col);
+              }
+            }}
+          />
+        ))}
+
+        {isoItems.map((item) => {
+          const row = Number(item.row || 1) - 1;
+          const col = Number(item.col || 1) - 1;
+          const rowSpan = Number(item.rowSpan || 1);
+          const colSpan = Number(item.colSpan || 1);
+          const depth = getIsoItemHeight(item.type);
+          const colors = getIsoItemColors(item.type);
+          const topPoints = [
+            model.project(row, col),
+            model.project(row, col + colSpan),
+            model.project(row + rowSpan, col + colSpan),
+            model.project(row + rowSpan, col),
+          ];
+          const lowered = topPoints.map((point) => ({ x: point.x, y: point.y + depth }));
+          const sidePoints = [topPoints[1], topPoints[2], lowered[2], lowered[1]];
+          const frontPoints = [topPoints[2], topPoints[3], lowered[3], lowered[2]];
+          const center = {
+            x: (topPoints[0].x + topPoints[2].x) / 2,
+            y: (topPoints[0].y + topPoints[2].y) / 2,
+          };
+          const selected = selectedItemId === item.id;
+          const fontSize = Math.max(9, Math.min(12, canvasCellSize * 0.28));
+
+          return (
+            <g
+              key={item.id}
+              data-plan-item="true"
+              role="button"
+              tabIndex={0}
+              className={classNames(
+                'cursor-grab outline-none transition-opacity active:cursor-grabbing',
+                draggingItemId === item.id ? 'opacity-70' : '',
+              )}
+              onPointerDown={(event) => handleIsoItemPointerDown(event, item)}
+              onPointerMove={handleIsoItemPointerMove}
+              onPointerUp={handleIsoItemPointerUp}
+              onPointerCancel={handleIsoItemPointerUp}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  setSelectedItemId(item.id);
+                }
+              }}
+            >
+              <polygon points={pointString(frontPoints)} fill={colors.front} stroke={colors.side} strokeWidth="0.8" />
+              <polygon points={pointString(sidePoints)} fill={colors.side} stroke={colors.side} strokeWidth="0.8" />
+              <polygon
+                points={pointString(topPoints)}
+                fill={colors.top}
+                stroke={selected ? '#f59e0b' : colors.stroke}
+                strokeWidth={selected ? '2.8' : '1.6'}
+              />
+              <text
+                x={center.x}
+                y={center.y + 2}
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fill={colors.text}
+                stroke="#ffffff"
+                strokeWidth="2.5"
+                paintOrder="stroke"
+                fontSize={fontSize}
+                fontWeight="800"
+                className="pointer-events-none"
+              >
+                {getIsoItemLabel(item)}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    );
   }
 
   // ============================================================================
@@ -1457,56 +1710,31 @@ export function VisualPlanPage({ marketId }) {
                   perspective: is3DMode ? '1400px' : undefined,
                 }}
               >
-                <div
-                  className={classNames(
-                    'relative bg-white shadow-inner',
-                    is3DMode ? 'absolute left-1/2 top-1/2 rounded-[22px] border border-slate-200 shadow-2xl shadow-slate-300/70' : '',
-                  )}
-                  style={{
-                    width: `${canvasWidth}px`,
-                    height: `${canvasHeight}px`,
-                    transform: is3DMode
-                      ? `translate(-50%, -50%) translate(${editorPan.x}px, ${editorPan.y}px) scale(${editorZoom * interactiveMapScale}) rotateX(56deg) rotateZ(-32deg)`
-                      : `scale(${editorZoom})`,
-                    transformOrigin: is3DMode ? 'center center' : 'top left',
-                    transformStyle: is3DMode ? 'preserve-3d' : undefined,
-                    ...(isPublishedRender ? publishedCutoutStyle : { backgroundColor: is3DMode ? '#ffffff' : undefined }),
-                  }}
-                >
-                  {isPublishedRender ? (
-                    <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[22px]">
-                      <div
-                        className="absolute bg-white/60"
-                        style={{
-                          left: `${publishedMapBounds.left}px`,
-                          top: `${publishedMapBounds.top}px`,
-                          width: `${Math.max(publishedMapBounds.right - publishedMapBounds.left, canvasCellSize)}px`,
-                          height: `${Math.max(canvasCellSize * 1.25, 40)}px`,
-                        }}
-                      />
-                      <div
-                        className="absolute bg-white/50"
-                        style={{
-                          left: `${publishedMapBounds.left}px`,
-                          top: `${Math.max(publishedMapBounds.bottom - (canvasCellSize * 1.5), publishedMapBounds.top)}px`,
-                          width: `${Math.max((publishedMapBounds.right - publishedMapBounds.left) * 0.55, canvasCellSize * 2)}px`,
-                          height: `${Math.max(canvasCellSize * 1.25, 40)}px`,
-                        }}
-                      />
-                    </div>
-                  ) : null}
+                {is3DMode ? (
+                  <div className="absolute inset-0">
+                    {renderIsoMap()}
+                  </div>
+                ) : (
+                  <div
+                    className="relative bg-white shadow-inner"
+                    style={{
+                      width: `${canvasWidth}px`,
+                      height: `${canvasHeight}px`,
+                      transform: `scale(${editorZoom})`,
+                      transformOrigin: 'top left',
+                    }}
+                  >
 
                   {/* Grid Background */}
-                  {showGridView && !isPublishedRender && (
+                  {showGridView && (
                   <div
                     className="absolute inset-0"
                     style={{
                       backgroundImage: `
-                        linear-gradient(to right, ${is3DMode ? '#dbeafe' : '#e2e8f0'} 1px, transparent 1px),
-                        linear-gradient(to bottom, ${is3DMode ? '#dbeafe' : '#e2e8f0'} 1px, transparent 1px)
+                        linear-gradient(to right, #e2e8f0 1px, transparent 1px),
+                        linear-gradient(to bottom, #e2e8f0 1px, transparent 1px)
                       `,
                       backgroundSize: `${canvasCellSize}px ${canvasCellSize}px`,
-                      transformStyle: is3DMode ? 'preserve-3d' : undefined,
                     }}
                   />
                   )}
@@ -1538,7 +1766,7 @@ export function VisualPlanPage({ marketId }) {
                           onDrop={(event) => handleGridDrop(event, row, col)}
                           className={classNames(
                             'h-full min-h-[28px] border border-transparent transition',
-                            isPublishedRender ? 'bg-transparent hover:bg-cyan-100/30' : 'hover:bg-cyan-50/50',
+                            'hover:bg-cyan-50/50',
                           )}
                           aria-label={`วาง object ที่ row ${row} col ${col}`}
                         />
@@ -1564,34 +1792,15 @@ export function VisualPlanPage({ marketId }) {
                         }}
                         className={classNames(
                           'absolute rounded-xl border-2 px-1 py-1 text-center shadow-md transition-all',
-                          is3DMode ? 'overflow-visible' : 'overflow-hidden',
+                          'overflow-hidden',
                           selectedItemId === item.id ? 'ring-2 ring-amber-400 ring-offset-2 z-10' : 'hover:shadow-lg',
                           draggingItemId === item.id ? 'opacity-70' : '',
-                          is3DMode ? 'shadow-xl' : '',
                           def.borderColor,
                           def.bgColor,
                           def.textColor,
                         )}
-                        style={is3DMode ? buildItem3DStyle(item, canvasCellSize) : buildItemStyle(item, canvasCellSize)}
+                        style={buildItemStyle(item, canvasCellSize)}
                       >
-                        {is3DMode ? (
-                          <>
-                            <span
-                              className="pointer-events-none absolute left-0 top-full h-2 w-full origin-top rounded-b-xl"
-                              style={{
-                                ...getItemDepthFaceStyle(item.type, 'bottom'),
-                                transform: 'skewX(-42deg)',
-                              }}
-                            />
-                            <span
-                              className="pointer-events-none absolute left-full top-0 h-full w-2 origin-left rounded-r-xl"
-                              style={{
-                                ...getItemDepthFaceStyle(item.type, 'right'),
-                                transform: 'skewY(-42deg)',
-                              }}
-                            />
-                          </>
-                        ) : null}
                         <div className="relative flex h-full w-full flex-col items-center justify-center">
                           {item.type === 'booth' ? (
                             <span className="truncate text-[10px] font-extrabold leading-none">
@@ -1604,7 +1813,8 @@ export function VisualPlanPage({ marketId }) {
                       </button>
                     );
                   })}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
