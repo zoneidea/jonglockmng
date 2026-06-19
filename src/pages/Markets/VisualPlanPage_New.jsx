@@ -265,19 +265,23 @@ function buildItemStyle(item, cellSize) {
 function buildItem3DStyle(item, cellSize) {
   const baseStyle = buildItemStyle(item, cellSize);
   const depth = item.type === 'booth' ? 5 : 7;
-  const shadowColor = item.type === 'booth' ? '#10b981' : '#0ea5e9';
+  const shadowColorByType = {
+    booth: '#10b981',
+    entrance: '#fb923c',
+    toilet: '#60a5fa',
+    tree: '#22c55e',
+    stage: '#a855f7',
+    parking: '#94a3b8',
+    text: '#f472b6',
+    custom: '#9ca3af',
+    eraser: '#f87171',
+  };
+  const shadowColor = shadowColorByType[item.type] || '#0ea5e9';
   return {
     ...baseStyle,
     transform: 'translateZ(1px)',
     boxShadow: `0 ${depth}px 0 ${shadowColor}, 0 ${depth + 8}px 18px rgba(15, 23, 42, 0.16)`,
   };
-}
-
-function getPublishedItemClasses(type) {
-  if (type === 'booth') return 'border-emerald-300 bg-emerald-100 text-emerald-900';
-  if (type === 'toilet' || type === 'tree' || type === 'entrance') return 'border-cyan-300 bg-cyan-100 text-cyan-900';
-  if (type === 'parking') return 'border-slate-300 bg-slate-100 text-slate-700';
-  return 'border-cyan-300 bg-cyan-100 text-cyan-900';
 }
 
 function normalizeLayoutForSave(layoutDraft, fallbackRows, fallbackColumns, fallbackCellSize) {
@@ -743,35 +747,56 @@ export function VisualPlanPage({ marketId }) {
     const maxDimension = Math.max(canvasWidth, canvasHeight, 1);
     return Math.max(0.52, Math.min(1, 760 / maxDimension));
   }, [canvasHeight, canvasWidth]);
+  const publishedMapBounds = useMemo(() => {
+    const items = layoutDraft?.items || [];
+    if (!items.length || !canvasWidth || !canvasHeight) {
+      return {
+        top: 0,
+        left: 0,
+        right: canvasWidth,
+        bottom: canvasHeight,
+      };
+    }
+    const padding = canvasCellSize;
+    const minLeft = Math.min(...items.map((item) => (Number(item.col || 1) - 1) * canvasCellSize));
+    const minTop = Math.min(...items.map((item) => (Number(item.row || 1) - 1) * canvasCellSize));
+    const maxRight = Math.max(...items.map((item) => (Number(item.col || 1) - 1 + Number(item.colSpan || 1)) * canvasCellSize));
+    const maxBottom = Math.max(...items.map((item) => (Number(item.row || 1) - 1 + Number(item.rowSpan || 1)) * canvasCellSize));
+    return {
+      top: Math.max(minTop - padding, 0),
+      left: Math.max(minLeft - padding, 0),
+      right: Math.min(maxRight + padding, canvasWidth),
+      bottom: Math.min(maxBottom + padding, canvasHeight),
+    };
+  }, [canvasCellSize, canvasHeight, canvasWidth, layoutDraft?.items]);
   const publishedCutoutStyle = useMemo(() => {
     if (!canvasWidth || !canvasHeight) return {};
     const floorColor = '#f8fafc';
-    const cutColor = '#94a3b8';
-    const leftWing = Math.min(Math.max(canvasWidth * 0.22, canvasCellSize * 2), canvasWidth * 0.38);
-    const rightWing = Math.max(canvasWidth * 0.66, canvasWidth - (canvasCellSize * 4));
-    const topDepth = Math.min(Math.max(canvasHeight * 0.22, canvasCellSize * 2), canvasHeight * 0.36);
-    const lowerCutTop = Math.max(canvasHeight * 0.72, canvasHeight - (canvasCellSize * 3));
-    const lowerCutLeft = Math.min(Math.max(canvasWidth * 0.62, canvasCellSize * 4), canvasWidth - canvasCellSize);
+    const cutColor = '#cbd5e1';
+    const { top, left, right, bottom } = publishedMapBounds;
     return {
       backgroundColor: floorColor,
       backgroundImage: [
         `linear-gradient(${cutColor}, ${cutColor})`,
         `linear-gradient(${cutColor}, ${cutColor})`,
         `linear-gradient(${cutColor}, ${cutColor})`,
+        `linear-gradient(${cutColor}, ${cutColor})`,
       ].join(', '),
       backgroundPosition: [
         '0 0',
-        `${rightWing}px 0`,
-        `${lowerCutLeft}px ${lowerCutTop}px`,
+        `0 ${top}px`,
+        `${right}px ${top}px`,
+        `0 ${bottom}px`,
       ].join(', '),
       backgroundSize: [
-        `${leftWing}px ${topDepth}px`,
-        `${Math.max(canvasWidth - rightWing, 0)}px ${Math.max(canvasHeight, 0)}px`,
-        `${Math.max(canvasWidth - lowerCutLeft, 0)}px ${Math.max(canvasHeight - lowerCutTop, 0)}px`,
+        `${canvasWidth}px ${top}px`,
+        `${left}px ${Math.max(bottom - top, 0)}px`,
+        `${Math.max(canvasWidth - right, 0)}px ${Math.max(bottom - top, 0)}px`,
+        `${canvasWidth}px ${Math.max(canvasHeight - bottom, 0)}px`,
       ].join(', '),
       backgroundRepeat: 'no-repeat',
     };
-  }, [canvasCellSize, canvasHeight, canvasWidth]);
+  }, [canvasHeight, canvasWidth, publishedMapBounds]);
 
   const previewLayout = useMemo(() => {
     if (!layoutDraft) return null;
@@ -1384,30 +1409,21 @@ export function VisualPlanPage({ marketId }) {
                   {isPublishedRender ? (
                     <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[22px]">
                       <div
-                        className="absolute bg-white/70"
+                        className="absolute bg-white/60"
                         style={{
-                          left: `${canvasCellSize}px`,
-                          top: `${Math.max(canvasHeight * 0.28, canvasCellSize)}px`,
-                          width: `${Math.max(canvasWidth * 0.58, canvasCellSize * 4)}px`,
+                          left: `${publishedMapBounds.left}px`,
+                          top: `${publishedMapBounds.top}px`,
+                          width: `${Math.max(publishedMapBounds.right - publishedMapBounds.left, canvasCellSize)}px`,
                           height: `${Math.max(canvasCellSize * 1.25, 40)}px`,
                         }}
                       />
                       <div
-                        className="absolute bg-white/70"
+                        className="absolute bg-white/50"
                         style={{
-                          left: `${Math.max(canvasWidth * 0.28, canvasCellSize)}px`,
-                          top: `${Math.max(canvasHeight * 0.46, canvasCellSize)}px`,
-                          width: `${Math.max(canvasCellSize * 2, 72)}px`,
-                          height: `${Math.max(canvasHeight * 0.26, canvasCellSize * 3)}px`,
-                        }}
-                      />
-                      <div
-                        className="absolute bg-white/70"
-                        style={{
-                          bottom: `${canvasCellSize}px`,
-                          left: `${canvasCellSize}px`,
-                          width: `${Math.max(canvasWidth * 0.5, canvasCellSize * 5)}px`,
-                          height: `${Math.max(canvasCellSize * 1.45, 48)}px`,
+                          left: `${publishedMapBounds.left}px`,
+                          top: `${Math.max(publishedMapBounds.bottom - (canvasCellSize * 1.5), publishedMapBounds.top)}px`,
+                          width: `${Math.max((publishedMapBounds.right - publishedMapBounds.left) * 0.55, canvasCellSize * 2)}px`,
+                          height: `${Math.max(canvasCellSize * 1.25, 40)}px`,
                         }}
                       />
                     </div>
@@ -1484,9 +1500,9 @@ export function VisualPlanPage({ marketId }) {
                           selectedItemId === item.id ? 'ring-2 ring-amber-400 ring-offset-2 z-10' : 'hover:shadow-lg',
                           draggingItemId === item.id ? 'opacity-70' : '',
                           is3DMode ? 'shadow-xl' : '',
-                          isPublishedRender ? getPublishedItemClasses(item.type) : def.borderColor,
-                          isPublishedRender ? '' : def.bgColor,
-                          isPublishedRender ? '' : def.textColor,
+                          def.borderColor,
+                          def.bgColor,
+                          def.textColor,
                         )}
                         style={is3DMode ? buildItem3DStyle(item, canvasCellSize) : buildItemStyle(item, canvasCellSize)}
                       >
