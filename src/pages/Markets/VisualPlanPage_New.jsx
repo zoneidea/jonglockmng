@@ -131,7 +131,33 @@ const VISUAL_PLAN_OBJECTS = [
     textColor: 'text-gray-900',
     iconColor: 'text-gray-600'
   },
-  { 
+  {
+    type: 'walkway',
+    label: 'ทางเดิน',
+    description: 'พื้นที่ทางเดินภายในแผนผัง',
+    rowSpan: 1,
+    colSpan: 4,
+    icon: Grid3X3,
+    color: 'slate',
+    bgColor: 'bg-slate-50',
+    borderColor: 'border-slate-300',
+    textColor: 'text-slate-700',
+    iconColor: 'text-slate-500'
+  },
+  {
+    type: 'road',
+    label: 'ถนน',
+    description: 'ถนนหรือทางรถผ่าน',
+    rowSpan: 2,
+    colSpan: 5,
+    icon: Car,
+    color: 'slate',
+    bgColor: 'bg-slate-200',
+    borderColor: 'border-slate-400',
+    textColor: 'text-slate-800',
+    iconColor: 'text-slate-600'
+  },
+  {
     type: 'eraser', 
     label: 'ยางลบ', 
     description: 'ลบวัตถุออกจากแผนผัง',
@@ -274,6 +300,8 @@ function buildItem3DStyle(item, cellSize) {
     parking: '#94a3b8',
     text: '#f472b6',
     custom: '#9ca3af',
+    walkway: '#cbd5e1',
+    road: '#94a3b8',
     eraser: '#f87171',
   };
   const shadowColor = shadowColorByType[item.type] || '#0ea5e9';
@@ -282,6 +310,24 @@ function buildItem3DStyle(item, cellSize) {
     transform: 'translateZ(1px)',
     boxShadow: `0 ${depth}px 0 ${shadowColor}, 0 ${depth + 8}px 18px rgba(15, 23, 42, 0.16)`,
   };
+}
+
+function getItemDepthFaceStyle(type, side) {
+  const colors = {
+    booth: ['#34d399', '#059669'],
+    entrance: ['#fdba74', '#ea580c'],
+    toilet: ['#93c5fd', '#2563eb'],
+    tree: ['#86efac', '#16a34a'],
+    stage: ['#d8b4fe', '#9333ea'],
+    parking: ['#cbd5e1', '#64748b'],
+    text: ['#f9a8d4', '#db2777'],
+    custom: ['#d1d5db', '#6b7280'],
+    walkway: ['#e2e8f0', '#94a3b8'],
+    road: ['#cbd5e1', '#64748b'],
+    eraser: ['#fca5a5', '#dc2626'],
+  };
+  const [light, dark] = colors[type] || ['#bae6fd', '#0891b2'];
+  return { backgroundColor: side === 'right' ? dark : light };
 }
 
 function normalizeLayoutForSave(layoutDraft, fallbackRows, fallbackColumns, fallbackCellSize) {
@@ -910,6 +956,26 @@ export function VisualPlanPage({ marketId }) {
     };
   }
 
+  function buildObjectOnlyPayload() {
+    if (!layoutDraft) return null;
+    return {
+      layoutJson: {
+        ...(selectedLayout?.layoutJson || {}),
+        version: 1,
+        rows: Number(selectedLayout?.rowsCount || layoutDraft.rows),
+        columns: Number(selectedLayout?.columnsCount || layoutDraft.columns),
+        cellSize: Number(selectedLayout?.cellSize || layoutDraft.cellSize),
+        items: (layoutDraft.items || []).map((item) => ({
+          ...item,
+          row: Number(item.row || 1),
+          col: Number(item.col || 1),
+          rowSpan: Number(item.rowSpan || 1),
+          colSpan: Number(item.colSpan || 1),
+        })),
+      },
+    };
+  }
+
   function applySavedLayout(normalizedLayout, savedLayout = {}) {
     setLayoutForm((current) => ({
       ...current,
@@ -961,15 +1027,16 @@ export function VisualPlanPage({ marketId }) {
       confirmButtonText: 'เผยแพร่',
     });
     if (!confirmed) return;
-    const saveData = buildLayoutSavePayload();
-    if (saveData) {
-      const savedLayout = await mutate(`/markets/${marketId}/layouts/${selectedLayoutId}`, saveData.payload, 'PATCH');
-      applySavedLayout(saveData.normalizedLayout, savedLayout);
-    }
+    const objectPayload = buildObjectOnlyPayload();
+    if (objectPayload) await mutate(`/markets/${marketId}/layouts/${selectedLayoutId}`, objectPayload, 'PATCH');
     await mutate(`/markets/${marketId}/layouts/${selectedLayoutId}/publish`, {}, 'POST');
     await reloadLayouts();
     await reloadSelectedLayout();
-    setSelectedLayoutData((current) => ({ ...(current || selectedLayout || {}), status: 'published' }));
+    setSelectedLayoutData((current) => ({
+      ...(current || selectedLayout || {}),
+      ...(objectPayload || {}),
+      status: 'published',
+    }));
     setEditorViewMode('3d');
     setShowGridView(false);
     setEditorPan({ x: 0, y: 0 });
@@ -1399,7 +1466,7 @@ export function VisualPlanPage({ marketId }) {
                     width: `${canvasWidth}px`,
                     height: `${canvasHeight}px`,
                     transform: is3DMode
-                      ? `translate(-50%, -50%) translate(${editorPan.x}px, ${editorPan.y}px) scale(${editorZoom * interactiveMapScale})`
+                      ? `translate(-50%, -50%) translate(${editorPan.x}px, ${editorPan.y}px) scale(${editorZoom * interactiveMapScale}) rotateX(56deg) rotateZ(-32deg)`
                       : `scale(${editorZoom})`,
                     transformOrigin: is3DMode ? 'center center' : 'top left',
                     transformStyle: is3DMode ? 'preserve-3d' : undefined,
@@ -1496,7 +1563,8 @@ export function VisualPlanPage({ marketId }) {
                           setSelectedItemId(item.id);
                         }}
                         className={classNames(
-                          'absolute overflow-hidden rounded-xl border-2 px-1 py-1 text-center shadow-md transition-all',
+                          'absolute rounded-xl border-2 px-1 py-1 text-center shadow-md transition-all',
+                          is3DMode ? 'overflow-visible' : 'overflow-hidden',
                           selectedItemId === item.id ? 'ring-2 ring-amber-400 ring-offset-2 z-10' : 'hover:shadow-lg',
                           draggingItemId === item.id ? 'opacity-70' : '',
                           is3DMode ? 'shadow-xl' : '',
@@ -1506,7 +1574,25 @@ export function VisualPlanPage({ marketId }) {
                         )}
                         style={is3DMode ? buildItem3DStyle(item, canvasCellSize) : buildItemStyle(item, canvasCellSize)}
                       >
-                        <div className="flex h-full w-full flex-col items-center justify-center">
+                        {is3DMode ? (
+                          <>
+                            <span
+                              className="pointer-events-none absolute left-0 top-full h-2 w-full origin-top rounded-b-xl"
+                              style={{
+                                ...getItemDepthFaceStyle(item.type, 'bottom'),
+                                transform: 'skewX(-42deg)',
+                              }}
+                            />
+                            <span
+                              className="pointer-events-none absolute left-full top-0 h-full w-2 origin-left rounded-r-xl"
+                              style={{
+                                ...getItemDepthFaceStyle(item.type, 'right'),
+                                transform: 'skewY(-42deg)',
+                              }}
+                            />
+                          </>
+                        ) : null}
+                        <div className="relative flex h-full w-full flex-col items-center justify-center">
                           {item.type === 'booth' ? (
                             <span className="truncate text-[10px] font-extrabold leading-none">
                               {item.boothCode || item.label}
