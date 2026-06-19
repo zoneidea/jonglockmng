@@ -273,6 +273,13 @@ function buildItem3DStyle(item, cellSize) {
   };
 }
 
+function getPublishedItemClasses(type) {
+  if (type === 'booth') return 'border-blue-700 bg-blue-600 text-white';
+  if (type === 'toilet' || type === 'tree' || type === 'entrance') return 'border-cyan-400 bg-cyan-300 text-cyan-950';
+  if (type === 'parking') return 'border-slate-700 bg-slate-800 text-white';
+  return 'border-blue-500 bg-blue-500 text-white';
+}
+
 function normalizeLayoutForSave(layoutDraft, fallbackRows, fallbackColumns, fallbackCellSize) {
   const sourceItems = Array.isArray(layoutDraft?.items) ? layoutDraft.items : [];
   const cellSize = Number(layoutDraft?.cellSize || fallbackCellSize || 48);
@@ -731,6 +738,7 @@ export function VisualPlanPage({ marketId }) {
   const scaledCanvasWidth = Math.max(canvasWidth * editorZoom, 1);
   const scaledCanvasHeight = Math.max(canvasHeight * editorZoom, 1);
   const is3DMode = editorViewMode === '3d';
+  const isPublishedRender = is3DMode && selectedLayout?.status === 'published';
   const interactiveMapScale = useMemo(() => {
     const maxDimension = Math.max(canvasWidth, canvasHeight, 1);
     return Math.max(0.52, Math.min(1, 760 / maxDimension));
@@ -908,6 +916,9 @@ export function VisualPlanPage({ marketId }) {
     await reloadLayouts();
     await reloadSelectedLayout();
     setSelectedLayoutData((current) => ({ ...(current || selectedLayout || {}), status: 'published' }));
+    setEditorViewMode('3d');
+    setShowGridView(false);
+    setEditorPan({ x: 0, y: 0 });
   }
 
   async function archiveLayout() {
@@ -1305,7 +1316,9 @@ export function VisualPlanPage({ marketId }) {
                   <div className="pointer-events-none absolute left-4 top-4 z-10 rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 shadow-lg shadow-slate-200/70 backdrop-blur">
                     <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-cyan-700">Indoor Map</p>
                     <p className="mt-1 text-sm font-extrabold text-slate-950">{selectedLayout?.floorPlanName || selectedLayout?.name || 'Visual Plan'}</p>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">{layoutDraft.items.length} objects · {Math.round(editorZoom * 100)}%</p>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">
+                      {isPublishedRender ? 'Published render' : `${layoutDraft.items.length} objects`} · {Math.round(editorZoom * 100)}%
+                    </p>
                   </div>
                   <div className="pointer-events-none absolute bottom-4 left-4 z-10 rounded-2xl border border-slate-200 bg-white/95 px-4 py-2 text-xs font-bold text-slate-600 shadow-lg shadow-slate-200/70 backdrop-blur">
                     ลากพื้นที่ว่างเพื่อเลื่อนแผนผัง · ใช้ล้อเมาส์เพื่อซูม
@@ -1336,11 +1349,47 @@ export function VisualPlanPage({ marketId }) {
                       : `scale(${editorZoom})`,
                     transformOrigin: is3DMode ? 'center center' : 'top left',
                     transformStyle: is3DMode ? 'preserve-3d' : undefined,
-                    backgroundColor: is3DMode ? '#ffffff' : undefined,
+                    backgroundColor: isPublishedRender ? '#eef2f7' : is3DMode ? '#ffffff' : undefined,
                   }}
                 >
+                  {isPublishedRender ? (
+                    <div className="absolute inset-0 overflow-hidden rounded-[22px]">
+                      <div className="absolute inset-0 bg-slate-200" />
+                      <div
+                        className="absolute left-0 right-0 bg-white shadow-sm"
+                        style={{
+                          top: `${Math.max(canvasHeight * 0.42, canvasCellSize)}px`,
+                          height: `${Math.max(canvasCellSize * 2.4, 88)}px`,
+                        }}
+                      />
+                      <div
+                        className="absolute bottom-0 top-0 bg-white shadow-sm"
+                        style={{
+                          left: `${Math.max(canvasWidth * 0.44, canvasCellSize)}px`,
+                          width: `${Math.max(canvasCellSize * 2.2, 80)}px`,
+                        }}
+                      />
+                      <div
+                        className="absolute -left-10 bg-white shadow-sm"
+                        style={{
+                          top: `${Math.max(canvasHeight * 0.68, canvasCellSize)}px`,
+                          width: `${canvasWidth + 80}px`,
+                          height: `${Math.max(canvasCellSize * 1.35, 48)}px`,
+                          transform: 'rotate(-18deg)',
+                        }}
+                      />
+                      <div
+                        className="absolute inset-0 opacity-60"
+                        style={{
+                          backgroundImage: 'linear-gradient(135deg, rgba(148, 163, 184, 0.28) 1px, transparent 1px)',
+                          backgroundSize: `${canvasCellSize * 2}px ${canvasCellSize * 2}px`,
+                        }}
+                      />
+                    </div>
+                  ) : null}
+
                   {/* Grid Background */}
-                  {showGridView && (
+                  {showGridView && !isPublishedRender && (
                   <div
                     className="absolute inset-0"
                     style={{
@@ -1407,9 +1456,9 @@ export function VisualPlanPage({ marketId }) {
                           selectedItemId === item.id ? 'ring-2 ring-amber-400 ring-offset-2 z-10' : 'hover:shadow-lg',
                           draggingItemId === item.id ? 'opacity-70' : '',
                           is3DMode ? 'shadow-xl' : '',
-                          def.borderColor,
-                          def.bgColor,
-                          def.textColor
+                          isPublishedRender ? getPublishedItemClasses(item.type) : def.borderColor,
+                          isPublishedRender ? '' : def.bgColor,
+                          isPublishedRender ? '' : def.textColor,
                         )}
                         style={is3DMode ? buildItem3DStyle(item, canvasCellSize) : buildItemStyle(item, canvasCellSize)}
                       >
