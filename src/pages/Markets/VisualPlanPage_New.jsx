@@ -274,10 +274,10 @@ function buildItem3DStyle(item, cellSize) {
 }
 
 function getPublishedItemClasses(type) {
-  if (type === 'booth') return 'border-blue-700 bg-blue-600 text-white';
-  if (type === 'toilet' || type === 'tree' || type === 'entrance') return 'border-cyan-400 bg-cyan-300 text-cyan-950';
-  if (type === 'parking') return 'border-slate-700 bg-slate-800 text-white';
-  return 'border-blue-500 bg-blue-500 text-white';
+  if (type === 'booth') return 'border-emerald-300 bg-emerald-100 text-emerald-900';
+  if (type === 'toilet' || type === 'tree' || type === 'entrance') return 'border-cyan-300 bg-cyan-100 text-cyan-900';
+  if (type === 'parking') return 'border-slate-300 bg-slate-100 text-slate-700';
+  return 'border-cyan-300 bg-cyan-100 text-cyan-900';
 }
 
 function normalizeLayoutForSave(layoutDraft, fallbackRows, fallbackColumns, fallbackCellSize) {
@@ -743,6 +743,35 @@ export function VisualPlanPage({ marketId }) {
     const maxDimension = Math.max(canvasWidth, canvasHeight, 1);
     return Math.max(0.52, Math.min(1, 760 / maxDimension));
   }, [canvasHeight, canvasWidth]);
+  const publishedCutoutStyle = useMemo(() => {
+    if (!canvasWidth || !canvasHeight) return {};
+    const floorColor = '#f8fafc';
+    const cutColor = '#94a3b8';
+    const leftWing = Math.min(Math.max(canvasWidth * 0.22, canvasCellSize * 2), canvasWidth * 0.38);
+    const rightWing = Math.max(canvasWidth * 0.66, canvasWidth - (canvasCellSize * 4));
+    const topDepth = Math.min(Math.max(canvasHeight * 0.22, canvasCellSize * 2), canvasHeight * 0.36);
+    const lowerCutTop = Math.max(canvasHeight * 0.72, canvasHeight - (canvasCellSize * 3));
+    const lowerCutLeft = Math.min(Math.max(canvasWidth * 0.62, canvasCellSize * 4), canvasWidth - canvasCellSize);
+    return {
+      backgroundColor: floorColor,
+      backgroundImage: [
+        `linear-gradient(${cutColor}, ${cutColor})`,
+        `linear-gradient(${cutColor}, ${cutColor})`,
+        `linear-gradient(${cutColor}, ${cutColor})`,
+      ].join(', '),
+      backgroundPosition: [
+        '0 0',
+        `${rightWing}px 0`,
+        `${lowerCutLeft}px ${lowerCutTop}px`,
+      ].join(', '),
+      backgroundSize: [
+        `${leftWing}px ${topDepth}px`,
+        `${Math.max(canvasWidth - rightWing, 0)}px ${Math.max(canvasHeight, 0)}px`,
+        `${Math.max(canvasWidth - lowerCutLeft, 0)}px ${Math.max(canvasHeight - lowerCutTop, 0)}px`,
+      ].join(', '),
+      backgroundRepeat: 'no-repeat',
+    };
+  }, [canvasCellSize, canvasHeight, canvasWidth]);
 
   const previewLayout = useMemo(() => {
     if (!layoutDraft) return null;
@@ -1349,40 +1378,36 @@ export function VisualPlanPage({ marketId }) {
                       : `scale(${editorZoom})`,
                     transformOrigin: is3DMode ? 'center center' : 'top left',
                     transformStyle: is3DMode ? 'preserve-3d' : undefined,
-                    backgroundColor: isPublishedRender ? '#eef2f7' : is3DMode ? '#ffffff' : undefined,
+                    ...(isPublishedRender ? publishedCutoutStyle : { backgroundColor: is3DMode ? '#ffffff' : undefined }),
                   }}
                 >
                   {isPublishedRender ? (
-                    <div className="absolute inset-0 overflow-hidden rounded-[22px]">
-                      <div className="absolute inset-0 bg-slate-200" />
+                    <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[22px]">
                       <div
-                        className="absolute left-0 right-0 bg-white shadow-sm"
+                        className="absolute bg-white/70"
                         style={{
-                          top: `${Math.max(canvasHeight * 0.42, canvasCellSize)}px`,
-                          height: `${Math.max(canvasCellSize * 2.4, 88)}px`,
+                          left: `${canvasCellSize}px`,
+                          top: `${Math.max(canvasHeight * 0.28, canvasCellSize)}px`,
+                          width: `${Math.max(canvasWidth * 0.58, canvasCellSize * 4)}px`,
+                          height: `${Math.max(canvasCellSize * 1.25, 40)}px`,
                         }}
                       />
                       <div
-                        className="absolute bottom-0 top-0 bg-white shadow-sm"
+                        className="absolute bg-white/70"
                         style={{
-                          left: `${Math.max(canvasWidth * 0.44, canvasCellSize)}px`,
-                          width: `${Math.max(canvasCellSize * 2.2, 80)}px`,
+                          left: `${Math.max(canvasWidth * 0.28, canvasCellSize)}px`,
+                          top: `${Math.max(canvasHeight * 0.46, canvasCellSize)}px`,
+                          width: `${Math.max(canvasCellSize * 2, 72)}px`,
+                          height: `${Math.max(canvasHeight * 0.26, canvasCellSize * 3)}px`,
                         }}
                       />
                       <div
-                        className="absolute -left-10 bg-white shadow-sm"
+                        className="absolute bg-white/70"
                         style={{
-                          top: `${Math.max(canvasHeight * 0.68, canvasCellSize)}px`,
-                          width: `${canvasWidth + 80}px`,
-                          height: `${Math.max(canvasCellSize * 1.35, 48)}px`,
-                          transform: 'rotate(-18deg)',
-                        }}
-                      />
-                      <div
-                        className="absolute inset-0 opacity-60"
-                        style={{
-                          backgroundImage: 'linear-gradient(135deg, rgba(148, 163, 184, 0.28) 1px, transparent 1px)',
-                          backgroundSize: `${canvasCellSize * 2}px ${canvasCellSize * 2}px`,
+                          bottom: `${canvasCellSize}px`,
+                          left: `${canvasCellSize}px`,
+                          width: `${Math.max(canvasWidth * 0.5, canvasCellSize * 5)}px`,
+                          height: `${Math.max(canvasCellSize * 1.45, 48)}px`,
                         }}
                       />
                     </div>
@@ -1428,7 +1453,10 @@ export function VisualPlanPage({ marketId }) {
                           }}
                           onDragOver={(event) => event.preventDefault()}
                           onDrop={(event) => handleGridDrop(event, row, col)}
-                          className="h-full min-h-[28px] border border-transparent transition hover:bg-cyan-50/50"
+                          className={classNames(
+                            'h-full min-h-[28px] border border-transparent transition',
+                            isPublishedRender ? 'bg-transparent hover:bg-cyan-100/30' : 'hover:bg-cyan-50/50',
+                          )}
                           aria-label={`วาง object ที่ row ${row} col ${col}`}
                         />
                       );
