@@ -627,7 +627,13 @@ export function VisualPlanPage({ marketId }) {
     marketId ? `/markets/${marketId}/booths` : null,
     { initialData: [] }
   );
-  const { data: selectedLayoutData, loading: selectedLayoutLoading, error: selectedLayoutError } = useApi(
+  const {
+    data: selectedLayoutData,
+    loading: selectedLayoutLoading,
+    error: selectedLayoutError,
+    reload: reloadSelectedLayout,
+    setData: setSelectedLayoutData,
+  } = useApi(
     marketId && selectedLayoutId && viewMode === 'editor' ? `/markets/${marketId}/layouts/${selectedLayoutId}` : null,
     { initialData: null, skip: !marketId || !selectedLayoutId || viewMode !== 'editor' },
   );
@@ -815,7 +821,7 @@ export function VisualPlanPage({ marketId }) {
     updateEditorZoom(editorZoom + direction);
   }
 
-  async function saveLayout() {
+  function buildLayoutSavePayload() {
     if (!selectedLayoutId || !layoutDraft) return;
     const normalizedLayout = normalizeLayoutForSave(
       layoutDraft,
@@ -823,7 +829,9 @@ export function VisualPlanPage({ marketId }) {
       layoutForm.columnsCount,
       layoutForm.cellSize,
     );
-    await mutate(`/markets/${marketId}/layouts/${selectedLayoutId}`, {
+    return {
+      normalizedLayout,
+      payload: {
       name: layoutForm.name,
       description: layoutForm.description,
       rowsCount: normalizedLayout.rows,
@@ -836,7 +844,11 @@ export function VisualPlanPage({ marketId }) {
         cellSize: normalizedLayout.cellSize,
         items: normalizedLayout.items,
       },
-    }, 'PATCH');
+      },
+    };
+  }
+
+  function applySavedLayout(normalizedLayout, savedLayout = {}) {
     setLayoutForm((current) => ({
       ...current,
       rowsCount: String(normalizedLayout.rows),
@@ -850,7 +862,32 @@ export function VisualPlanPage({ marketId }) {
       cellSize: normalizedLayout.cellSize,
       items: normalizedLayout.items,
     });
+    setSelectedLayoutData((current) => ({
+      ...(current || selectedLayout || {}),
+      ...savedLayout,
+      name: savedLayout.name ?? layoutForm.name,
+      description: savedLayout.description ?? layoutForm.description,
+      rowsCount: savedLayout.rowsCount ?? normalizedLayout.rows,
+      columnsCount: savedLayout.columnsCount ?? normalizedLayout.columns,
+      cellSize: savedLayout.cellSize ?? normalizedLayout.cellSize,
+      layoutJson: savedLayout.layoutJson ?? {
+        version: 1,
+        rows: normalizedLayout.rows,
+        columns: normalizedLayout.columns,
+        cellSize: normalizedLayout.cellSize,
+        items: normalizedLayout.items,
+      },
+    }));
+    setViewMode('editor');
+  }
+
+  async function saveLayout() {
+    const saveData = buildLayoutSavePayload();
+    if (!saveData) return;
+    const savedLayout = await mutate(`/markets/${marketId}/layouts/${selectedLayoutId}`, saveData.payload, 'PATCH');
+    applySavedLayout(saveData.normalizedLayout, savedLayout);
     await reloadLayouts();
+    await reloadSelectedLayout();
     await showAlert({ title: 'บันทึกแล้ว', text: 'อัปเดต Visual Plan เรียบร้อย', icon: 'success' });
   }
 
@@ -862,8 +899,15 @@ export function VisualPlanPage({ marketId }) {
       confirmButtonText: 'เผยแพร่',
     });
     if (!confirmed) return;
+    const saveData = buildLayoutSavePayload();
+    if (saveData) {
+      const savedLayout = await mutate(`/markets/${marketId}/layouts/${selectedLayoutId}`, saveData.payload, 'PATCH');
+      applySavedLayout(saveData.normalizedLayout, savedLayout);
+    }
     await mutate(`/markets/${marketId}/layouts/${selectedLayoutId}/publish`, {}, 'POST');
     await reloadLayouts();
+    await reloadSelectedLayout();
+    setSelectedLayoutData((current) => ({ ...(current || selectedLayout || {}), status: 'published' }));
   }
 
   async function archiveLayout() {

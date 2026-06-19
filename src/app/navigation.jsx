@@ -23,9 +23,9 @@ export const menu = [
     children: [
       { path: '/markets', label: 'รายชื่อตลาด' },
       { path: '/market-info', label: 'ข้อมูลทั่วไป' },
-      { path: '/booth-types', label: 'แผนผังบูธ' },
-      { path: '/visual-plan', label: 'แผนผังตลาด' },
+      { path: '/booth-types', label: 'แผนผัง' },
       { path: '/booths', label: 'จัดการบูธ' },
+      { path: '/visual-plan', label: 'แผนผังเสมือนจริง' },
       { path: '/holiday-calendar', label: 'ปฏิทินวันหยุด' },
       { path: '/market-images', label: 'จัดการรูปภาพตลาด' },
       { path: '/accessories', label: 'จัดการบริการเสริม' },
