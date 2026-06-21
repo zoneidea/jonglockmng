@@ -23,11 +23,11 @@ import { useApi, useMutation } from '../../hooks/useApi.js';
 import { showAlert, showConfirm } from '../../utils/alerts.js';
 import { classNames, formatMoney, normalizeRows } from '../../utils/formatters.js';
 
-function RestroomPairIcon({ className = '' }) {
+function RestroomPairIcon({ className = '', ...props }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="8" cy="4.5" r="2" stroke="currentColor" strokeWidth="2" />
-      <circle cx="16" cy="4.5" r="2" stroke="currentColor" strokeWidth="2" />
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
+      <circle cx="8" cy="4.5" r="2" fill="currentColor" />
+      <circle cx="16" cy="4.5" r="2" fill="currentColor" />
       <path d="M8 8v11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       <path d="M5.5 12.5 8 8l2.5 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M6 20h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -49,11 +49,11 @@ const VISUAL_PLAN_OBJECTS = [
     rowSpan: 1, 
     colSpan: 1,
     icon: LayoutGrid,
-    color: 'emerald',
-    bgColor: 'bg-emerald-100',
-    borderColor: 'border-emerald-300',
-    textColor: 'text-emerald-900',
-    iconColor: 'text-emerald-600'
+    color: 'cyan',
+    bgColor: 'bg-cyan-100',
+    borderColor: 'border-cyan-300',
+    textColor: 'text-cyan-950',
+    iconColor: 'text-cyan-700'
   },
   { 
     type: 'entrance', 
@@ -203,8 +203,8 @@ function getObjectDefinition(type) {
 function getPaletteButtonClasses(type, active) {
   const classes = {
     booth: active
-      ? 'border-emerald-600 bg-emerald-600 text-white shadow-md'
-      : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50',
+      ? 'border-cyan-600 bg-cyan-600 text-white shadow-md'
+      : 'border-slate-200 bg-white text-slate-700 hover:border-cyan-200 hover:bg-cyan-50',
     entrance: active
       ? 'border-orange-600 bg-orange-600 text-white shadow-md'
       : 'border-slate-200 bg-white text-slate-700 hover:border-orange-200 hover:bg-orange-50',
@@ -278,15 +278,15 @@ function buildItemStyle(item, cellSize) {
 }
 
 const ISO_ITEM_COLORS = {
-  booth: { top: '#d1fae5', stroke: '#6ee7b7', front: '#34d399', side: '#059669', text: '#064e3b' },
-  entrance: { top: '#ffedd5', stroke: '#fdba74', front: '#fb923c', side: '#ea580c', text: '#c2410c' },
-  toilet: { top: '#dbeafe', stroke: '#93c5fd', front: '#60a5fa', side: '#2563eb', text: '#1d4ed8' },
-  tree: { top: '#dcfce7', stroke: '#86efac', front: '#4ade80', side: '#16a34a', text: '#166534' },
-  stage: { top: '#f3e8ff', stroke: '#d8b4fe', front: '#c084fc', side: '#9333ea', text: '#6b21a8' },
-  parking: { top: '#e2e8f0', stroke: '#94a3b8', front: '#cbd5e1', side: '#64748b', text: '#334155' },
-  text: { top: '#fce7f3', stroke: '#f9a8d4', front: '#f472b6', side: '#db2777', text: '#9d174d' },
-  custom: { top: '#f3f4f6', stroke: '#d1d5db', front: '#d1d5db', side: '#6b7280', text: '#374151' },
-  eraser: { top: '#fee2e2', stroke: '#fca5a5', front: '#f87171', side: '#dc2626', text: '#991b1b' },
+  booth: { top: '#cffafe', stroke: '#67e8f9', front: '#22d3ee', side: '#0891b2', text: '#164e63', icon: '#0891b2' },
+  entrance: { top: '#ffedd5', stroke: '#fdba74', front: '#fb923c', side: '#ea580c', text: '#c2410c', icon: '#ea580c' },
+  toilet: { top: '#dbeafe', stroke: '#93c5fd', front: '#60a5fa', side: '#2563eb', text: '#1d4ed8', icon: '#2563eb' },
+  tree: { top: '#dcfce7', stroke: '#86efac', front: '#4ade80', side: '#16a34a', text: '#166534', icon: '#15803d' },
+  stage: { top: '#f3e8ff', stroke: '#d8b4fe', front: '#c084fc', side: '#9333ea', text: '#6b21a8', icon: '#9333ea' },
+  parking: { top: '#e2e8f0', stroke: '#94a3b8', front: '#cbd5e1', side: '#64748b', text: '#334155', icon: '#475569' },
+  text: { top: '#fce7f3', stroke: '#f9a8d4', front: '#f472b6', side: '#db2777', text: '#9d174d', icon: '#db2777' },
+  custom: { top: '#f3f4f6', stroke: '#d1d5db', front: '#d1d5db', side: '#6b7280', text: '#374151', icon: '#4b5563' },
+  eraser: { top: '#fee2e2', stroke: '#fca5a5', front: '#f87171', side: '#dc2626', text: '#991b1b', icon: '#dc2626' },
 };
 
 function pointString(points) {
@@ -1409,6 +1409,7 @@ export function VisualPlanPage({ marketId }) {
           const def = getObjectDefinition(item.type);
           const IconComponent = def.icon;
           const iconSize = Math.max(16, Math.min(22, canvasCellSize * 0.5));
+          const isBooth = item.type === 'booth';
 
           return (
             <g
@@ -1431,15 +1432,20 @@ export function VisualPlanPage({ marketId }) {
                 }
               }}
             >
-              <polygon points={pointString(frontPoints)} fill={colors.front} stroke={colors.side} strokeWidth="0.8" />
-              <polygon points={pointString(sidePoints)} fill={colors.side} stroke={colors.side} strokeWidth="0.8" />
+              {isBooth ? (
+                <>
+                  <polygon points={pointString(frontPoints)} fill={colors.front} stroke={colors.side} strokeWidth="0.8" />
+                  <polygon points={pointString(sidePoints)} fill={colors.side} stroke={colors.side} strokeWidth="0.8" />
+                </>
+              ) : null}
               <polygon
                 points={pointString(topPoints)}
                 fill={colors.top}
+                fillOpacity={isBooth ? '1' : '0.16'}
                 stroke={selected ? '#f59e0b' : colors.stroke}
-                strokeWidth={selected ? '2.8' : '1.6'}
+                strokeWidth={selected ? '2.2' : (isBooth ? '1.6' : '1')}
               />
-              {item.type === 'booth' ? (
+              {isBooth ? (
                 <text
                   x={center.x}
                   y={center.y + 2}
@@ -1466,9 +1472,9 @@ export function VisualPlanPage({ marketId }) {
                   <div
                     xmlns="http://www.w3.org/1999/xhtml"
                     className="flex h-full w-full items-center justify-center"
-                    style={{ color: colors.text }}
+                    style={{ color: colors.icon }}
                   >
-                    <IconComponent className="h-full w-full drop-shadow-[0_1px_0_rgba(255,255,255,0.9)]" />
+                    <IconComponent className="h-full w-full drop-shadow-[0_1px_0_rgba(255,255,255,0.9)]" strokeWidth={3} />
                   </div>
                 </foreignObject>
               )}
