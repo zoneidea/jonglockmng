@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { 
   Plus, Save, Trash2, Eye, Send, Grid3X3, LayoutGrid, DoorOpen, 
-  Toilet, TreePine, Presentation, Car, Type, Box, Eraser, 
+  TreePine, Presentation, Car, Type, Box, Eraser,
   MoreVertical, ZoomIn, ZoomOut, Monitor
 } from 'lucide-react';
 import { Card } from '../../components/Card.jsx';
@@ -22,6 +22,21 @@ import {
 import { useApi, useMutation } from '../../hooks/useApi.js';
 import { showAlert, showConfirm } from '../../utils/alerts.js';
 import { classNames, formatMoney, normalizeRows } from '../../utils/formatters.js';
+
+function RestroomPairIcon({ className = '' }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="8" cy="4.5" r="2" stroke="currentColor" strokeWidth="2" />
+      <circle cx="16" cy="4.5" r="2" stroke="currentColor" strokeWidth="2" />
+      <path d="M8 8v11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M5.5 12.5 8 8l2.5 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6 20h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M16 8v11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M13.5 8h5l-1.2 6.5h-2.6L13.5 8Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+      <path d="M14 20h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 // ============================================================================
 // OBJECT DEFINITIONS WITH ICONS AND COLORS
@@ -59,7 +74,7 @@ const VISUAL_PLAN_OBJECTS = [
     description: 'ห้องน้ำ / สุขา',
     rowSpan: 1, 
     colSpan: 1,
-    icon: Toilet,
+    icon: RestroomPairIcon,
     color: 'blue',
     bgColor: 'bg-blue-100',
     borderColor: 'border-blue-300',
@@ -130,32 +145,6 @@ const VISUAL_PLAN_OBJECTS = [
     borderColor: 'border-gray-300',
     textColor: 'text-gray-900',
     iconColor: 'text-gray-600'
-  },
-  {
-    type: 'walkway',
-    label: 'ทางเดิน',
-    description: 'พื้นที่ทางเดินภายในแผนผัง',
-    rowSpan: 1,
-    colSpan: 4,
-    icon: Grid3X3,
-    color: 'slate',
-    bgColor: 'bg-slate-50',
-    borderColor: 'border-slate-300',
-    textColor: 'text-slate-700',
-    iconColor: 'text-slate-500'
-  },
-  {
-    type: 'road',
-    label: 'ถนน',
-    description: 'ถนนหรือทางรถผ่าน',
-    rowSpan: 2,
-    colSpan: 5,
-    icon: Car,
-    color: 'slate',
-    bgColor: 'bg-slate-200',
-    borderColor: 'border-slate-400',
-    textColor: 'text-slate-800',
-    iconColor: 'text-slate-600'
   },
   {
     type: 'eraser', 
@@ -237,12 +226,6 @@ function getPaletteButtonClasses(type, active) {
     custom: active
       ? 'border-gray-600 bg-gray-600 text-white shadow-md'
       : 'border-slate-200 bg-white text-slate-700 hover:border-gray-300 hover:bg-gray-50',
-    walkway: active
-      ? 'border-slate-600 bg-slate-600 text-white shadow-md'
-      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
-    road: active
-      ? 'border-slate-700 bg-slate-700 text-white shadow-md'
-      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50',
     eraser: active
       ? 'border-red-600 bg-red-600 text-white shadow-md'
       : 'border-slate-200 bg-white text-slate-700 hover:border-red-200 hover:bg-red-50',
@@ -303,8 +286,6 @@ const ISO_ITEM_COLORS = {
   parking: { top: '#e2e8f0', stroke: '#94a3b8', front: '#cbd5e1', side: '#64748b', text: '#334155' },
   text: { top: '#fce7f3', stroke: '#f9a8d4', front: '#f472b6', side: '#db2777', text: '#9d174d' },
   custom: { top: '#f3f4f6', stroke: '#d1d5db', front: '#d1d5db', side: '#6b7280', text: '#374151' },
-  walkway: { top: '#f8fafc', stroke: '#cbd5e1', front: '#e2e8f0', side: '#94a3b8', text: '#475569' },
-  road: { top: '#e2e8f0', stroke: '#94a3b8', front: '#cbd5e1', side: '#64748b', text: '#334155' },
   eraser: { top: '#fee2e2', stroke: '#fca5a5', front: '#f87171', side: '#dc2626', text: '#991b1b' },
 };
 
@@ -317,8 +298,6 @@ function getIsoItemColors(type) {
 }
 
 function getIsoItemHeight(type) {
-  if (type === 'walkway') return 5;
-  if (type === 'road') return 7;
   if (type === 'booth') return 11;
   return 14;
 }
@@ -1427,6 +1406,9 @@ export function VisualPlanPage({ marketId }) {
           };
           const selected = selectedItemId === item.id;
           const fontSize = Math.max(9, Math.min(12, canvasCellSize * 0.28));
+          const def = getObjectDefinition(item.type);
+          const IconComponent = def.icon;
+          const iconSize = Math.max(16, Math.min(22, canvasCellSize * 0.5));
 
           return (
             <g
@@ -1457,21 +1439,39 @@ export function VisualPlanPage({ marketId }) {
                 stroke={selected ? '#f59e0b' : colors.stroke}
                 strokeWidth={selected ? '2.8' : '1.6'}
               />
-              <text
-                x={center.x}
-                y={center.y + 2}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                fill={colors.text}
-                stroke="#ffffff"
-                strokeWidth="2.5"
-                paintOrder="stroke"
-                fontSize={fontSize}
-                fontWeight="800"
-                className="pointer-events-none"
-              >
-                {getIsoItemLabel(item)}
-              </text>
+              {item.type === 'booth' ? (
+                <text
+                  x={center.x}
+                  y={center.y + 2}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fill={colors.text}
+                  stroke="#ffffff"
+                  strokeWidth="2.5"
+                  paintOrder="stroke"
+                  fontSize={fontSize}
+                  fontWeight="800"
+                  className="pointer-events-none"
+                >
+                  {getIsoItemLabel(item)}
+                </text>
+              ) : (
+                <foreignObject
+                  x={center.x - (iconSize / 2)}
+                  y={center.y - (iconSize / 2)}
+                  width={iconSize}
+                  height={iconSize}
+                  className="pointer-events-none overflow-visible"
+                >
+                  <div
+                    xmlns="http://www.w3.org/1999/xhtml"
+                    className="flex h-full w-full items-center justify-center"
+                    style={{ color: colors.text }}
+                  >
+                    <IconComponent className="h-full w-full drop-shadow-[0_1px_0_rgba(255,255,255,0.9)]" />
+                  </div>
+                </foreignObject>
+              )}
             </g>
           );
         })}
@@ -1844,21 +1844,21 @@ export function VisualPlanPage({ marketId }) {
               </div>
               <div className="mt-3 max-h-[360px] overflow-y-auto pr-1">
                 {unplacedBooths.length ? (
-                  <div className="grid grid-cols-4 gap-1.5">
+                  <div className="grid grid-cols-5 gap-1">
                     {unplacedBooths.map((booth) => (
                       <button
                         key={booth.id}
                         type="button"
                         onClick={() => setSelectedBoothId(String(booth.id))}
                         className={classNames(
-                          'relative min-h-14 rounded-lg border-2 border-dashed p-1.5 text-center shadow-sm transition',
+                          'relative min-h-11 rounded-lg border-2 border-dashed p-1 text-center shadow-sm transition',
                           String(selectedBoothId) === String(booth.id)
                             ? 'border-amber-300 bg-amber-500 text-white'
                             : 'border-cyan-200 bg-cyan-600 text-white hover:bg-cyan-700'
                         )}
                       >
                         <div className="flex h-full w-full flex-col items-center justify-center">
-                          <span className="max-w-full truncate text-xs font-extrabold">
+                          <span className="max-w-full truncate text-[11px] font-extrabold leading-none">
                             {booth.code || booth.name || booth.id}
                           </span>
                         </div>
