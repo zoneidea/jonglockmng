@@ -53,3 +53,30 @@ export async function showConfirm({
 
   return result.isConfirmed;
 }
+
+export async function showSelect({
+  title = 'เลือกข้อมูล',
+  text = '',
+  inputOptions = {},
+  inputPlaceholder = 'กรุณาเลือก',
+  confirmButtonText = 'ยืนยัน',
+  cancelButtonText = 'ยกเลิก',
+  ...options
+} = {}) {
+  const result = await Swal.fire({
+    ...baseOptions,
+    title,
+    text,
+    input: 'select',
+    inputOptions,
+    inputPlaceholder,
+    inputValidator: (value) => (value ? undefined : 'กรุณาเลือกประเภทสินค้า'),
+    showCancelButton: true,
+    confirmButtonText,
+    cancelButtonText,
+    reverseButtons: true,
+    ...options,
+  });
+
+  return result.isConfirmed ? result.value : null;
+}

@@ -7,12 +7,13 @@ import { EmptyState } from '../../components/EmptyState.jsx';
 import { LoadingBlock } from '../../components/LoadingBlock.jsx';
 import { PageHeader } from '../../components/PageHeader.jsx';
 import { StatusBadge } from '../../components/StatusBadge.jsx';
+import { BookingImportPanel } from '../../features/bookings/BookingImportPanel.jsx';
 import { downloadBookingImportTemplate } from '../../features/bookings/bookingImport.js';
 import { useApi, useMutation } from '../../hooks/useApi.js';
 import { useAuth } from '../../state/auth.jsx';
 import { classNames, formatDate, formatMoney, normalizeRows } from '../../utils/formatters.js';
 import { boothAvailabilityLabel, toDateInputValue } from '../../utils/management.js';
-import { showConfirm } from '../../utils/alerts.js';
+import { showConfirm, showSelect } from '../../utils/alerts.js';
 import { BoothBox, DatePicker, DatePickerBare, ErrorNotice, FormPanel, Label, Modal, NeedMarket, RichTextEditor, SelectInput, SmallButton, TextInput, TextInputBare } from '../../components/ManagementUi.jsx';
 
 export function PaymentProofReviewPage() {
@@ -311,6 +312,8 @@ export function BookingsPage({ marketId, mode }) {
   const [editForm, setEditForm] = useState({ bookingDate: today, boothId: '', productId: '' });
   const [localError, setLocalError] = useState('');
   const [importing, setImporting] = useState(false);
+  const [confirmingImport, setConfirmingImport] = useState(false);
+  const [importFile, setImportFile] = useState(null);
   const [importResult, setImportResult] = useState(null);
   const { data: editItems = [], loading: editLoading, reload: reloadEditItems } = useApi(marketId && mode === 'edit' ? `/markets/${marketId}/booking-items?bookingDate=${editDate}` : null, { initialData: [] });
   const { data: editLogs = [], loading: editLogsLoading, reload: reloadEditLogs } = useApi(marketId && mode === 'history' ? `/markets/${marketId}/booking-edit-logs?limit=500` : null, { initialData: [] });
@@ -417,18 +420,77 @@ export function BookingsPage({ marketId, mode }) {
     setImporting(true);
     setLocalError('');
     setImportResult(null);
+    setImportFile(file);
     try {
       const body = new FormData();
       body.append('file', file);
+      body.append('action', 'preview');
       const payload = await request(`/markets/${marketId}/bookings/import`, { method: 'POST', body, token });
       setImportResult(payload.data);
-      reload();
-      reloadAvailability();
     } catch (importError) {
+      setImportFile(null);
       setLocalError(importError.message || 'Import file ไม่สำเร็จ');
     } finally {
       setImporting(false);
     }
+  }
+
+  async function confirmBookingImport() {
+    if (!importFile || importResult?.mode !== 'preview') return;
+    const missingProducts = normalizeRows(importResult.missingProducts);
+    let createMissingProducts = false;
+    const productCategories = {};
+    if (missingProducts.length) {
+      const confirmed = await showConfirm({
+        title: 'พบสินค้าที่ยังไม่มีในระบบ',
+        text: `ต้องการสร้าง ${missingProducts.length} สินค้าก่อนบันทึกการจองหรือไม่?`,
+        confirmButtonText: 'สร้างสินค้าและนำเข้า',
+      });
+      if (!confirmed) return;
+      createMissingProducts = true;
+      const availableCategories = normalizeRows(importResult.availableCategories);
+      for (const product of missingProducts.filter((item) => !item.categoryId)) {
+        const categoryId = await showSelect({
+          title: `เลือกประเภทสินค้า: ${product.name}`,
+          text: 'บูธในไฟล์ไม่ได้กำหนดประเภทสินค้า กรุณาเลือกประเภทสำหรับสินค้าที่จะสร้าง',
+          inputOptions: Object.fromEntries(availableCategories.map((category) => [String(category.id), category.name])),
+          inputPlaceholder: 'เลือกประเภทสินค้า',
+          confirmButtonText: 'ใช้ประเภทนี้',
+        });
+        if (!categoryId) return;
+        productCategories[`${String(product.name).toLowerCase()}::unassigned`] = Number(categoryId);
+      }
+    } else {
+      const confirmed = await showConfirm({
+        title: 'ยืนยันการนำเข้าไฟล์',
+        text: `ระบบจะสร้างรายการจองจากข้อมูล ${importResult.totalRows || 0} row`,
+        confirmButtonText: 'ยืนยันนำเข้า',
+      });
+      if (!confirmed) return;
+    }
+
+    setConfirmingImport(true);
+    setLocalError('');
+    try {
+      const body = new FormData();
+      body.append('file', importFile);
+      body.append('action', 'confirm');
+      body.append('createMissingProducts', String(createMissingProducts));
+      body.append('productCategories', JSON.stringify(productCategories));
+      const payload = await request(`/markets/${marketId}/bookings/import`, { method: 'POST', body, token });
+      setImportResult(payload.data);
+      setImportFile(null);
+      await Promise.all([reload(), reloadAvailability()]);
+    } catch (importError) {
+      setLocalError(importError.message || 'ยืนยัน Import file ไม่สำเร็จ');
+    } finally {
+      setConfirmingImport(false);
+    }
+  }
+
+  function closeImportResult() {
+    setImportResult(null);
+    setImportFile(null);
   }
 
   if (mode === 'history') {
@@ -559,37 +621,12 @@ export function BookingsPage({ marketId, mode }) {
       />
       <div className="grid gap-6">
         <ErrorNotice error={localError || error} />
-        {importResult ? (
-          <Card className="space-y-4">
-            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="text-lg font-extrabold text-slate-950">ผลการ Import Excel</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  {`ทั้งหมด ${importResult.totalRows || 0} row, สำเร็จ ${importResult.successCount || 0} ใบจอง, error ${importResult.errorCount || 0} row`}
-                </p>
-              </div>
-              <button type="button" onClick={() => setImportResult(null)} className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-bold text-slate-600">ปิดผลลัพธ์</button>
-            </div>
-            {importResult.successes?.length ? (
-              <DataTable
-                columns={['ลูกค้า', 'เลขที่ใบจอง', 'จำนวนรายการ', 'ยอดรวม', 'แจ้งเตือน']}
-                rows={importResult.successes.map((item) => [
-                  item.customerIdentifier,
-                  item.publicId,
-                  item.itemCount,
-                  formatMoney(item.totalAmount),
-                  item.notificationQueued ? 'บันทึกแจ้งเตือนแล้ว' : '-',
-                ])}
-              />
-            ) : null}
-            {importResult.errors?.length ? (
-              <DataTable
-                columns={['Row', 'ลูกค้า', 'สาเหตุ']}
-                rows={importResult.errors.map((item) => [item.rowNumber, item.customerIdentifier || '-', item.message])}
-              />
-            ) : null}
-          </Card>
-        ) : null}
+        <BookingImportPanel
+          result={importResult}
+          confirming={confirmingImport}
+          onConfirm={confirmBookingImport}
+          onClose={closeImportResult}
+        />
         <Card>{loading ? <LoadingBlock /> : <DataTable columns={['เลขที่', 'วันที่จอง', 'Booth', 'สถานะ', 'ยอดรวม', 'แหล่งที่มา', 'จำนวนรายการ', 'วันที่ทำรายการ', 'จัดการ']} rows={rows.map((booking) => [booking.public_id, booking.booking_dates || '-', booking.booths || '-', <StatusBadge value={booking.status} />, formatMoney(booking.total_amount), booking.source, booking.item_count, formatDate(booking.created_at), booking.status === 'pending_payment' ? <SmallButton tone="red" onClick={() => deletePendingBooking(booking)}>ลบ</SmallButton> : '-'])} />}</Card>
         <Modal open={modalOpen} title="สร้างการจองแทนลูกค้า" onClose={() => setModalOpen(false)}>
         <FormPanel onSubmit={submit} loading={saving} error={localError || error || availabilityError}>
