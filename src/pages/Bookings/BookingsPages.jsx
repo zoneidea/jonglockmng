@@ -127,17 +127,6 @@ function validateTenantForm(form, mode = 'create') {
   return '';
 }
 
-function validateAdminForm(form, options = {}) {
-  const requireUsername = options.requireUsername !== false;
-  const requirePassword = options.requirePassword !== false;
-  if (requireUsername && (!form.username || form.username.trim().length < 3)) return 'Username ต้องมีอย่างน้อย 3 ตัวอักษร';
-  if (requirePassword && !isStrongPassword(form.password)) return 'Password ต้องมีอย่างน้อย 10 ตัวอักษร และมีตัวพิมพ์ใหญ่ ตัวเลข และอักขระพิเศษ';
-  if (!requirePassword && form.password && !isStrongPassword(form.password)) return 'Password ต้องมีอย่างน้อย 10 ตัวอักษร และมีตัวพิมพ์ใหญ่ ตัวเลข และอักขระพิเศษ';
-  if (!form.name || !form.name.trim()) return 'กรุณากรอกชื่อ';
-  if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(form.email).trim())) return 'อีเมลไม่ถูกต้อง';
-  return '';
-}
-
 export function TenantsPage({ status }) {
   const { data = [], loading, reload } = useApi('/tenants', { initialData: [] });
   const { data: tenantTypes = [] } = useApi('/tenant-types', { initialData: [] });
