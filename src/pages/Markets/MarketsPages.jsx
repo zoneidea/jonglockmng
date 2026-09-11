@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Eye, Image, Plus, X } from 'lucide-react';
+import { Eye, Image, Plus, Trash2, X } from 'lucide-react';
 import { request } from '../../api/client.js';
 import { Card } from '../../components/Card.jsx';
 import { DataTable } from '../../components/DataTable.jsx';
@@ -11,7 +11,7 @@ import { useApi, useMutation } from '../../hooks/useApi.js';
 import { useAuth } from '../../state/auth.jsx';
 import { classNames, formatDate, formatMoney, normalizeRows } from '../../utils/formatters.js';
 import { combineOpeningHours, dateKeyFromUtcTime, dateKeyFromValue, splitOpeningHours, utcTimeFromDateKey } from '../../utils/management.js';
-import { showConfirm } from '../../utils/alerts.js';
+import { showAlert, showConfirm } from '../../utils/alerts.js';
 import { BoothBox, DatePicker, ErrorNotice, FileInput, FileSummary, FormPanel, Label, Modal, NeedMarket, OutlineButton, SelectInput, SmallButton, TextInput, TextInputBare, TimePicker, Toolbar, RichTextEditor, FilterPill } from '../../components/ManagementUi.jsx';
 
 const OPEN_DAY_OPTIONS = [
@@ -412,6 +412,8 @@ export function BoothsPage({ marketId }) {
   const [selectedBoothIds, setSelectedBoothIds] = useState([]);
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [bulkForm, setBulkForm] = useState({ categoryId: '', price: '' });
+  const [deletingSelected, setDeletingSelected] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     if (selectedType && !typeRows.some((item) => String(item.id) === String(selectedType))) {
@@ -518,6 +520,39 @@ export function BoothsPage({ marketId }) {
     ));
   }
 
+  async function deleteSelectedBooths() {
+    if (deletingSelected || saving || loading) return;
+    const boothIds = filteredRows
+      .filter((booth) => booth.status !== 'deleted' && selectedBoothIds.includes(booth.id))
+      .map((booth) => booth.id);
+    if (!boothIds.length) return;
+    setDeletingSelected(true);
+    setDeleteError('');
+    const deletedIds = [];
+    let confirmed = false;
+    try {
+      confirmed = await showConfirm({
+        title: `ยืนยันลบบูธ ${boothIds.length} รายการ`,
+        text: 'บูธที่ลบแล้วจะยังแสดงในหน้าจัดการเป็นสีเทา',
+        confirmButtonText: 'ลบรายการที่เลือก',
+      });
+      if (!confirmed) return;
+      for (const boothId of boothIds) {
+        await request(`/markets/${marketId}/booths/${boothId}`, { token, method: 'DELETE', feedback: false });
+        deletedIds.push(boothId);
+      }
+      await showAlert({ icon: 'success', title: `ลบบูธสำเร็จ ${deletedIds.length} รายการ`, timer: 2000, showConfirmButton: false });
+    } catch (err) {
+      setDeleteError(`ลบสำเร็จ ${deletedIds.length} จาก ${boothIds.length} รายการ: ${err.message || 'ลบบูธไม่สำเร็จ'} รายการที่ยังไม่ลบจะคงการเลือกไว้`);
+    } finally {
+      if (confirmed) {
+        setSelectedBoothIds((current) => current.filter((id) => !deletedIds.includes(id)));
+        await reload();
+      }
+      setDeletingSelected(false);
+    }
+  }
+
   function selectAllVisible() {
     setSelectedBoothIds(filteredRows.filter((booth) => booth.status !== 'deleted').map((booth) => booth.id));
   }
@@ -553,17 +588,28 @@ export function BoothsPage({ marketId }) {
           <div className="flex flex-wrap gap-2">
             <button
               onClick={openBulkModal}
-              disabled={!selectedBoothIds.length}
+              disabled={!selectedBoothIds.length || deletingSelected || saving || loading}
               className="inline-flex h-11 items-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               แก้ไขหลายบูธ ({selectedBoothIds.length})
             </button>
-            <button onClick={openCreateModal} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white"><Plus size={16} /> เพิ่มบูธ</button>
+            <button
+              type="button"
+              onClick={deleteSelectedBooths}
+              disabled={!selectedBoothIds.length || deletingSelected || saving || loading}
+              className="inline-flex h-11 items-center gap-2 rounded-xl bg-red-600 px-4 text-sm font-bold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            >
+              <Trash2 size={16} />
+              {deletingSelected ? 'กำลังดำเนินการ...' : `ลบรายการที่เลือก (${selectedBoothIds.length})`}
+            </button>
+            <button disabled={deletingSelected} onClick={openCreateModal} className="inline-flex h-11 items-center gap-2 rounded-xl bg-cyan-600 px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300"><Plus size={16} /> เพิ่มบูธ</button>
           </div>
         )}
       />
       <Card>
         <ErrorNotice error={error} hint="ตรวจสอบ endpoint /markets/:marketId/booths และความสัมพันธ์ booths.category_id -> product_categories.id" />
+        <ErrorNotice error={deleteError} />
+        <fieldset disabled={deletingSelected} className="min-w-0" aria-busy={deletingSelected}>
         <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
           <aside className="rounded-3xl border border-slate-200 bg-slate-50 p-3">
             <div className="mb-3 px-2">
@@ -663,6 +709,7 @@ export function BoothsPage({ marketId }) {
             )}
           </section>
         </div>
+        </fieldset>
       </Card>
       <Modal open={modalOpen} title="เพิ่มบูธ" onClose={() => setModalOpen(false)}>
         <FormPanel onSubmit={submit} loading={saving} error={saveError}>
