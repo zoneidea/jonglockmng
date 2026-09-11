@@ -1,3 +1,5 @@
+import { isMutation, mutationFeedback } from '../utils/mutationFeedback.js';
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://jonglockapi.zonedevnode.com/management';
 const MARKET_DEEP_LINK_BASE_URL = import.meta.env.VITE_MARKET_DEEP_LINK_BASE_URL || 'https://jonglock.zonedevnode.com/market';
 const SESSION_STORAGE_KEY = 'jonglock.management.session';
@@ -23,7 +25,7 @@ function expireSession() {
   }
 }
 
-async function request(path, options = {}) {
+async function performRequest(path, options = {}) {
   const token = options.token;
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const headers = {
@@ -47,6 +49,28 @@ async function request(path, options = {}) {
     throw new ApiError(payload?.message || response.statusText || 'API request failed', response.status, payload);
   }
 
+  return payload;
+}
+
+async function request(path, options = {}) {
+  const notify = isMutation(path, options);
+  let payload;
+  try {
+    payload = await performRequest(path, options);
+  } catch (error) {
+    if (notify && error.status !== 401) {
+      const { showAlert } = await import('../utils/alerts.js');
+      await showAlert({ icon: 'error', title: 'ทำรายการไม่สำเร็จ', text: error.message || 'กรุณาลองใหม่' });
+    }
+    throw error;
+  }
+  if (notify) {
+    const feedback = mutationFeedback(options, payload);
+    if (feedback) {
+      const { showAlert } = await import('../utils/alerts.js');
+      await showAlert(feedback);
+    }
+  }
   return payload;
 }
 

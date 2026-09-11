@@ -1023,7 +1023,6 @@ export function VisualPlanPage({ marketId }) {
     applySavedLayout(saveData.normalizedLayout, savedLayout);
     await reloadLayouts();
     await reloadSelectedLayout();
-    await showAlert({ title: 'บันทึกแล้ว', text: 'อัปเดต Visual Plan เรียบร้อย', icon: 'success' });
   }
 
   async function publishLayout() {

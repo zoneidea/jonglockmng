@@ -317,7 +317,6 @@ export function VisualPlanPage({ marketId }) {
       },
     }, 'PATCH');
     await Promise.all([reloadLayouts(), reloadLayout()]);
-    await showAlert({ title: 'บันทึกแล้ว', text: 'อัปเดต Visual Plan เรียบร้อย', icon: 'success' });
   }
 
   async function publishLayout() {
