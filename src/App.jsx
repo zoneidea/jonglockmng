@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { useSelectedMarket } from './hooks/useSelectedMarket.js';
 import { createPortal } from 'react-dom';
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import qrcode from 'qrcode-generator';
@@ -567,9 +568,7 @@ function Shell() {
     initialData: null,
   });
   const marketRows = normalizeRows(markets);
-  const [selectedMarketId, setSelectedMarketId] = useState('');
-  const currentMarketId = selectedMarketId || marketRows?.[0]?.id || '';
-  const currentMarket = marketRows.find((market) => String(market.id) === String(currentMarketId)) || marketRows?.[0] || null;
+  const [currentMarketId, setSelectedMarketId, currentMarket] = useSelectedMarket(user, marketRows);
   const featureKey = resolveSubscriptionFeature(location.pathname);
   const subscriptionGate = buildSubscriptionGate(subscription, featureKey);
   const subscriptionContextValue = useMemo(() => ({

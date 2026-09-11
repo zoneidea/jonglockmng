@@ -372,7 +372,7 @@ export function RichTextEditor({ label, value, onChange, onUploadImage, uploadin
   }
 
   return (
-    <label className="block">
+    <div className="block" role="group" aria-label={label}>
       {label ? <span className="mb-1.5 block text-sm font-bold text-slate-600">{label}</span> : null}
       <div className="overflow-hidden rounded-2xl border border-slate-300 bg-white">
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-3">
@@ -415,6 +415,9 @@ export function RichTextEditor({ label, value, onChange, onUploadImage, uploadin
         <div
           ref={editorRef}
           contentEditable
+          role="textbox"
+          aria-label={label}
+          aria-multiline="true"
           suppressContentEditableWarning
           onInput={syncValue}
           className="min-h-[360px] w-full px-4 py-4 text-sm leading-7 text-slate-700 outline-none"
@@ -422,7 +425,7 @@ export function RichTextEditor({ label, value, onChange, onUploadImage, uploadin
         />
       </div>
       <p className="mt-2 text-xs text-slate-500">รองรับการจัดหน้า ปรับฟอนต์ ปรับตัวหนังสือ แทรกรูปภาพ และแทรกลิงก์ โดยบันทึกเป็นเนื้อหา HTML</p>
-    </label>
+    </div>
   );
 }
 
