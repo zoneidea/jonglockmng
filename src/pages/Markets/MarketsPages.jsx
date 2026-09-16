@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import MarketBasicDialog from './MarketBasicDialog.jsx';
 import { Eye, Image, Plus, Trash2, X } from 'lucide-react';
 import { request } from '../../api/client.js';
 import { Card } from '../../components/Card.jsx';
@@ -69,13 +70,30 @@ function OpenDaysCheckboxGroup({ value = [], onChange }) {
 }
 
 export function MarketsPage({ markets, reloadMarkets }) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const [editingMarket, setEditingMarket] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const deleteLock = useRef(false);
   const { mutate, loading, error } = useMutation();
   const [keyword, setKeyword] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({ code: '', name: '', description: '', openDays: DEFAULT_OPEN_DAYS });
   const [mainImageFile, setMainImageFile] = useState(null);
   const rows = markets.filter((market) => `${market.code} ${market.name}`.toLowerCase().includes(keyword.toLowerCase()));
+
+  async function deleteMarket(market) {
+    if (deleteLock.current) return;
+    deleteLock.current = true;
+    try {
+      const confirmed = await showConfirm({ title: 'ลบตลาด', text: `ลบตลาด ${market.name} แบบเก็บข้อมูลย้อนหลัง? ตลาดที่มีประวัติชำระเงินหรือรายการจองที่ยังไม่สิ้นสุดจะลบไม่ได้`, confirmButtonText: 'ยืนยันลบตลาด' });
+      if (!confirmed) return;
+      setDeletingId(market.id);
+      await request(`/markets/${market.id}`, { token, method: 'DELETE' });
+      await reloadMarkets();
+    } catch {
+      // Shared request feedback reports failures; never hide a failed deletion.
+    } finally { setDeletingId(null); deleteLock.current = false; }
+  }
 
   async function openCreateModal() {
     setMainImageFile(null);
@@ -113,16 +131,21 @@ export function MarketsPage({ markets, reloadMarkets }) {
         <Card>
           <Toolbar keyword={keyword} onKeyword={setKeyword} />
           <DataTable
-            columns={['ลำดับ', 'รหัสตลาด', 'ชื่อตลาด', 'วันเปิดตลาด', 'สถานะ']}
+            columns={['ลำดับ', 'รหัสตลาด', 'ชื่อตลาด', 'วันเปิดตลาด', 'สถานะ', 'จัดการ']}
             rows={rows.map((market, index) => [
               index + 1,
               market.code || '-',
               market.name,
               formatOpenDaysThai(market.open_days_json),
               <StatusBadge value={market.status || 'active'} />,
+              <div className="flex flex-wrap gap-2">
+                {['supervisor', 'admin'].includes(user?.role) ? <button type="button" disabled={Boolean(deletingId)} onClick={() => setEditingMarket(market)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold disabled:opacity-50">แก้ไข</button> : null}
+                {user?.role === 'supervisor' ? <button type="button" disabled={Boolean(deletingId)} onClick={() => deleteMarket(market)} className="rounded-lg border border-red-200 px-3 py-2 text-sm font-bold text-red-600 disabled:opacity-50">{deletingId === market.id ? 'กำลังลบ...' : 'ลบ'}</button> : null}
+              </div>,
             ])}
           />
         </Card>
+        {editingMarket ? <MarketBasicDialog key={editingMarket.id} market={editingMarket} onClose={() => setEditingMarket(null)} onSaved={() => { setEditingMarket(null); reloadMarkets(); }} /> : null}
         <Modal open={modalOpen} title="เพิ่มตลาด" onClose={() => setModalOpen(false)}>
         <FormPanel onSubmit={submit} loading={loading} error={error}>
           <TextInput label="รหัสตลาด" value={form.code} onChange={(value) => setForm((current) => ({ ...current, code: value }))} required />

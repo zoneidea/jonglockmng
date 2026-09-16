@@ -640,7 +640,8 @@ function EditorTopbar({
           </button>
           <button
             type="button"
-            onClick={() => onViewModeChange('3d')}
+            disabled
+            title="3D Interactive ปิดใช้งานชั่วคราว"
             className={classNames(
               'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-bold transition',
               is3DMode
@@ -649,7 +650,7 @@ function EditorTopbar({
             )}
           >
             <Box size={14} />
-            3D Interactive
+            3D Interactive (ปิดชั่วคราว)
           </button>
         </div>
         
@@ -885,6 +886,7 @@ export function VisualPlanPage({ marketId }) {
   }
 
   function changeEditorViewMode(nextMode) {
+    if (nextMode !== '2d') return;
     setEditorViewMode(nextMode);
     setEditorPan({ x: 0, y: 0 });
   }
@@ -1043,7 +1045,7 @@ export function VisualPlanPage({ marketId }) {
       ...(objectPayload || {}),
       status: 'published',
     }));
-    setEditorViewMode('3d');
+    setEditorViewMode('2d');
     setShowGridView(false);
     setEditorPan({ x: 0, y: 0 });
   }
