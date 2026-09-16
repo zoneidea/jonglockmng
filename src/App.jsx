@@ -107,11 +107,10 @@ function readLoginQueryPrefill() {
   try {
     const params = new URLSearchParams(window.location.search);
     return {
-      organizationCode: (params.get('organizationCode') || '').trim().toUpperCase(),
       username: (params.get('username') || '').trim(),
     };
   } catch {
-    return { organizationCode: '', username: '' };
+    return { username: '' };
   }
 }
 
@@ -124,7 +123,7 @@ function readRememberedLogin() {
   }
 }
 
-function persistRememberedLogin({ organizationCode, username }, rememberMe) {
+function persistRememberedLogin({ username }, rememberMe) {
   if (!rememberMe) {
     localStorage.removeItem(REMEMBERED_LOGIN_KEY);
     return;
@@ -132,7 +131,6 @@ function persistRememberedLogin({ organizationCode, username }, rememberMe) {
   localStorage.setItem(
     REMEMBERED_LOGIN_KEY,
     JSON.stringify({
-      organizationCode: organizationCode.trim().toUpperCase(),
       username: username.trim(),
     }),
   );
@@ -466,11 +464,10 @@ function LoginPage() {
   const rememberedLogin = useMemo(readRememberedLogin, []);
   const loginPrefill = useMemo(readLoginQueryPrefill, []);
   const [form, setForm] = useState({
-    organizationCode: loginPrefill.organizationCode || rememberedLogin?.organizationCode || '',
     username: loginPrefill.username || rememberedLogin?.username || '',
     password: '',
   });
-  const [rememberMe, setRememberMe] = useState(Boolean(rememberedLogin?.organizationCode || rememberedLogin?.username));
+  const [rememberMe, setRememberMe] = useState(Boolean(rememberedLogin?.username));
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -480,10 +477,9 @@ function LoginPage() {
     setError('');
     try {
       const nextLogin = {
-        organizationCode: form.organizationCode.trim().toUpperCase(),
         username: form.username.trim(),
       };
-      await login(nextLogin.organizationCode, nextLogin.username, form.password, rememberMe);
+      await login(nextLogin.username, form.password, rememberMe);
       persistRememberedLogin(nextLogin, rememberMe);
       navigate('/');
     } catch (err) {
@@ -521,7 +517,6 @@ function LoginPage() {
             <h2 className="mt-2 text-2xl font-bold">เข้าสู่ระบบจัดการ</h2>
             <p className="mt-2 text-sm text-slate-500">ใช้บัญชี supervisor, admin หรือ accounting</p>
             <div className="mt-8 space-y-4">
-              <TextInput label="รหัสองค์กร" value={form.organizationCode} onChange={(value) => setForm((current) => ({ ...current, organizationCode: value }))} autoComplete="off" required />
               <TextInput label="Username" value={form.username} onChange={(value) => setForm((current) => ({ ...current, username: value }))} autoComplete="off" required />
               <TextInput label="Password" value={form.password} onChange={(value) => setForm((current) => ({ ...current, password: value }))} type="password" autoComplete="new-password" required />
             </div>

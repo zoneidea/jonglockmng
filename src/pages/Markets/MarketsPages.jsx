@@ -377,8 +377,8 @@ export function BoothTypesPage({ marketId }) {
           <TextInput label="ชื่อแผนผังบูธ" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
           <FileInput label="แผนผังภาพรวมของตลาด" onChange={setPlanImageFile} />
           {planImageFile ? <FileSummary file={planImageFile} /> : null}
-          <DatePicker label="วันที่เริ่มต้น" value={form.startDate} onChange={(value) => setForm((current) => ({ ...current, startDate: value }))} />
-          <DatePicker label="วันที่สิ้นสุด" value={form.endDate} onChange={(value) => setForm((current) => ({ ...current, endDate: value }))} />
+          <DatePicker label="วันที่เริ่มต้น" value={form.startDate} onChange={(value) => setForm((current) => ({ ...current, startDate: value }))} required />
+          <DatePicker label="วันที่สิ้นสุด" value={form.endDate} onChange={(value) => setForm((current) => ({ ...current, endDate: value }))} required />
           <TextInput label="จำนวนบูธในแผนผัง" type="number" value={form.boothCount} onChange={(value) => setForm((current) => ({ ...current, boothCount: value }))} required />
           <TextInput label="ราคาตั้งต้นของบูธ" type="number" value={form.defaultPrice} onChange={(value) => setForm((current) => ({ ...current, defaultPrice: value }))} required />
           <SelectInput
@@ -396,8 +396,8 @@ export function BoothTypesPage({ marketId }) {
           {editingBoothType?.plan_image_url ? <img src={editingBoothType.plan_image_url} alt={`แผนผังบูธ ${editingBoothType.name || editingBoothType.title || ''}`} className="h-48 w-full rounded-2xl object-cover" /> : null}
           <FileInput label="แผนผังภาพรวมของตลาด" onChange={setEditPlanImageFile} />
           {editPlanImageFile ? <FileSummary file={editPlanImageFile} /> : null}
-          <DatePicker label="วันที่เริ่มต้น" value={editForm.startDate} onChange={(value) => setEditForm((current) => ({ ...current, startDate: value }))} />
-          <DatePicker label="วันที่สิ้นสุด" value={editForm.endDate} onChange={(value) => setEditForm((current) => ({ ...current, endDate: value }))} />
+          <DatePicker label="วันที่เริ่มต้น" value={editForm.startDate} onChange={(value) => setEditForm((current) => ({ ...current, startDate: value }))} required />
+          <DatePicker label="วันที่สิ้นสุด" value={editForm.endDate} onChange={(value) => setEditForm((current) => ({ ...current, endDate: value }))} required />
           <SelectInput label="สถานะ" value={editForm.status} onChange={(value) => setEditForm((current) => ({ ...current, status: value }))} options={[['active', 'ใช้งาน'], ['inactive', 'ระงับการใช้']]} />
         </FormPanel>
         </Modal>
