@@ -361,7 +361,7 @@ export function BoothTypesPage({ marketId }) {
               columns={['ลำดับ', 'ผังภาพรวม', 'ชื่อแบบ', 'จำนวนบูธ', 'เริ่มต้น', 'สิ้นสุด', 'สถานะ', 'จัดการ']}
               rows={rows.map((item, index) => [
                 index + 1,
-                item.plan_image_url ? <img src={item.plan_image_url} className="h-16 w-24 rounded-xl object-cover" /> : <div className="flex h-16 w-24 items-center justify-center rounded-xl bg-slate-100 text-xs font-bold text-slate-400">ไม่มีผัง</div>,
+                item.plan_image_url ? <img src={item.plan_image_url} alt={`แผนผังบูธ ${item.name || item.title || ''}`} className="h-16 w-24 rounded-xl object-cover" /> : <div className="flex h-16 w-24 items-center justify-center rounded-xl bg-slate-100 text-xs font-bold text-slate-400">ไม่มีผัง</div>,
                 item.name || item.title,
                 Number(item.booth_count || 0),
                 formatDate(item.start_date),
@@ -393,7 +393,7 @@ export function BoothTypesPage({ marketId }) {
         <Modal open={editModalOpen} title="แก้ไขแผนผังบูธ" onClose={() => setEditModalOpen(false)}>
         <FormPanel onSubmit={submitEdit} loading={saving} error={saveError}>
           <TextInput label="ชื่อแผนผังบูธ" value={editForm.name} onChange={(value) => setEditForm((current) => ({ ...current, name: value }))} required />
-          {editingBoothType?.plan_image_url ? <img src={editingBoothType.plan_image_url} className="h-48 w-full rounded-2xl object-cover" /> : null}
+          {editingBoothType?.plan_image_url ? <img src={editingBoothType.plan_image_url} alt={`แผนผังบูธ ${editingBoothType.name || editingBoothType.title || ''}`} className="h-48 w-full rounded-2xl object-cover" /> : null}
           <FileInput label="แผนผังภาพรวมของตลาด" onChange={setEditPlanImageFile} />
           {editPlanImageFile ? <FileSummary file={editPlanImageFile} /> : null}
           <DatePicker label="วันที่เริ่มต้น" value={editForm.startDate} onChange={(value) => setEditForm((current) => ({ ...current, startDate: value }))} />
@@ -713,6 +713,7 @@ export function BoothsPage({ marketId }) {
                       <label className="absolute left-1.5 top-1.5">
                         <input
                           type="checkbox"
+                          aria-label={`เลือกบูธ ${booth.code || booth.name || booth.id}`}
                           checked={selectedBoothIds.includes(booth.id)}
                           onChange={() => toggleBoothSelection(booth.id)}
                           className="h-4 w-4 rounded border-white/70 text-amber-500 focus:ring-amber-300"
@@ -1082,7 +1083,7 @@ export function AccessoriesPage({ marketId }) {
           {loading ? <LoadingBlock /> : (
             <DataTable
               columns={['ลำดับที่', 'ชื่อบริการ', 'รูปภาพ', 'ราคา', 'จำนวน', 'สถานะ', 'จัดการ']}
-              rows={rows.map((item, index) => [index + 1, item.name, item.image_url ? <img src={item.image_url} className="h-20 w-20 rounded-xl object-cover" /> : <div className="flex h-20 w-20 items-center justify-center rounded-xl bg-slate-100"><Image size={24} /></div>, formatMoney(item.price), item.quantity || 1, <StatusBadge value={item.status || 'active'} />, <SmallButton tone="red">ปิดการใช้งาน</SmallButton>])}
+              rows={rows.map((item, index) => [index + 1, item.name, item.image_url ? <img src={item.image_url} alt={`บริการเสริม ${item.name || ''}`} className="h-20 w-20 rounded-xl object-cover" /> : <div className="flex h-20 w-20 items-center justify-center rounded-xl bg-slate-100"><Image size={24} /></div>, formatMoney(item.price), item.quantity || 1, <StatusBadge value={item.status || 'active'} />, <SmallButton tone="red">ปิดการใช้งาน</SmallButton>])}
             />
           )}
         </Card>
