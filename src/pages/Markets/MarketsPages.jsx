@@ -1,3 +1,4 @@
+import MarketCollectionField from './MarketCollectionField.jsx';
 import MarketLocationFields from './MarketLocationFields.jsx';
 import { useEffect, useRef, useState } from 'react';
 import MarketBasicDialog from './MarketBasicDialog.jsx';
@@ -78,7 +79,7 @@ export function MarketsPage({ markets, reloadMarkets }) {
   const { mutate, loading, error } = useMutation();
   const [keyword, setKeyword] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ code: '', name: '', description: '', openDays: DEFAULT_OPEN_DAYS });
+  const [form, setForm] = useState({ code: '', name: '', description: '', collectionMode: 'system', openDays: DEFAULT_OPEN_DAYS });
   const [mainImageFile, setMainImageFile] = useState(null);
   const rows = markets.filter((market) => `${market.code} ${market.name}`.toLowerCase().includes(keyword.toLowerCase()));
 
@@ -98,7 +99,7 @@ export function MarketsPage({ markets, reloadMarkets }) {
 
   async function openCreateModal() {
     setMainImageFile(null);
-    setForm({ code: '', name: '', description: '', openDays: DEFAULT_OPEN_DAYS });
+    setForm({ code: '', name: '', description: '', collectionMode: 'system', openDays: DEFAULT_OPEN_DAYS });
     setModalOpen(true);
     try {
       const payload = await request('/markets/next-code', { token });
@@ -112,10 +113,11 @@ export function MarketsPage({ markets, reloadMarkets }) {
     payload.append('code', form.code);
     payload.append('name', form.name);
     payload.append('description', form.description);
+    payload.append('collectionMode', form.collectionMode);
     payload.append('openDays', JSON.stringify(form.openDays?.length ? form.openDays : DEFAULT_OPEN_DAYS));
     if (mainImageFile) payload.append('mainImage', mainImageFile);
     await mutate('/markets', payload);
-    setForm({ code: '', name: '', description: '', openDays: DEFAULT_OPEN_DAYS });
+    setForm({ code: '', name: '', description: '', collectionMode: 'system', openDays: DEFAULT_OPEN_DAYS });
     setMainImageFile(null);
     setModalOpen(false);
     reloadMarkets();
@@ -132,12 +134,13 @@ export function MarketsPage({ markets, reloadMarkets }) {
         <Card>
           <Toolbar keyword={keyword} onKeyword={setKeyword} />
           <DataTable
-            columns={['ลำดับ', 'รหัสตลาด', 'ชื่อตลาด', 'วันเปิดตลาด', 'สถานะ', 'จัดการ']}
+            columns={['ลำดับ', 'รหัสตลาด', 'ชื่อตลาด', 'วันเปิดตลาด', 'การเก็บเงิน', 'สถานะ', 'จัดการ']}
             rows={rows.map((market, index) => [
               index + 1,
               market.code || '-',
               market.name,
               formatOpenDaysThai(market.open_days_json),
+              market.collection_mode === 'self' ? 'เก็บเงินเอง' : 'ชำระผ่านระบบ',
               <StatusBadge value={market.status || 'active'} />,
               <div className="flex flex-wrap gap-2">
                 {['supervisor', 'admin'].includes(user?.role) ? <button type="button" disabled={Boolean(deletingId)} onClick={() => setEditingMarket(market)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold disabled:opacity-50">แก้ไข</button> : null}
@@ -152,6 +155,7 @@ export function MarketsPage({ markets, reloadMarkets }) {
           <TextInput label="รหัสตลาด" value={form.code} onChange={(value) => setForm((current) => ({ ...current, code: value }))} required />
           <TextInput label="ชื่อตลาด" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} required />
           <TextInput label="คำอธิบาย" value={form.description} onChange={(value) => setForm((current) => ({ ...current, description: value }))} />
+          <MarketCollectionField value={form.collectionMode} onChange={(value) => setForm((current) => ({ ...current, collectionMode: value }))} disabled={loading} />
           <FileInput label="รูปภาพหลักของตลาด" onChange={setMainImageFile} />
           {mainImageFile ? <FileSummary file={mainImageFile} /> : null}
           <div>
