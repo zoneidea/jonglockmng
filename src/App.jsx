@@ -1,3 +1,4 @@
+import OrganizationPaymentSettings from './pages/Organization/OrganizationPaymentSettings.jsx';
 import AccountingPage from './pages/Accounting/AccountingPage.jsx';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useSelectedMarket } from './hooks/useSelectedMarket.js';
@@ -1233,7 +1234,6 @@ function OrganizationSettingsPage() {
   const { data = {}, loading, reload } = useApi('/organization-settings', { initialData: {} });
   const { mutate, loading: saving, error } = useMutation();
   const [formError, setFormError] = useState('');
-  const [paymentQrCodeImage, setPaymentQrCodeImage] = useState(null);
   const [form, setForm] = useState({
     name: '',
     address: '',
@@ -1248,11 +1248,6 @@ function OrganizationSettingsPage() {
     registeredDistrict: '',
     registeredProvince: '',
     registeredPostcode: '',
-    paymentPromptpayId: '',
-    paymentBankName: '',
-    paymentBankAccountName: '',
-    paymentBankAccountNo: '',
-    paymentInstructions: '',
   });
 
   useEffect(() => {
@@ -1270,13 +1265,7 @@ function OrganizationSettingsPage() {
       registeredDistrict: data?.registered_district || '',
       registeredProvince: data?.registered_province || '',
       registeredPostcode: data?.registered_postcode || '',
-      paymentPromptpayId: data?.payment_promptpay_id || '',
-      paymentBankName: data?.payment_bank_name || '',
-      paymentBankAccountName: data?.payment_bank_account_name || '',
-      paymentBankAccountNo: data?.payment_bank_account_no || '',
-      paymentInstructions: data?.payment_instructions || '',
     });
-    setPaymentQrCodeImage(null);
   }, [data]);
 
   async function submit(event) {
@@ -1297,15 +1286,8 @@ function OrganizationSettingsPage() {
         return;
       }
     }
-    const payload = paymentQrCodeImage ? new FormData() : { ...form, vatRate: Number(form.vatRate || 0) };
-    if (paymentQrCodeImage) {
-      Object.entries({ ...form, vatRate: Number(form.vatRate || 0) }).forEach(([key, value]) => {
-        payload.append(key, value ?? '');
-      });
-      payload.append('paymentQrCodeImage', paymentQrCodeImage);
-    }
+    const payload = { ...form, vatRate: Number(form.vatRate || 0) };
     await mutate('/organization-settings', payload, 'PUT');
-    setPaymentQrCodeImage(null);
     reload();
   }
 
@@ -1339,32 +1321,10 @@ function OrganizationSettingsPage() {
               <TextInput label="รหัสไปรษณีย์" value={form.registeredPostcode} onChange={(value) => setForm((current) => ({ ...current, registeredPostcode: value }))} required />
             </div>
           ) : null}
-          <div className="grid gap-4 rounded-2xl border border-emerald-100 bg-emerald-50/40 p-4 md:grid-cols-2">
-            <div className="md:col-span-2">
-              <div className="text-sm font-extrabold text-slate-800">บัญชีรับเงินสำหรับแอปฯ</div>
-              <div className="mt-1 text-xs font-semibold text-slate-500">ใช้แสดงให้ผู้จองโอนเงินและอัปโหลดสลิปในตะกร้า</div>
-            </div>
-            <TextInput label="PromptPay" value={form.paymentPromptpayId} onChange={(value) => setForm((current) => ({ ...current, paymentPromptpayId: value }))} />
-            <TextInput label="ธนาคาร" value={form.paymentBankName} onChange={(value) => setForm((current) => ({ ...current, paymentBankName: value }))} />
-            <TextInput label="ชื่อบัญชี" value={form.paymentBankAccountName} onChange={(value) => setForm((current) => ({ ...current, paymentBankAccountName: value }))} />
-            <TextInput label="เลขบัญชี" value={form.paymentBankAccountNo} onChange={(value) => setForm((current) => ({ ...current, paymentBankAccountNo: value }))} />
-            <div className="md:col-span-2">
-              <FileInput label="รูปภาพ QR Code สำหรับรับชำระเงิน" onChange={setPaymentQrCodeImage} />
-              {paymentQrCodeImage ? <FileSummary file={paymentQrCodeImage} /> : null}
-              {data?.payment_qrcode_image_url ? (
-                <div className="mt-3 flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-3">
-                  <img src={data.payment_qrcode_image_url} alt="Payment QR Code" className="h-24 w-24 rounded-xl border border-slate-200 object-contain" />
-                  <div>
-                    <div className="text-sm font-extrabold text-slate-800">QR Code ปัจจุบัน</div>
-                    <button type="button" onClick={() => window.open(data.payment_qrcode_image_url, '_blank', 'noopener,noreferrer')} className="mt-2 rounded-xl bg-slate-950 px-3 py-2 text-xs font-bold text-white">ดูรูปภาพ</button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-            <label className="block md:col-span-2"><span className="mb-1.5 block text-sm font-bold text-slate-600">คำแนะนำการชำระเงิน</span><textarea value={form.paymentInstructions} onChange={(event) => setForm((current) => ({ ...current, paymentInstructions: event.target.value }))} rows={3} className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:border-cyan-600" /></label>
-          </div>
+
         </FormPanel>
       )}</Card>
+      <OrganizationPaymentSettings />
     </>
   );
 }

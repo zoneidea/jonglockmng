@@ -8,14 +8,15 @@ import { showAlert, showConfirm } from '../../utils/alerts.js';
 const manualDefaults = { bankName: '', accountName: '', accountNumber: '', promptpayId: '', qrCodeImageUrl: '', instructions: '' };
 const gatewayDefaults = { bankCode: '', accountName: '', accountNumber: '', email: '', phone: '' };
 
-export default function MarketPaymentSettings({ marketId }) {
-  const path = `/markets/${marketId}/payment-settings`;
+export default function OrganizationPaymentSettings() {
+  const path = '/organization-settings/payments';
   const { data, loading, error, reload } = useApi(path);
   const { mutate, loading: saving } = useMutation();
   const [mode, setMode] = useState('manual');
   const [manual, setManual] = useState(manualDefaults);
   const [gateway, setGateway] = useState(gatewayDefaults);
   const [image, setImage] = useState(null);
+  const [candidateId, setCandidateId] = useState('');
   const lock = useRef(false);
   useEffect(() => {
     if (!data) return;
@@ -54,24 +55,42 @@ export default function MarketPaymentSettings({ marketId }) {
       await reload();
     } finally { lock.current = false; }
   }
+  async function adopt() {
+    if (lock.current || !candidateId) return;
+    lock.current = true;
+    try {
+      if (!await showConfirm({ title: 'ใช้การตั้งค่านี้ทั้งองค์กร', text: 'ยืนยันใช้ช่องทางและบัญชีชุดนี้กับทุกตลาด? ข้อมูลรายตลาดเดิมจะยังเก็บไว้', confirmButtonText: 'ยืนยันใช้ร่วมกัน' })) return;
+      await mutate(`${path}/adopt`, { sourceMarketId: Number(candidateId), confirmed: true });
+      await reload();
+    } catch { await reload(); } finally { lock.current = false; }
+  }
   async function disable() {
     if (lock.current) return;
     lock.current = true;
     try {
-      const confirmed = await showConfirm({ title: 'ยกเลิกใช้ Payment Gateway', text: 'ยืนยันนำผู้ติดต่อของตลาดนี้ออกจาก ReservePay? ประวัติการชำระเงินในระบบของเราจะยังคงอยู่ และต้องตั้งค่าโอนเงินก่อนรับชำระครั้งต่อไป', confirmButtonText: 'ยืนยันยกเลิก' });
+      const confirmed = await showConfirm({ title: 'ยกเลิกใช้ Payment Gateway', text: 'ยืนยันนำผู้ติดต่อขององค์กรนี้ออกจาก ReservePay? ประวัติการชำระเงินในระบบของเราจะยังคงอยู่ และต้องตั้งค่าโอนเงินก่อนรับชำระครั้งต่อไป', confirmButtonText: 'ยืนยันยกเลิก' });
       if (!confirmed) return;
       await mutate(`${path}/disable`, { confirmed: true });
       await reload();
     } catch { await reload(); } finally { lock.current = false; }
   }
   return <Card className="mt-6">
-    <h2 className="text-lg font-black text-slate-950">ช่องทางรับชำระเงินของตลาด</h2>
+    <h2 className="text-lg font-black text-slate-950">ช่องทางรับชำระเงินขององค์กร</h2>
+    <p className="mt-2 text-sm text-slate-600">ทุกตลาดในองค์กรใช้ช่องทางและบัญชีรับเงินชุดเดียวกัน การเปลี่ยนแปลงมีผลกับทุกตลาด</p>
+    {data?.migrationConflict ? <div className="mt-4 space-y-3">
+      <p className="text-sm text-slate-700">พบการตั้งค่ารายตลาดเดิมหลายชุด กรุณาเลือกชุดที่จะใช้ร่วมกันทั้งองค์กร</p>
+      <select aria-label="เลือกการตั้งค่าเดิม" value={candidateId} onChange={event => setCandidateId(event.target.value)} className="w-full rounded-xl border p-3">
+        <option value="">เลือกการตั้งค่า</option>
+        {(data.candidates || []).map(item => <option key={item.marketId} value={item.marketId}>{item.marketName} • {item.mode === 'gateway' ? 'Payment Gateway' : 'โอนเงิน'} • {item.accountLast4 ? `บัญชีลงท้าย ${item.accountLast4}` : 'ไม่ได้ระบุบัญชี'}</option>)}
+      </select>
+      <button type="button" disabled={!candidateId || saving} onClick={adopt} className="rounded-xl bg-slate-950 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">ใช้การตั้งค่านี้ทั้งองค์กร</button>
+    </div> : null}
     {loading ? <LoadingBlock /> : error ? <button type="button" onClick={reload} className="mt-4 rounded-xl border px-4 py-2">ลองโหลดอีกครั้ง</button> : <form onSubmit={submit} className="mt-4 space-y-5">
-      {data?.mode === 'legacy' ? <p className="text-sm text-slate-600">ตลาดยังใช้การตั้งค่าเดิม เลือกช่องทางและบันทึกเพื่อใช้การตั้งค่าเฉพาะตลาด</p> : null}
-      <fieldset disabled={saving} className="space-y-5 disabled:opacity-60">
+      {data?.mode === 'legacy' ? <p className="text-sm text-slate-600">เลือกช่องทางรับชำระเงินที่จะใช้ร่วมกันทุกตลาดในองค์กร</p> : null}
+      <fieldset disabled={saving || data?.migrationConflict} className="space-y-5 disabled:opacity-60">
         <div className="grid gap-3 sm:grid-cols-2">
           {[['manual', 'โอนเงิน / อัปโหลด QR Code'], ['gateway', 'Payment Gateway (ReservePay)']].map(([value, label]) => <label key={value} className={`flex cursor-pointer items-center gap-3 rounded-2xl border p-4 text-sm font-bold ${mode === value ? 'border-teal-600 bg-teal-50' : 'border-slate-200'}`}>
-            <input type="radio" name={`payment-mode-${marketId}`} value={value} disabled={value === 'manual' && Boolean(data?.contactId)} checked={mode === value} onChange={() => setMode(value)} />{label}
+            <input type="radio" name="organization-payment-mode" value={value} disabled={value === 'manual' && Boolean(data?.contactId)} checked={mode === value} onChange={() => setMode(value)} />{label}
           </label>)}
         </div>
         {mode === 'manual' ? <div className="grid gap-4 md:grid-cols-2">
@@ -98,7 +117,7 @@ export default function MarketPaymentSettings({ marketId }) {
         </>}
       </fieldset>
       <div className="flex flex-wrap gap-3">
-        <button type="submit" disabled={saving} className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{saving ? 'กำลังบันทึก…' : 'บันทึกช่องทางรับเงิน'}</button>
+        <button type="submit" disabled={saving || data?.migrationConflict} className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{saving ? 'กำลังบันทึก…' : 'บันทึกช่องทางรับเงิน'}</button>
         {data?.contactId || data?.mode === 'gateway' ? <button type="button" disabled={saving} onClick={disable} className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-bold disabled:opacity-50">ยกเลิกใช้ Payment Gateway</button> : null}
       </div>
     </form>}

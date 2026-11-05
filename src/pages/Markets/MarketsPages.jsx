@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import MarketPaymentSettings from './MarketPaymentSettings.jsx';
 import MarketBasicDialog from './MarketBasicDialog.jsx';
 import { Eye, Image, Plus, Trash2, X } from 'lucide-react';
 import { request } from '../../api/client.js';
@@ -254,7 +253,6 @@ export function MarketInfoPage({ marketId, market, reloadMarkets }) {
           <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-start"><Label>เงื่อนไขข้อตกลง</Label><RichTextEditor value={form.terms} onChange={(value) => setForm((current) => ({ ...current, terms: value }))} /></div>
         </FormPanel>
       </Card>
-      <MarketPaymentSettings key={marketId} marketId={marketId} />
     </>
   );
 }
