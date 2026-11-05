@@ -1,3 +1,4 @@
+import AccountingPage from './pages/Accounting/AccountingPage.jsx';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useSelectedMarket } from './hooks/useSelectedMarket.js';
 import { createPortal } from 'react-dom';
@@ -651,7 +652,7 @@ function Shell() {
                   <Route path="/booking-payment-proofs" element={<PaymentProofReviewPage />} />
                   <Route path="/reports" element={<ReportsPage />} />
                   <Route path="/report-booths" element={<ReportsPage reportType="booths" />} />
-                  <Route path="/report-payments" element={<AccountingPage paidOnly />} />
+                  <Route path="/report-payments" element={<AccountingPage paidOnly onPrintDocument={openPaymentDocumentWindow} />} />
                   <Route path="/report-daily" element={<ReportsPage reportType="daily" />} />
                   <Route path="/report-person" element={<ReportsPage reportType="person" />} />
                   <Route path="/audit" element={<AuditPage marketId={currentMarketId} />} />
@@ -665,7 +666,7 @@ function Shell() {
                   <Route path="/accounting" element={<AccountingAllReportPage />} />
                   <Route path="/accounting-payment-proofs" element={<Navigate to="/booking-payment-proofs" replace />} />
                   <Route path="/accounting-bookings" element={<ReportsPage reportType="accounting-bookings" />} />
-                  <Route path="/accounting-payments" element={<AccountingPage />} />
+                  <Route path="/accounting-payments" element={<AccountingPage onPrintDocument={openPaymentDocumentWindow} />} />
                   <Route path="/accounting-summary" element={<AccountingSalesSummaryPage />} />
                   <Route path="/accounting-sap" element={<ReportsPage reportType="sap" />} />
                   <Route path="/accounting-documents" element={<AccountingStandardReportPage reportType="documents" />} />
@@ -1789,113 +1790,6 @@ function AccountingStandardReportPage({ reportType }) {
   );
 }
 
-function AccountingPage({ paidOnly = false }) {
-  const { data: markets = [] } = useApi('/markets', { initialData: [] });
-  const marketRows = normalizeRows(markets);
-  const [filters, setFilters] = useState({
-    ...currentMonthFilterDates(),
-    marketId: '',
-    dateField: 'payment_date',
-    sortBy: 'payment_date',
-    keyword: '',
-  });
-  const queryString = new URLSearchParams({
-    ...(paidOnly ? { paidOnly: '1' } : {}),
-    startDate: filters.startDate,
-    endDate: filters.endDate,
-    dateField: filters.dateField,
-    sortBy: filters.sortBy,
-    ...(filters.marketId ? { marketId: filters.marketId } : {}),
-  }).toString();
-  const { data = [], loading, reload } = useApi(`/accounting/payments?${queryString}`, { initialData: [] });
-  const { mutate: mutateDocument, loading: issuingDocument } = useMutation();
-  const rows = normalizeRows(data);
-  const filteredRows = filterRowsByKeyword(rows, filters.keyword);
-  const exportColumns = paidOnly
-    ? ['เลขชำระเงิน', 'ประเภทการชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน']
-    : ['เลขชำระเงิน', 'ประเภทการชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'สถานะ', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน'];
-  const exportRows = filteredRows.map((payment) => {
-    const baseRow = [payment.public_id, paymentTypeLabel(payment.payment_kind), payment.booking_public_id || '-', payment.market_name || '-', formatBookingDateSummary(payment.booking_dates), payment.booths || '-', payment.customer_name || '-'];
-    const amountRow = [formatMoney(payment.subtotal_amount || 0), formatMoney(payment.discount_amount || 0), formatMoney(payment.vat_amount || 0), formatMoney(payment.amount), formatDate(payment.paid_at || payment.created_at)];
-    return paidOnly ? [...baseRow, ...amountRow] : [...baseRow, payment.status || '-', ...amountRow];
-  });
-
-  function setFilter(name, value) {
-    setFilters((current) => ({ ...current, [name]: value }));
-  }
-
-  async function issueAndPrintPaymentDocument(payment) {
-    const payload = await mutateDocument(`/accounting/payments/${payment.id}/document`, {}, 'POST');
-    openPaymentDocumentWindow(payload);
-    reload();
-  }
-
-  return (
-    <>
-      <PageHeader
-        title={paidOnly ? 'รายงานการชำระเงิน' : 'บัญชี'}
-        description={paidOnly ? 'แสดงรายการที่ชำระเงินแล้วทั้งหมดตามช่วงวันที่และตลาด' : 'รายการชำระเงินทั้งหมด'}
-        action={(
-          <div className="w-full rounded-3xl border border-slate-200 bg-white p-4 shadow-soft xl:min-w-[720px]">
-            <div className="flex flex-col gap-3 xl:items-end">
-              <div className="flex w-full flex-col gap-3 sm:flex-row xl:justify-end">
-                <SearchInput value={filters.keyword} onChange={(value) => setFilter('keyword', value)} placeholder="ค้นหาลูกค้า เลขจอง เลขชำระเงิน หรือตลาด" />
-                <DatePickerBare value={filters.startDate} onChange={(value) => setFilter('startDate', value)} className="sm:w-[210px]" />
-                <DatePickerBare value={filters.endDate} onChange={(value) => setFilter('endDate', value)} className="sm:w-[210px]" />
-                <ReportActionButton tone="slate" onClick={reload}>ค้นหา</ReportActionButton>
-              </div>
-              <ReportExportActions title={paidOnly ? 'รายงานการชำระเงิน' : 'รายการชำระเงินทั้งหมด'} columns={exportColumns} rows={exportRows} disabled={!exportRows.length} />
-            </div>
-          </div>
-        )}
-      />
-      <Card>
-        <div className="space-y-6">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="grid gap-4 lg:grid-cols-3">
-              <select value={filters.marketId} onChange={(event) => setFilter('marketId', event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-slate-600 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100">
-                <option value="">ทุกตลาด</option>
-                {marketRows.map((market) => <option key={market.id} value={market.id}>{market.name}</option>)}
-              </select>
-              <select value={filters.dateField} onChange={(event) => setFilter('dateField', event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-slate-600 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100">
-                <option value="payment_date">ค้นหาด้วยวันที่ชำระเงิน</option>
-                <option value="booking_date">ค้นหาด้วยวันที่จัดงาน</option>
-                <option value="created_date">ค้นหาด้วยวันที่ทำรายการ</option>
-              </select>
-              <select value={filters.sortBy} onChange={(event) => setFilter('sortBy', event.target.value)} className="h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-slate-600 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100">
-                <option value="payment_date">เรียงตามวันที่ชำระเงิน</option>
-                <option value="booking_public_id">เรียงตามเลขที่ใบจอง</option>
-                <option value="booking_date">เรียงตามวันที่จัดงาน</option>
-              </select>
-            </div>
-          </div>
-          {loading ? <LoadingBlock /> : <DataTable columns={paidOnly ? ['เลขชำระเงิน', 'ประเภทการชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน', 'จัดการ'] : ['เลขชำระเงิน', 'ประเภทการชำระเงิน', 'เลขจอง', 'ตลาด', 'วันที่จอง', 'Booth', 'ลูกค้า', 'สถานะ', 'ยอดก่อนส่วนลด', 'ส่วนลด', 'VAT', 'จำนวนเงิน', 'วันที่ชำระเงิน', 'จัดการ']} rows={filteredRows.map((payment) => {
-            const baseRow = [
-              payment.public_id,
-              paymentTypeLabel(payment.payment_kind),
-              payment.booking_public_id || '-',
-              payment.market_name || '-',
-              <BookingDateSummary value={payment.booking_dates} />,
-              payment.booths || '-',
-              payment.customer_name || '-',
-            ];
-            const amountRow = [
-              formatMoney(payment.subtotal_amount || 0),
-              formatMoney(payment.discount_amount || 0),
-              formatMoney(payment.vat_amount || 0),
-              formatMoney(payment.amount),
-              formatDate(payment.paid_at || payment.created_at),
-              <SmallButton tone={Number(payment.vat_enabled || 0) === 1 ? 'cyan' : 'amber'} onClick={() => issueAndPrintPaymentDocument(payment)} disabled={issuingDocument}>
-                {payment.document_no || (Number(payment.vat_enabled || 0) === 1 ? 'ใบกำกับภาษี' : 'ใบเสร็จ')}
-              </SmallButton>,
-            ];
-            return paidOnly ? [...baseRow, ...amountRow] : [...baseRow, <StatusBadge value={payment.status} />, ...amountRow];
-          })} />}
-        </div>
-      </Card>
-    </>
-  );
-}
 
 function AdminsPage({ marketId }) {
   const { data: admins = [], loading: adminsLoading, reload: reloadAdmins } = useApi('/admins', { initialData: [] });
