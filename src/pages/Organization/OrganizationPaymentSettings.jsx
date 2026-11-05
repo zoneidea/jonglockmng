@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
+import BankSelect from '../../components/BankSelect.jsx';
+import GatewayPaymentTerms from './GatewayPaymentTerms.jsx';
 import { Card } from '../../components/Card.jsx';
 import { LoadingBlock } from '../../components/LoadingBlock.jsx';
 import { FileInput, FileSummary, TextInput } from '../../components/ManagementUi.jsx';
 import { useApi, useMutation } from '../../hooks/useApi.js';
 import { showAlert, showConfirm } from '../../utils/alerts.js';
 
-const manualDefaults = { bankName: '', accountName: '', accountNumber: '', promptpayId: '', qrCodeImageUrl: '', instructions: '' };
+const manualDefaults = { bankCode: '', bankName: '', accountName: '', accountNumber: '', promptpayId: '', qrCodeImageUrl: '', instructions: '' };
 const gatewayDefaults = { bankCode: '', accountName: '', accountNumber: '', email: '', phone: '' };
 
 export default function OrganizationPaymentSettings() {
   const path = '/organization-settings/payments';
   const { data, loading, error, reload } = useApi(path);
+  const { data: banks = [], loading: banksLoading, error: banksError, reload: reloadBanks } = useApi('/master-data/banks', { initialData: [] });
   const { mutate, loading: saving } = useMutation();
   const [mode, setMode] = useState('manual');
   const [manual, setManual] = useState(manualDefaults);
@@ -26,7 +29,10 @@ export default function OrganizationPaymentSettings() {
     setImage(null);
   }, [data]);
   useEffect(() => { if (error) showAlert({ icon: 'error', title: 'โหลดการตั้งค่าไม่สำเร็จ', text: error }); }, [error]);
+  useEffect(() => { if (banksError) showAlert({ icon: 'error', title: 'โหลดรายชื่อธนาคารไม่สำเร็จ', text: banksError }); }, [banksError]);
   const bankLocked = Boolean(data?.contactId);
+  const manualBankCode = manual.bankCode || banks.find(bank => bank.nameTh === manual.bankName || bank.shortName === manual.bankName)?.code || '';
+  const bankLoadingBlocksSave = mode === 'gateway' && !bankLocked && (banksLoading || Boolean(banksError));
   const change = (setter, key) => value => setter(current => ({ ...current, [key]: value }));
   async function submit(event) {
     event.preventDefault();
@@ -41,7 +47,7 @@ export default function OrganizationPaymentSettings() {
         const confirmed = await showConfirm({ title: 'เปิดใช้ Payment Gateway', text: 'ยืนยันส่งข้อมูลผู้ติดต่อและบัญชีรับเงินนี้ไปลงทะเบียนกับ ReservePay?', confirmButtonText: 'ยืนยันลงทะเบียน' });
         if (!confirmed) return;
       }
-      let body = { mode, details: mode === 'manual' ? manual : gateway };
+      let body = { mode, details: mode === 'manual' ? { ...manual, bankCode: manualBankCode } : gateway };
       if (mode === 'manual' && image) {
         const form = new FormData();
         form.append('settings', JSON.stringify(body));
@@ -93,8 +99,10 @@ export default function OrganizationPaymentSettings() {
             <input type="radio" name="organization-payment-mode" value={value} disabled={value === 'manual' && Boolean(data?.contactId)} checked={mode === value} onChange={() => setMode(value)} />{label}
           </label>)}
         </div>
+        {banksError ? <button type="button" onClick={reloadBanks} className="rounded-xl border px-4 py-2 text-sm font-bold">โหลดรายชื่อธนาคารอีกครั้ง</button> : null}
         {mode === 'manual' ? <div className="grid gap-4 md:grid-cols-2">
-          <TextInput label="ธนาคาร" value={manual.bankName} onChange={change(setManual, 'bankName')} />
+          <BankSelect banks={banks} loading={banksLoading} value={manualBankCode} legacyName={manual.bankName}
+            required={Boolean(manual.accountNumber && !manual.bankName)} onChange={code => setManual(current => ({ ...current, bankCode: code, bankName: banks.find(bank => bank.code === code)?.nameTh || '' }))} />
           <TextInput label="ชื่อบัญชี" value={manual.accountName} onChange={change(setManual, 'accountName')} />
           <TextInput label="เลขบัญชี" value={manual.accountNumber} onChange={change(setManual, 'accountNumber')} />
           <TextInput label="หมายเลขพร้อมเพย์" value={manual.promptpayId} onChange={change(setManual, 'promptpayId')} />
@@ -102,10 +110,11 @@ export default function OrganizationPaymentSettings() {
           {image ? <FileSummary file={image} /> : manual.qrCodeImageUrl ? <img src={manual.qrCodeImageUrl} alt="QR Code รับโอนเงิน" className="h-40 w-40 rounded-xl border object-contain" /> : null}
           <div className="md:col-span-2"><TextInput label="คำแนะนำการโอนเงิน" value={manual.instructions} onChange={change(setManual, 'instructions')} /></div>
         </div> : <>
-          <p className="text-sm text-slate-600">บัญชีนี้ใช้ลงทะเบียนผู้รับเงินกับ ReservePay ข้อมูลในระบบจัดเก็บแบบเข้ารหัส การจ่ายเงินออกเป็นอีกขั้นตอนหนึ่ง</p>
+          <GatewayPaymentTerms />
+          <p className="text-sm text-slate-600">ข้อมูลบัญชีรับเงินจะถูกจัดเก็บแบบเข้ารหัสและลงทะเบียนกับ ReservePay</p>
           {bankLocked ? <p className="text-sm text-slate-600">ลงทะเบียนข้อมูลผู้รับเงินแล้ว หากต้องการเปลี่ยนบัญชี ให้ยกเลิก Payment Gateway ก่อนลงทะเบียนใหม่</p> : null}
           <fieldset disabled={bankLocked} className="grid gap-4 md:grid-cols-2 disabled:opacity-70">
-            <TextInput label="รหัสธนาคาร 3 หลัก" value={gateway.bankCode} onChange={change(setGateway, 'bankCode')} required />
+            <BankSelect label="ธนาคารรับเงิน" banks={banks} loading={banksLoading} value={gateway.bankCode} onChange={change(setGateway, 'bankCode')} required />
             <TextInput label="ชื่อผู้ถือบัญชี" value={gateway.accountName} onChange={change(setGateway, 'accountName')} required />
             <TextInput label="เลขบัญชีรับเงิน" value={gateway.accountNumber} onChange={change(setGateway, 'accountNumber')} required />
           </fieldset>
@@ -117,7 +126,7 @@ export default function OrganizationPaymentSettings() {
         </>}
       </fieldset>
       <div className="flex flex-wrap gap-3">
-        <button type="submit" disabled={saving || data?.migrationConflict} className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{saving ? 'กำลังบันทึก…' : 'บันทึกช่องทางรับเงิน'}</button>
+        <button type="submit" disabled={saving || data?.migrationConflict || bankLoadingBlocksSave} className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{saving ? 'กำลังบันทึก…' : 'บันทึกช่องทางรับเงิน'}</button>
         {data?.contactId || data?.mode === 'gateway' ? <button type="button" disabled={saving} onClick={disable} className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-bold disabled:opacity-50">ยกเลิกใช้ Payment Gateway</button> : null}
       </div>
     </form>}
