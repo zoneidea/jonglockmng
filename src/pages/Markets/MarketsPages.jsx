@@ -1,3 +1,4 @@
+import MarketLocationFields from './MarketLocationFields.jsx';
 import { useEffect, useRef, useState } from 'react';
 import MarketBasicDialog from './MarketBasicDialog.jsx';
 import { Eye, Image, Plus, Trash2, X } from 'lucide-react';
@@ -173,6 +174,8 @@ export function MarketInfoPage({ marketId, market, reloadMarkets }) {
     name: market?.name || '',
     description: market?.description || '',
     address: market?.address || '',
+    latitude: market?.latitude ?? '',
+    longitude: market?.longitude ?? '',
     openingStart: openingHours.openingStart,
     openingEnd: openingHours.openingEnd,
     openDays: normalizeOpenDays(market?.open_days_json),
@@ -189,6 +192,8 @@ export function MarketInfoPage({ marketId, market, reloadMarkets }) {
       name: market?.name || '',
       description: market?.description || '',
       address: market?.address || '',
+      latitude: market?.latitude ?? '',
+      longitude: market?.longitude ?? '',
       openingStart: nextOpeningHours.openingStart,
       openingEnd: nextOpeningHours.openingEnd,
       openDays: normalizeOpenDays(market?.open_days_json),
@@ -208,6 +213,8 @@ export function MarketInfoPage({ marketId, market, reloadMarkets }) {
     payload.append('name', form.name || '');
     payload.append('description', form.description || '');
     payload.append('address', form.address || '');
+    payload.append('latitude', String(form.latitude));
+    payload.append('longitude', String(form.longitude));
     payload.append('openingHours', combineOpeningHours(form.openingStart, form.openingEnd));
     payload.append('openDays', JSON.stringify(form.openDays?.length ? form.openDays : DEFAULT_OPEN_DAYS));
     payload.append('phone', form.phone || '');
@@ -236,6 +243,7 @@ export function MarketInfoPage({ marketId, market, reloadMarkets }) {
             </div>
           </div>
           <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center"><Label>ที่ตั้ง</Label><TextInputBare value={form.address} onChange={(value) => setForm((current) => ({ ...current, address: value }))} /></div>
+          <MarketLocationFields key={marketId} latitude={form.latitude} longitude={form.longitude} onChange={(point) => setForm((current) => ({ ...current, ...point }))} />
           <div className="grid gap-4 lg:grid-cols-[220px_1fr] lg:items-center">
             <Label>เวลาทำการ</Label>
             <div className="grid gap-3 sm:grid-cols-2">
