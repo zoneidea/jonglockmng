@@ -1,3 +1,4 @@
+import {OPEN_DAY_OPTIONS, DEFAULT_OPEN_DAYS, normalizeOpenDays, OpenDaysCheckboxGroup} from './MarketOpenDaysField.jsx';
 import MarketCollectionField from './MarketCollectionField.jsx';
 import MarketLocationFields from './MarketLocationFields.jsx';
 import { useEffect, useRef, useState } from 'react';
@@ -17,58 +18,11 @@ import { combineOpeningHours, dateKeyFromUtcTime, dateKeyFromValue, splitOpening
 import { showAlert, showConfirm } from '../../utils/alerts.js';
 import { BoothBox, DatePicker, ErrorNotice, FileInput, FileSummary, FormPanel, Label, Modal, NeedMarket, OutlineButton, SelectInput, SmallButton, TextInput, TextInputBare, TimePicker, Toolbar, RichTextEditor, FilterPill } from '../../components/ManagementUi.jsx';
 
-const OPEN_DAY_OPTIONS = [
-  ['sun', 'อาทิตย์'],
-  ['mon', 'จันทร์'],
-  ['tue', 'อังคาร'],
-  ['wed', 'พุธ'],
-  ['thu', 'พฤหัสบดี'],
-  ['fri', 'ศุกร์'],
-  ['sat', 'เสาร์'],
-];
-
-const DEFAULT_OPEN_DAYS = OPEN_DAY_OPTIONS.map(([value]) => value);
-
-function normalizeOpenDays(value) {
-  if (Array.isArray(value)) return value.filter((item) => DEFAULT_OPEN_DAYS.includes(String(item)));
-  if (typeof value === 'string') {
-    try {
-      const parsed = JSON.parse(value);
-      if (Array.isArray(parsed)) return normalizeOpenDays(parsed);
-    } catch {}
-  }
-  return DEFAULT_OPEN_DAYS;
-}
-
 function formatOpenDaysThai(value) {
   const days = normalizeOpenDays(value);
   if (days.length === DEFAULT_OPEN_DAYS.length) return 'ทุกวัน';
   const labels = OPEN_DAY_OPTIONS.filter(([day]) => days.includes(day)).map(([, label]) => label);
   return labels.length ? labels.join(', ') : 'ทุกวัน';
-}
-
-function OpenDaysCheckboxGroup({ value = [], onChange }) {
-  const selected = value.length ? value : DEFAULT_OPEN_DAYS;
-  return (
-    <div className="grid gap-2 sm:grid-cols-4">
-      {OPEN_DAY_OPTIONS.map(([day, label]) => (
-        <label key={day} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            checked={selected.includes(day)}
-            onChange={(event) => {
-              const next = event.target.checked
-                ? [...new Set([...selected, day])]
-                : selected.filter((item) => item !== day);
-              onChange(next.length ? next : DEFAULT_OPEN_DAYS);
-            }}
-            className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
-          />
-          {label}
-        </label>
-      ))}
-    </div>
-  );
 }
 
 export function MarketsPage({ markets, reloadMarkets }) {

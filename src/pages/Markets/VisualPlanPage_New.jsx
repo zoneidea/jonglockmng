@@ -475,7 +475,7 @@ function VisualPlanListCard({ layout, onClick }) {
   );
 }
 
-function VisualPlanListTable({ layouts, onEdit }) {
+function VisualPlanListTable({ layouts, onEdit, onDelete, busy }) {
   return (
     <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
       <div className="overflow-x-auto">
@@ -514,7 +514,10 @@ function VisualPlanListTable({ layouts, onEdit }) {
                     {new Date(layout.updatedAt).toLocaleDateString('th-TH')}
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <SmallButton tone="cyan" onClick={() => onEdit(layout.id)}>จัดแผนผัง</SmallButton>
+                    <div className="flex justify-end gap-2">
+                      <SmallButton tone="cyan" disabled={busy} onClick={() => onEdit(layout.id)}>จัดแผนผัง</SmallButton>
+                      <SmallButton tone="red" disabled={busy} onClick={() => onDelete(layout)}>ลบ</SmallButton>
+                    </div>
                   </td>
                 </tr>
               );
@@ -739,8 +742,10 @@ export function VisualPlanPage({ marketId }) {
     { initialData: null, skip: !marketId || !selectedLayoutId || viewMode !== 'editor' },
   );
   const { mutate, loading: saving, error: saveError } = useMutation();
+  const layoutActionLock = useRef(false);
   const layoutRows = normalizeRows(layouts);
   const floorPlanRows = normalizeRows(boothTypes);
+  const availableFloorPlans = floorPlanRows.filter(plan => !layoutRows.some(layout => Number(layout.floorPlanId) === Number(plan.id)));
   const boothRows = normalizeRows(booths).filter((row) => row.status !== 'deleted');
   const selectedLayout = selectedLayoutData;
 
@@ -864,21 +869,31 @@ export function VisualPlanPage({ marketId }) {
   // ============================================================================
   async function createLayout(event) {
     event.preventDefault();
-    const payload = await mutate(`/markets/${marketId}/layouts`, {
-      name: createForm.name,
-      description: createForm.description,
-      floorPlanId: Number(createForm.floorPlanId) || null,
-      rowsCount: Number(createForm.rowsCount),
-      columnsCount: Number(createForm.columnsCount),
-      cellSize: Number(createForm.cellSize),
-    });
-    setCreateModalOpen(false);
-    setCreateForm(createDefaultCreateForm());
-    await reloadLayouts();
-    if (payload?.id) {
-      setSelectedLayoutId(String(payload.id));
-      setViewMode('editor');
+    if (layoutActionLock.current) return;
+    if (!createForm.floorPlanId || !availableFloorPlans.some(plan => Number(plan.id) === Number(createForm.floorPlanId))) {
+      await showAlert({icon: 'warning', text: 'กรุณาเลือกแผนผังบูธที่ยังไม่มี Visual Plan'});
+      return;
     }
+    layoutActionLock.current = true;
+    try {
+      const payload = await mutate(`/markets/${marketId}/layouts`, {
+        name: createForm.name,
+        description: createForm.description,
+        floorPlanId: Number(createForm.floorPlanId) || null,
+        rowsCount: Number(createForm.rowsCount),
+        columnsCount: Number(createForm.columnsCount),
+        cellSize: Number(createForm.cellSize),
+      });
+      setCreateModalOpen(false);
+      setCreateForm(createDefaultCreateForm());
+      await reloadLayouts();
+      if (payload?.id) {
+        setSelectedLayoutId(String(payload.id));
+        setViewMode('editor');
+      }
+    } catch {
+      // Shared API alerts preserve the form on a failed creation.
+    } finally { layoutActionLock.current = false; }
   }
 
   function updateEditorZoom(nextZoom) {
@@ -1050,20 +1065,27 @@ export function VisualPlanPage({ marketId }) {
     setEditorPan({ x: 0, y: 0 });
   }
 
-  async function archiveLayout() {
-    if (!selectedLayoutId) return;
-    const confirmed = await showConfirm({
-      title: 'ย้ายแผนผังไปยัง archived',
-      text: 'รายการนี้จะถูกซ่อนจากการใช้งานปกติของตลาดนี้',
-      confirmButtonText: 'ยืนยัน',
-    });
-    if (!confirmed) return;
-    await mutate(`/markets/${marketId}/layouts/${selectedLayoutId}`, null, 'DELETE');
-    setSelectedLayoutId('');
-    setSelectedItemId('');
-    setLayoutDraft(null);
-    setViewMode('list');
-    await reloadLayouts();
+  async function archiveLayout(layout) {
+    if (!layout?.id || layoutActionLock.current) return;
+    layoutActionLock.current = true;
+    try {
+      const confirmed = await showConfirm({
+        title: 'ลบแผนผังเสมือน',
+        text: `ลบ ${layout.name || 'แผนผังนี้'}? ระบบจะซ่อนรายการและเก็บข้อมูลไว้ โดยไม่ลบบูธหรือประวัติการจอง`,
+        confirmButtonText: 'ยืนยันลบ',
+      });
+      if (!confirmed) return;
+      await mutate(`/markets/${marketId}/layouts/${layout.id}`, null, 'DELETE');
+      if (String(selectedLayoutId) === String(layout.id)) {
+        setSelectedLayoutId('');
+        setSelectedItemId('');
+        setLayoutDraft(null);
+      }
+      setViewMode('list');
+      await reloadLayouts();
+    } catch {
+      // Shared API alerts show failure without hiding the existing layout.
+    } finally { layoutActionLock.current = false; }
   }
 
   // ============================================================================
@@ -1544,7 +1566,9 @@ export function VisualPlanPage({ marketId }) {
                 </p>
               </div>
               <VisualPlanListTable 
-                layouts={layoutRows} 
+                layouts={layoutRows}
+                onDelete={archiveLayout}
+                busy={saving}
                 onEdit={(id) => {
                   setSelectedLayoutId(String(id));
                   setViewMode('editor');
@@ -1574,7 +1598,7 @@ export function VisualPlanPage({ marketId }) {
                 label="อ้างอิงแผนผังบูธ"
                 value={createForm.floorPlanId}
                 onChange={(value) => setCreateForm((current) => ({ ...current, floorPlanId: value }))}
-                options={floorPlanRows.map((item) => [String(item.id), item.name || `Floor plan ${item.id}`])}
+                options={[["", "เลือกแผนผังบูธที่ยังไม่มี Visual Plan"], ...availableFloorPlans.map((item) => [String(item.id), item.name || `Floor plan ${item.id}`])]}
                 placeholder="เลือกแผนผังบูธ"
               />
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
